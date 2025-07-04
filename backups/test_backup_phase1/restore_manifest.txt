@@ -1,0 +1,10 @@
+# Tor Migration Backup Manifest
+# Created: Fri Jul  4 08:08:24 AM UTC 2025
+# Script Version: 1.1.0-phase1
+# Backup Directory: /workspace/backups/test_backup_phase1
+
+# Files backed up:
+services=active_services.txt
+
+# Restore command:
+# ./tor_migration.sh rollback --from-backup test_backup_phase1

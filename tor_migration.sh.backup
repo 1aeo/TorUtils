@@ -12,17 +12,8 @@
 set -euo pipefail
 
 # Script version and configuration
-VERSION="1.1.0-phase1"
+VERSION="1.0.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Phase 1 improvements - Backup and Error Handling
-BACKUP_BASE_DIR="$SCRIPT_DIR/backups"
-LAST_BACKUP_FILE="$SCRIPT_DIR/.last_backup"
-
-# Global error handling configuration
-export TOR_MIGRATION_INTERACTIVE="${TOR_MIGRATION_INTERACTIVE:-true}"
-declare -g MIGRATION_ERRORS=0
-declare -g MIGRATION_WARNINGS=0
 
 # Colors for output (only if terminal supports it)
 if [[ "${TERM:-}" != "dumb" ]] && [[ "${TERM:-}" =~ color ]] && command -v tput >/dev/null 2>&1; then
@@ -59,551 +50,9 @@ METRICS_PORT_START=""  # Required parameter - must be specified by user
 # Function to print colored output
 print_header() { echo -e "${CYAN}=== $1 ===${NC}"; }
 print_success() { echo -e "${GREEN}✓${NC} $1"; }
-print_warning() { echo -e "${YELLOW}⚠${NC} $1"; MIGRATION_WARNINGS=$((MIGRATION_WARNINGS + 1)); }
-print_error() { echo -e "${RED}✗${NC} $1" >&2; MIGRATION_ERRORS=$((MIGRATION_ERRORS + 1)); }
+print_warning() { echo -e "${YELLOW}⚠${NC} $1"; }
+print_error() { echo -e "${RED}✗${NC} $1" >&2; }
 print_info() { echo -e "${BLUE}ℹ${NC} $1"; }
-
-# PHASE 1 IMPROVEMENT: Comprehensive Error Handling System
-log_error() {
-    local operation="$1"
-    local context="$2"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] ERROR: $operation failed in $context" >> "$SCRIPT_DIR/migration_errors.log"
-    print_error "$operation failed in $context"
-}
-
-log_warning() {
-    local operation="$1"
-    local context="$2"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] WARNING: $operation in $context" >> "$SCRIPT_DIR/migration_warnings.log"
-    print_warning "$operation in $context"
-}
-
-# Enhanced error handling function with recovery options
-handle_operation() {
-    local operation="$1"
-    local context="$2"
-    local retry_count="${3:-0}"
-    
-    # Execute the operation
-    if ! eval "$operation"; then
-        log_error "$operation" "$context"
-        
-        if [ "$retry_count" -gt 0 ]; then
-            print_warning "Retrying $operation (attempts remaining: $retry_count)"
-            handle_operation "$operation" "$context" $((retry_count - 1))
-        else
-            offer_recovery_options "$operation" "$context"
-            return 1
-        fi
-    fi
-    return 0
-}
-
-# Recovery options for failed operations
-offer_recovery_options() {
-    local operation="$1"
-    local context="$2"
-    
-    echo ""
-    print_error "Operation failed: $operation in $context"
-    echo "Recovery options:"
-    echo "  1. Continue with remaining items (c)"
-    echo "  2. Retry this operation (r)"
-    echo "  3. Skip this item (s)"  
-    echo "  4. Abort migration (a)"
-    echo ""
-    
-    if [ "${TOR_MIGRATION_INTERACTIVE:-true}" = "true" ]; then
-        read -p "Choose [c/r/s/a]: " choice
-        case "$choice" in
-            r|R) return 2 ;;  # Retry
-            s|S) return 1 ;;  # Skip
-            a|A) exit 1 ;;    # Abort
-            *) return 0 ;;    # Continue
-        esac
-    fi
-    
-    return 0
-}
-
-# PHASE 1 IMPROVEMENT: Backup/Rollback System
-backup_system() {
-    local backup_name="${1:-migration_$(date +%Y%m%d_%H%M%S)}"
-    local backup_dir="$BACKUP_BASE_DIR/$backup_name"
-    
-    print_header "Creating Migration Backup"
-    
-    # Create backup directory
-    if ! mkdir -p "$backup_dir"; then
-        print_error "Failed to create backup directory: $backup_dir"
-        return 1
-    fi
-    
-    print_info "Backup directory: $backup_dir"
-    
-    # Backup configurations
-    if [ -d "/etc/tor/instances" ]; then
-        print_info "Backing up Tor configurations..."
-        if sudo cp -r /etc/tor/instances "$backup_dir/configs" 2>/dev/null; then
-            print_success "Configurations backed up"
-        else
-            log_warning "Failed to backup configurations" "backup_system"
-        fi
-    fi
-    
-    # Backup data and keys  
-    if [ -d "/var/lib/tor-instances" ]; then
-        print_info "Backing up Tor data and keys..."
-        if sudo cp -r /var/lib/tor-instances "$backup_dir/data" 2>/dev/null; then
-            print_success "Data and keys backed up"
-        else
-            log_warning "Failed to backup data" "backup_system"
-        fi
-    fi
-    
-    # Backup systemd service states
-    print_info "Backing up service states..."
-    if systemctl list-units --type=service --state=active | grep "tor@" > "$backup_dir/active_services.txt" 2>/dev/null; then
-        print_success "Service states backed up"
-    else
-        log_warning "Failed to backup service states" "backup_system"
-    fi
-    
-    # Create restore manifest
-    create_restore_manifest "$backup_dir"
-    
-    # Save backup reference
-    echo "$backup_dir" > "$LAST_BACKUP_FILE"
-    print_success "Backup created: $backup_dir"
-    
-    return 0
-}
-
-# Create restore manifest with metadata
-create_restore_manifest() {
-    local backup_dir="$1"
-    local manifest="$backup_dir/restore_manifest.txt"
-    
-    {
-        echo "# Tor Migration Backup Manifest"
-        echo "# Created: $(date)"
-        echo "# Script Version: $VERSION"
-        echo "# Backup Directory: $backup_dir"
-        echo ""
-        echo "# Files backed up:"
-        if [ -d "$backup_dir/configs" ]; then
-            echo "configurations=/etc/tor/instances"
-        fi
-        if [ -d "$backup_dir/data" ]; then
-            echo "data=/var/lib/tor-instances"
-        fi
-        if [ -f "$backup_dir/active_services.txt" ]; then
-            echo "services=active_services.txt"
-        fi
-        echo ""
-        echo "# Restore command:"
-        echo "# $0 rollback --from-backup $(basename "$backup_dir")"
-    } > "$manifest"
-}
-
-# Rollback from backup
-rollback_from_backup() {
-    local backup_name="$1"
-    local backup_dir="$BACKUP_BASE_DIR/$backup_name"
-    local force="${2:-false}"
-    
-    print_header "Rolling Back Migration"
-    
-    if [ ! -d "$backup_dir" ]; then
-        print_error "Backup not found: $backup_dir"
-        return 1
-    fi
-    
-    if [ ! -f "$backup_dir/restore_manifest.txt" ]; then
-        print_error "Backup manifest not found: $backup_dir/restore_manifest.txt"
-        return 1
-    fi
-    
-    print_info "Restoring from backup: $backup_dir"
-    
-    # Warn user about destructive operation
-    if [ "$force" = "false" ] && [ "${TOR_MIGRATION_INTERACTIVE:-true}" = "true" ]; then
-        echo ""
-        print_warning "This will REPLACE current Tor configurations and data!"
-        read -p "Are you sure? [y/N]: " confirm
-        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-            print_info "Rollback cancelled"
-            return 1
-        fi
-    fi
-    
-    # Stop all Tor services first
-    print_info "Stopping Tor services..."
-    sudo systemctl stop 'tor@*' 2>/dev/null || true
-    
-    # Restore configurations
-    if [ -d "$backup_dir/configs" ]; then
-        print_info "Restoring configurations..."
-        if sudo rm -rf /etc/tor/instances && sudo cp -r "$backup_dir/configs" /etc/tor/instances; then
-            print_success "Configurations restored"
-        else
-            print_error "Failed to restore configurations"
-            return 1
-        fi
-    fi
-    
-    # Restore data
-    if [ -d "$backup_dir/data" ]; then
-        print_info "Restoring data and keys..."
-        if sudo rm -rf /var/lib/tor-instances && sudo cp -r "$backup_dir/data" /var/lib/tor-instances; then
-            print_success "Data and keys restored"
-        else
-            print_error "Failed to restore data"
-            return 1
-        fi
-    fi
-    
-    # Restore service states
-    if [ -f "$backup_dir/active_services.txt" ]; then
-        print_info "Restoring active services..."
-        while IFS= read -r service_line; do
-            if [[ "$service_line" =~ tor@([^.]+)\.service ]]; then
-                local service_name="${BASH_REMATCH[1]}"
-                if sudo systemctl start "tor@$service_name" 2>/dev/null; then
-                    print_info "Restored service: tor@$service_name"
-                else
-                    log_warning "Failed to restore service: tor@$service_name" "rollback"
-                fi
-            fi
-        done < "$backup_dir/active_services.txt"
-    fi
-    
-    print_success "Rollback completed from backup: $backup_name"
-    return 0
-}
-
-# PHASE 1 IMPROVEMENT: Comprehensive Input Validation
-validate_inputs() {
-    local check_all="${1:-false}"
-    local errors=0
-    
-    print_header "Pre-Migration Validation"
-    
-    # Check required files exist and are readable
-    print_info "Validating required files..."
-    for file in "$BATCH_FILE" "$IP_FILE"; do
-        if [ ! -r "$file" ]; then
-            print_error "Cannot read required file: $file"
-            ((errors++))
-        else
-            print_success "File accessible: $file"
-        fi
-    done
-    
-    # Validate file formats
-    print_info "Validating file formats..."
-    if ! validate_batch_file_format; then ((errors++)); fi
-    if ! validate_ip_file_format; then ((errors++)); fi
-    
-    if [ "$check_all" = "true" ]; then
-        # Check port availability
-        print_info "Checking port conflicts..."
-        if ! check_port_conflicts; then ((errors++)); fi
-        
-        # Check network connectivity
-        print_info "Testing network connectivity..."
-        if ! test_ip_connectivity; then ((errors++)); fi
-        
-        # Check disk space
-        print_info "Checking disk space..."
-        if ! check_disk_space; then ((errors++)); fi
-        
-        # Check permissions
-        print_info "Checking required permissions..."
-        if ! check_required_permissions; then ((errors++)); fi
-        
-        # Check environment
-        print_info "Checking environment..."
-        check_environment  # This returns warnings, not errors
-    fi
-    
-    if [ $errors -eq 0 ]; then
-        print_success "All validation checks passed"
-        return 0
-    else
-        print_error "Validation failed with $errors error(s)"
-        return 1
-    fi
-}
-
-# Validate batch file format
-validate_batch_file_format() {
-    if [ ! -f "$BATCH_FILE" ]; then
-        print_error "Batch file not found: $BATCH_FILE"
-        return 1
-    fi
-    
-    local line_num=0
-    local errors=0
-    
-    while IFS= read -r line; do
-        ((line_num++))
-        
-        # Skip comments and empty lines
-        [[ "$line" =~ ^[[:space:]]*# ]] && continue
-        [[ -z "$line" ]] && continue
-        
-        # Check if line has exactly two fields
-        local field_count=$(echo "$line" | awk '{print NF}')
-        if [ "$field_count" -ne 2 ]; then
-            print_error "Invalid format at line $line_num: '$line' (expected: old_name new_name)"
-            ((errors++))
-        fi
-        
-        # Check for invalid characters in relay names
-        local old_name=$(echo "$line" | awk '{print $1}')
-        local new_name=$(echo "$line" | awk '{print $2}')
-        
-        if [[ "$old_name" == *"_"* ]]; then
-            print_error "Invalid character '_' in old relay name at line $line_num: $old_name"
-            ((errors++))
-        fi
-        
-        if [[ "$new_name" == *"_"* ]]; then
-            print_error "Invalid character '_' in new relay name at line $line_num: $new_name"
-            ((errors++))
-        fi
-        
-    done < "$BATCH_FILE"
-    
-    if [ $errors -eq 0 ]; then
-        print_success "Batch file format is valid"
-        return 0
-    else
-        print_error "Batch file has $errors format error(s)"
-        return 1
-    fi
-}
-
-# Validate IP file format
-validate_ip_file_format() {
-    if [ ! -f "$IP_FILE" ]; then
-        print_error "IP file not found: $IP_FILE"
-        return 1
-    fi
-    
-    local line_num=0
-    local errors=0
-    local ip_count=0
-    
-    while IFS= read -r line; do
-        ((line_num++))
-        
-        # Skip comments and empty lines
-        [[ "$line" =~ ^[[:space:]]*# ]] && continue
-        [[ -z "$line" ]] && continue
-        
-        ((ip_count++))
-        
-        # Validate IP address format
-        if ! [[ "$line" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            print_error "Invalid IP address format at line $line_num: '$line'"
-            ((errors++))
-            continue
-        fi
-        
-        # Check IP address ranges
-        IFS='.' read -ra octets <<< "$line"
-        for octet in "${octets[@]}"; do
-            if [ "$octet" -lt 0 ] || [ "$octet" -gt 255 ]; then
-                print_error "Invalid IP address range at line $line_num: '$line' (octet: $octet)"
-                ((errors++))
-                break
-            fi
-        done
-        
-    done < "$IP_FILE"
-    
-    if [ $errors -eq 0 ]; then
-        print_success "IP file format is valid ($ip_count addresses)"
-        
-        # Check if IP count matches batch file
-        local batch_count=$(grep -c '^[^#]' "$BATCH_FILE" 2>/dev/null || echo "0")
-        if [ "$ip_count" -ne "$batch_count" ]; then
-            print_warning "IP count ($ip_count) doesn't match batch file entries ($batch_count)"
-        fi
-        
-        return 0
-    else
-        print_error "IP file has $errors format error(s)"
-        return 1
-    fi
-}
-
-# Check for port conflicts
-check_port_conflicts() {
-    if [ -z "$CONTROL_PORT_START" ] || [ -z "$METRICS_PORT_START" ]; then
-        print_warning "Port numbers not specified, skipping port conflict check"
-        return 0
-    fi
-    
-    local batch_count=$(grep -c '^[^#]' "$BATCH_FILE" 2>/dev/null || echo "0")
-    local end_control_port=$((CONTROL_PORT_START + batch_count - 1))
-    local end_metrics_port=$((METRICS_PORT_START + batch_count - 1))
-    
-    local conflicts=()
-    
-    # Check ControlPort range
-    for ((port=CONTROL_PORT_START; port<=end_control_port; port++)); do
-        if ss -ltn | grep -q ":$port "; then
-            local process=$(sudo lsof -i :$port 2>/dev/null | awk 'NR==2{print $1}' || echo "unknown")
-            conflicts+=("$port (used by $process)")
-        fi
-    done
-    
-    # Check MetricsPort range
-    for ((port=METRICS_PORT_START; port<=end_metrics_port; port++)); do
-        if ss -ltn | grep -q ":$port "; then
-            local process=$(sudo lsof -i :$port 2>/dev/null | awk 'NR==2{print $1}' || echo "unknown")
-            conflicts+=("$port (used by $process)")
-        fi
-    done
-    
-    if [ ${#conflicts[@]} -gt 0 ]; then
-        print_error "Port conflicts detected:"
-        for conflict in "${conflicts[@]}"; do
-            echo "  - $conflict"
-        done
-        return 1
-    fi
-    
-    print_success "No port conflicts in ranges $CONTROL_PORT_START-$end_control_port, $METRICS_PORT_START-$end_metrics_port"
-    return 0
-}
-
-# Test IP connectivity
-test_ip_connectivity() {
-    if [ ! -f "$IP_FILE" ]; then
-        print_warning "IP file not found, skipping connectivity test"
-        return 0
-    fi
-    
-    local failures=()
-    local tested=0
-    
-    while IFS= read -r ip; do
-        [[ "$ip" =~ ^[[:space:]]*# ]] && continue
-        [[ -z "$ip" ]] && continue
-        
-        ((tested++))
-        
-        if ! ping -c 1 -W 5 "$ip" >/dev/null 2>&1; then
-            failures+=("$ip")
-        fi
-    done < "$IP_FILE"
-    
-    if [ ${#failures[@]} -gt 0 ]; then
-        print_error "Unreachable IP addresses:"
-        for ip in "${failures[@]}"; do
-            echo "  - $ip"
-        done
-        return 1
-    fi
-    
-    print_success "All $tested IP addresses are reachable"
-    return 0
-}
-
-# Check disk space
-check_disk_space() {
-    local required_mb=1024  # Require at least 1GB free
-    local available=$(df "$PWD" | awk 'NR==2 {print $4}')
-    local available_mb=$((available / 1024))
-    
-    if [ "$available_mb" -lt $required_mb ]; then
-        print_error "Insufficient disk space: ${available_mb}MB available, ${required_mb}MB required"
-        return 1
-    fi
-    
-    print_success "Sufficient disk space: ${available_mb}MB available"
-    return 0
-}
-
-# Check required permissions
-check_required_permissions() {
-    local errors=0
-    
-    # Check sudo access
-    if ! sudo -n true 2>/dev/null; then
-        print_error "sudo access required for Tor management"
-        ((errors++))
-    fi
-    
-    # Check write access to script directory
-    if [ ! -w "$SCRIPT_DIR" ]; then
-        print_error "Write access required to script directory: $SCRIPT_DIR"
-        ((errors++))
-    fi
-    
-    # Check if tor-instance-create is available
-    if ! command -v tor-instance-create >/dev/null 2>&1; then
-        print_error "tor-instance-create command not found"
-        ((errors++))
-    fi
-    
-    if [ $errors -eq 0 ]; then
-        print_success "All required permissions available"
-        return 0
-    else
-        return 1
-    fi
-}
-
-# Check environment conditions
-check_environment() {
-    local warnings=0
-    
-    # Check disk space (need at least 1GB free)
-    local available=$(df "$PWD" | awk 'NR==2 {print $4}')
-    local available_mb=$((available / 1024))
-    if [ "$available_mb" -lt 1024 ]; then
-        print_warning "Low disk space: ${available_mb}MB available"
-        ((warnings++))
-    fi
-    
-    # Check system load
-    local load_avg=$(uptime | awk -F'average:' '{print $2}' | cut -d, -f1 | tr -d ' ')
-    local cpu_cores=$(nproc)
-    if command -v bc >/dev/null 2>&1; then
-        if (( $(echo "$load_avg > $cpu_cores" | bc -l 2>/dev/null || echo "0") )); then
-            print_warning "High system load: $load_avg (cores: $cpu_cores)"
-            ((warnings++))
-        fi
-    fi
-    
-    # Check if running as root (usually not recommended)
-    if [ "$EUID" -eq 0 ]; then
-        print_warning "Running as root - some operations may not work as expected"
-        ((warnings++))
-    fi
-    
-    # Check memory usage
-    local mem_usage=$(free | awk 'NR==2{printf "%.0f", $3/$2*100}')
-    if [ "$mem_usage" -gt 90 ]; then
-        print_warning "High memory usage: ${mem_usage}%"
-        ((warnings++))
-    fi
-    
-    if [ $warnings -eq 0 ]; then
-        print_success "Environment checks passed"
-    else
-        print_info "Environment checks completed with $warnings warning(s)"
-    fi
-    
-    return $warnings
-}
 
 # Function to show main help
 show_help() {
@@ -626,11 +75,6 @@ ${YELLOW}COMMANDS:${NC}
     ${GREEN}status${NC}              Show overall migration status
     ${GREEN}cleanup${NC}             Clean up temporary files
     ${GREEN}fix-ownership${NC}        Fix ownership of existing Tor relay instances
-    
-    ${YELLOW}PHASE 1 SAFETY FEATURES:${NC}
-    ${GREEN}backup${NC}              Create a backup of current Tor configuration and data
-    ${GREEN}rollback${NC}            Rollback to a previous backup
-    ${GREEN}validate${NC}            Validate input files and system readiness
 
 ${YELLOW}GLOBAL OPTIONS:${NC}
     --help, -h           Show this help message
@@ -643,16 +87,11 @@ ${YELLOW}GLOBAL OPTIONS:${NC}
     --metrics-port-start NUM  Starting MetricsPort number (REQUIRED)
 
 ${YELLOW}EXAMPLES:${NC}
-    # Complete migration workflow with Phase 1 safety features
-    $0 validate --all
-    $0 backup
+    # Complete migration workflow
     $0 create-inputs --control-port-start 47100 --metrics-port-start 31000
-    $0 migrate --control-port-start 47100 --metrics-port-start 31000 --verbose --with-backup
+    $0 migrate --control-port-start 47100 --metrics-port-start 31000 --verbose
     $0 manage start --parallel
     $0 list
-    
-    # Rollback if needed
-    $0 rollback --from-backup migration_20240101_120000
     
     # Generate master list from deployed relays (no migration files needed)
     $0 list --deployed --verbose
@@ -776,7 +215,6 @@ ${YELLOW}OPTIONS:${NC}
     --instances-only    Migrate instances only (skip torrc)
     --torrc-only       Migrate torrc only (skip instances)
     --parallel         Use parallel processing (up to 20 concurrent jobs)
-    --with-backup      Create backup before migration
     --control-port-start NUM  Starting ControlPort number (REQUIRED)
     --metrics-port-start NUM  Starting MetricsPort number (REQUIRED)
     --help             Show this help
@@ -909,86 +347,6 @@ the correct _tor-{relayname} user instead of the generic debian-tor user.
 ${YELLOW}EXAMPLES:${NC}
     $0 fix-ownership --verbose
     $0 fix-ownership --dry-run
-
-EOF
-            ;;
-        backup)
-            cat << EOF
-${CYAN}BACKUP Command${NC}
-
-Create a backup of current Tor configuration and data.
-
-${YELLOW}USAGE:${NC}
-    $0 backup [backup_name]
-
-${YELLOW}OPTIONS:${NC}
-    backup_name    Custom backup name (default: migration_YYYYMMDD_HHMMSS)
-    --help         Show this help
-
-${YELLOW}DESCRIPTION:${NC}
-Creates a complete backup of:
-- Tor configurations (/etc/tor/instances)
-- Tor data and keys (/var/lib/tor-instances)
-- Active service states
-
-${YELLOW}EXAMPLES:${NC}
-    $0 backup
-    $0 backup pre_migration_backup
-    $0 backup before_relay_update
-
-EOF
-            ;;
-        rollback)
-            cat << EOF
-${CYAN}ROLLBACK Command${NC}
-
-Rollback to a previous backup.
-
-${YELLOW}USAGE:${NC}
-    $0 rollback --from-backup <backup_name> [options]
-
-${YELLOW}OPTIONS:${NC}
-    --from-backup NAME  Backup name to restore from (required)
-    --force             Skip confirmation prompt
-    --help              Show this help
-
-${YELLOW}DESCRIPTION:${NC}
-Restores Tor configuration and data from a previous backup.
-This operation will REPLACE current configurations!
-
-${YELLOW}EXAMPLES:${NC}
-    $0 rollback --from-backup migration_20240101_120000
-    $0 rollback --from-backup pre_migration_backup --force
-
-EOF
-            ;;
-        validate)
-            cat << EOF
-${CYAN}VALIDATE Command${NC}
-
-Validate input files and system readiness.
-
-${YELLOW}USAGE:${NC}
-    $0 validate [options]
-
-${YELLOW}OPTIONS:${NC}
-    --all              Run all validation checks
-    --files-only       Validate only input files
-    --system-only      Validate only system requirements
-    --help             Show this help
-
-${YELLOW}DESCRIPTION:${NC}
-Validates:
-- File formats (batch_migration.txt, ipv4_addresses.txt)
-- Port availability and conflicts
-- Network connectivity to IP addresses
-- System requirements (disk space, permissions)
-- Environment conditions
-
-${YELLOW}EXAMPLES:${NC}
-    $0 validate --all
-    $0 validate --files-only
-    $0 validate --system-only
 
 EOF
             ;;
@@ -1394,82 +752,6 @@ migrate_instances() {
     return $errors
 }
 
-# PHASE 1 IMPROVEMENT: Extract port scanning into separate function for better error handling
-scan_existing_ports() {
-    local verbose="$1"
-    local max_control_port=0
-    local max_metrics_port=0
-    local existing_count=0
-    
-    if [ -d "/etc/tor/instances" ]; then
-        if [ "$verbose" = true ]; then
-            print_info "/etc/tor/instances directory found, scanning torrc files..."
-        fi
-        
-        # Find all torrc files and process them
-        local torrc_files
-        torrc_files=$(find /etc/tor/instances -name "torrc" -type f 2>/dev/null)
-        
-        if [ -n "$torrc_files" ]; then
-            while IFS= read -r torrc_file; do
-                if [ ! -f "$torrc_file" ]; then
-                    continue
-                fi
-                
-                existing_count=$((existing_count + 1))
-                local relay_name=$(basename "$(dirname "$torrc_file")")
-                
-                if [ "$verbose" = true ]; then
-                    print_info "Scanning $relay_name/torrc (count: $existing_count)"
-                fi
-                
-                # Extract ControlPort number
-                local control_line
-                control_line=$(sudo grep "^ControlPort" "$torrc_file" 2>/dev/null | head -1)
-                if [ -n "$control_line" ]; then
-                    local extracted_port
-                    extracted_port=$(echo "$control_line" | sed 's/.*:\([0-9][0-9]*\).*/\1/')
-                    if [[ "$extracted_port" =~ ^[0-9]+$ ]] && [ "$extracted_port" -gt "$max_control_port" ]; then
-                        max_control_port="$extracted_port"
-                        if [ "$verbose" = true ]; then
-                            print_info "New max ControlPort: $max_control_port from $relay_name"
-                        fi
-                    fi
-                fi
-                
-                # Extract MetricsPort number
-                local metrics_line
-                metrics_line=$(sudo grep "^MetricsPort" "$torrc_file" 2>/dev/null | head -1)
-                if [ -n "$metrics_line" ]; then
-                    local extracted_port
-                    extracted_port=$(echo "$metrics_line" | sed 's/.*:\([0-9][0-9]*\).*/\1/')
-                    if [[ "$extracted_port" =~ ^[0-9]+$ ]] && [ "$extracted_port" -gt "$max_metrics_port" ]; then
-                        max_metrics_port="$extracted_port"
-                        if [ "$verbose" = true ]; then
-                            print_info "New max MetricsPort: $max_metrics_port from $relay_name"
-                        fi
-                    fi
-                fi
-            done <<< "$torrc_files"
-        else
-            if [ "$verbose" = true ]; then
-                print_info "No torrc files found in /etc/tor/instances/"
-            fi
-        fi
-    else
-        if [ "$verbose" = true ]; then
-            print_info "/etc/tor/instances/ directory does not exist"
-        fi
-    fi
-    
-    # Output results in a parseable format
-    echo "max_control_port=$max_control_port"
-    echo "max_metrics_port=$max_metrics_port"
-    echo "existing_count=$existing_count"
-    
-    return 0
-}
-
 # Function to migrate torrc files
 migrate_torrc() {
     local batch_file="$BATCH_FILE"
@@ -1557,27 +839,72 @@ migrate_torrc() {
     local max_metrics_port=0
     local existing_count=0
     
-    # PHASE 1 IMPROVEMENT: Use consistent error handling instead of set +e
-    local scan_result
-    scan_result=$(scan_existing_ports "$verbose")
-    local scan_exit_code=$?
+    # Temporarily disable strict error checking for this section
+    set +e
     
-    if [ $scan_exit_code -eq 0 ]; then
-        # Parse the results
-        max_control_port=$(echo "$scan_result" | grep "max_control_port=" | cut -d'=' -f2)
-        max_metrics_port=$(echo "$scan_result" | grep "max_metrics_port=" | cut -d'=' -f2)
-        existing_count=$(echo "$scan_result" | grep "existing_count=" | cut -d'=' -f2)
-        
+    if [ -d "/etc/tor/instances" ]; then
         if [ "$verbose" = true ]; then
-            print_success "Port scanning completed successfully"
+            print_info "/etc/tor/instances directory found, scanning torrc files..."
+        fi
+        
+        # Find all torrc files and process them
+        local torrc_files
+        torrc_files=$(find /etc/tor/instances -name "torrc" -type f 2>/dev/null)
+        
+        if [ -n "$torrc_files" ]; then
+            while IFS= read -r torrc_file; do
+                if [ ! -f "$torrc_file" ]; then
+                    continue
+                fi
+                
+                existing_count=$((existing_count + 1))
+                local relay_name=$(basename "$(dirname "$torrc_file")")
+                
+                if [ "$verbose" = true ]; then
+                    print_info "Scanning $relay_name/torrc (count: $existing_count)"
+                fi
+                
+                # Extract ControlPort number
+                local control_line
+                control_line=$(sudo grep "^ControlPort" "$torrc_file" 2>/dev/null | head -1)
+                if [ -n "$control_line" ]; then
+                    local extracted_port
+                    extracted_port=$(echo "$control_line" | sed 's/.*:\([0-9][0-9]*\).*/\1/')
+                    if [[ "$extracted_port" =~ ^[0-9]+$ ]] && [ "$extracted_port" -gt "$max_control_port" ]; then
+                        max_control_port="$extracted_port"
+                        if [ "$verbose" = true ]; then
+                            print_info "New max ControlPort: $max_control_port from $relay_name"
+                        fi
+                    fi
+                fi
+                
+                # Extract MetricsPort number
+                local metrics_line
+                metrics_line=$(sudo grep "^MetricsPort" "$torrc_file" 2>/dev/null | head -1)
+                if [ -n "$metrics_line" ]; then
+                    local extracted_port
+                    extracted_port=$(echo "$metrics_line" | sed 's/.*:\([0-9][0-9]*\).*/\1/')
+                    if [[ "$extracted_port" =~ ^[0-9]+$ ]] && [ "$extracted_port" -gt "$max_metrics_port" ]; then
+                        max_metrics_port="$extracted_port"
+                        if [ "$verbose" = true ]; then
+                            print_info "New max MetricsPort: $max_metrics_port from $relay_name"
+                        fi
+                    fi
+                fi
+            done <<< "$torrc_files"
+        else
+            if [ "$verbose" = true ]; then
+                print_info "No torrc files found in /etc/tor/instances/"
+            fi
         fi
     else
-        log_warning "Port scanning encountered issues" "migrate_torrc"
-        # Use default values
-        max_control_port=0
-        max_metrics_port=0
-        existing_count=0
+        if [ "$verbose" = true ]; then
+            print_info "/etc/tor/instances/ directory does not exist"
+        fi
     fi
+    
+    # Re-enable strict error checking
+    set -e
     
     # Set starting ports (next available)
     local next_control_port=$((max_control_port + 1))
@@ -1808,7 +1135,6 @@ migrate_relays() {
     local parallel_flag=""
     local verbose_flag=""
     local dry_run_flag=""
-    local with_backup=false
     local control_port_start="$CONTROL_PORT_START"
     local metrics_port_start="$METRICS_PORT_START"
     local metrics_port_specified=false
@@ -1838,10 +1164,6 @@ migrate_relays() {
                 dry_run_flag="--dry-run"
                 shift
                 ;;
-            --with-backup)
-                with_backup=true
-                shift
-                ;;
             --control-port-start)
                 control_port_start="$2"
                 CONTROL_PORT_START="$2"  # Update global variable too
@@ -1866,15 +1188,6 @@ migrate_relays() {
     done
     
     print_header "Starting Tor Relay Migration"
-    
-    # Create backup if requested
-    if [ "$with_backup" = true ]; then
-        print_info "Creating pre-migration backup..."
-        if ! backup_system "pre_migration_$(date +%Y%m%d_%H%M%S)"; then
-            print_error "Failed to create backup"
-            exit 1
-        fi
-    fi
     
     # Check required files
     if [ ! -f "$BATCH_FILE" ]; then
@@ -4206,7 +3519,7 @@ main() {
                 METRICS_PORT_START="$2"
                 shift 2
                 ;;
-            create-inputs|create-new|migrate|migrate-instances|migrate-torrc|manage|list|inventory|verify|status|cleanup|fix-ownership|backup|rollback|validate)
+            create-inputs|create-new|migrate|migrate-instances|migrate-torrc|manage|list|inventory|verify|status|cleanup|fix-ownership)
                 local command="$1"
                 shift
                 break
@@ -4323,112 +3636,6 @@ main() {
             ;;
         fix-ownership)
             fix_ownership "$@"
-            ;;
-        backup)
-            local backup_name=""
-            
-            while [[ $# -gt 0 ]]; do
-                case $1 in
-                    --help)
-                        show_command_help "backup"
-                        exit 0
-                        ;;
-                    *)
-                        backup_name="$1"
-                        shift
-                        ;;
-                esac
-            done
-            
-            backup_system "$backup_name"
-            ;;
-        rollback)
-            local backup_name=""
-            local force=false
-            
-            while [[ $# -gt 0 ]]; do
-                case $1 in
-                    --from-backup)
-                        backup_name="$2"
-                        shift 2
-                        ;;
-                    --force)
-                        force=true
-                        shift
-                        ;;
-                    --help)
-                        show_command_help "rollback"
-                        exit 0
-                        ;;
-                    *)
-                        print_error "Unknown option: $1"
-                        exit 1
-                        ;;
-                esac
-            done
-            
-            if [ -z "$backup_name" ]; then
-                print_error "Backup name is required"
-                print_info "Use: $0 rollback --from-backup <backup_name>"
-                exit 1
-            fi
-            
-            rollback_from_backup "$backup_name" "$force"
-            ;;
-        validate)
-            local check_all=false
-            local files_only=false
-            local system_only=false
-            
-            while [[ $# -gt 0 ]]; do
-                case $1 in
-                    --all)
-                        check_all=true
-                        shift
-                        ;;
-                    --files-only)
-                        files_only=true
-                        shift
-                        ;;
-                    --system-only)
-                        system_only=true
-                        shift
-                        ;;
-                    --batch-file)
-                        BATCH_FILE="$2"
-                        shift 2
-                        ;;
-                    --ip-file)
-                        IP_FILE="$2"
-                        shift 2
-                        ;;
-                    --help)
-                        show_command_help "validate"
-                        exit 0
-                        ;;
-                    *)
-                        print_error "Unknown option: $1"
-                        exit 1
-                        ;;
-                esac
-            done
-            
-            if [ "$files_only" = true ]; then
-                # Only validate file formats
-                print_header "File Validation"
-                validate_batch_file_format && validate_ip_file_format
-            elif [ "$system_only" = true ]; then
-                # Only validate system requirements  
-                print_header "System Validation"
-                local errors=0
-                if ! check_disk_space; then ((errors++)); fi
-                if ! check_required_permissions; then ((errors++)); fi
-                check_environment  # This only gives warnings
-                [ $errors -eq 0 ]
-            else
-                # Full validation (default for --all or no options)
-                validate_inputs "$check_all"
-            fi
             ;;
         *)
             print_error "Unknown command: $command"
