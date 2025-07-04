@@ -5,6 +5,9 @@
 # This script orchestrates the complete Tor relay migration process,
 # including creating input files, migrating relays, managing services,
 # and generating reports.
+#
+# This is a unified, self-contained script that includes all functionality
+# previously split between tor_migration.sh and manage_tor_relays.sh
 
 set -euo pipefail
 
@@ -366,12 +369,7 @@ check_prerequisites() {
         fi
     done
     
-    # Check for our helper scripts
-    for script in manage_tor_relays.sh; do
-        if [ ! -f "$SCRIPT_DIR/$script" ] || [ ! -x "$SCRIPT_DIR/$script" ]; then
-            missing+=("$script (not found or not executable)")
-        fi
-    done
+    # Note: Removed check for manage_tor_relays.sh since this script is now self-contained
     
     if [ ${#missing[@]} -gt 0 ]; then
         print_error "Missing prerequisites:"
@@ -1889,7 +1887,7 @@ manage_relays() {
             fi
             ;;
         stop|restart|reload|status|enable|disable|list|count)
-            "$SCRIPT_DIR/manage_tor_relays.sh" "$action" "$@"
+            "$0" "$action" "$@"
             ;;
         *)
             print_error "Unknown manage action: $action"
