@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Tor Memory Monitor - Tracks RSS memory usage across all tor relay processes
+# To run daily at 2am: (crontab -l; echo "0 2 * * * /path/to/monitor-relays.sh") | crontab -
 
 CSV_FILE="/home/aeo1/tor_memory_stats.csv"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
