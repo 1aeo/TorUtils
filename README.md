@@ -27,15 +27,16 @@ Migrate Tor relays between servers, preserving keys and identity.
 
 ### `network/` - Network Configuration
 
-Network and IP address tools.
+Tool for adding /24 IP ranges. Auto-detects netplan or NetworkManager.
 
-- `apply_netplan_changes.sh` - Configure IPs via netplan
+- `configure_ip_range.sh` - Add /24 ranges (works on Ubuntu 24.04 and Debian 13)
 
 ## Requirements
 
-- Ubuntu 24.04 or Debian-based Linux
+- Ubuntu 24.04 or Debian 13 (or other Debian-based Linux)
 - Tor installed: `sudo apt install tor`
 - Root/sudo access
+- For network tools: netplan (Ubuntu) or NetworkManager (Debian)
 
 ## License
 
