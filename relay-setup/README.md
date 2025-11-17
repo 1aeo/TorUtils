@@ -1,6 +1,6 @@
 # Tor Relay Setup
 
-Create and manage Tor relays on Ubuntu 24.04.
+Create and manage Tor relays on Ubuntu 24.04 or Debian 13.
 
 ## Quick Start
 
@@ -40,9 +40,11 @@ relay03,,203.0.113.102,,,
 
 ## Scripts
 
-- `create-relays.sh` - Create relays (validates CSV, creates everything)
-- `verify-relays.sh` - Verify system (reads /etc/tor/instances)
+- `create-relays.sh` - Create relays (auto-detects Ubuntu/Debian)
+- `verify-relays.sh` - Verify system
 - `manage-relays.sh` - Daily management
+
+**Platform compatibility**: Scripts auto-detect and work on both Ubuntu 24.04 and Debian 13.
 
 ## Management
 
