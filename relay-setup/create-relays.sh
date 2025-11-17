@@ -103,7 +103,7 @@ while IFS=',' read -r nick lan wan or ctl met; do
     seen_nicks+=("$nick")
     
     [[ " ${seen_ips[@]} " =~ " $wan " ]] && \
-        echo -e "  ${YELLOW}⚠ Line $line: Duplicate IP '$wan'${NC}"
+        { echo -e "  ${RED}✗ Line $line: Duplicate IP '$wan'${NC}"; errors=$((errors + 1)); }
     seen_ips+=("$wan")
     
     relay=$((relay + 1))
@@ -214,16 +214,42 @@ done
 
 # [5/5] Start services
 echo -e "${GREEN}[5/5] Starting services${NC}"
+failed=()
 for n in "${NICKS[@]}"; do
     systemctl enable "tor@$n.service" 2>&1 | grep -v "Created symlink" || true
-    systemctl is-active --quiet "tor@$n.service" || systemctl start "tor@$n.service"
+    if systemctl is-active --quiet "tor@$n.service"; then
+        echo "  ✓ $n (already running)"
+    else
+        echo -n "  Starting $n..."
+        if systemctl start "tor@$n.service" && sleep 1 && systemctl is-active --quiet "tor@$n.service"; then
+            echo -e " ${GREEN}✓${NC}"
+        else
+            echo -e " ${RED}✗ FAILED${NC}"
+            failed+=("$n")
+        fi
+    fi
 done
 
-sleep 3
-RUNNING=$(echo "${NICKS[@]}" | xargs -n1 | xargs -I{} systemctl is-active --quiet "tor@{}.service" && echo 1 || true | wc -l)
+sleep 2
+RUNNING=0
+NOT_RUNNING=()
+for n in "${NICKS[@]}"; do
+    if systemctl is-active --quiet "tor@$n.service"; then
+        RUNNING=$((RUNNING + 1))
+    else
+        NOT_RUNNING+=("$n")
+    fi
+done
 
 echo -e "\n${CYAN}Complete!${NC}"
 echo "Relays: ${#NICKS[@]}"
 echo "Running: $RUNNING/${#NICKS[@]}"
-[ $RUNNING -eq ${#NICKS[@]} ] && echo -e "${GREEN}✓ All running${NC}" || echo -e "${YELLOW}⚠ Check logs${NC}"
+if [ $RUNNING -eq ${#NICKS[@]} ]; then
+    echo -e "${GREEN}✓ All running${NC}"
+else
+    echo -e "${YELLOW}⚠ ${#NOT_RUNNING[@]} relay(s) not running:${NC}"
+    for n in "${NOT_RUNNING[@]}"; do
+        echo -e "  ${RED}✗${NC} $n (check logs: sudo journalctl -u tor@$n.service -n 20)"
+    done
+fi
 echo -e "\nNext: ./verify-relays.sh"
