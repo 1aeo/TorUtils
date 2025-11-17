@@ -1,0 +1,33 @@
+# Tor Relay Configuration Example
+# Copy to relay-config.csv and edit with your values
+#
+# Format: nickname,lan_ip,wan_ip,or_port,control_port,metrics_port
+#
+# FIRST ROW (required): all 6 fields
+# FOLLOWING ROWS (required): nickname, wan_ip
+# FOLLOWING ROWS (optional): lan_ip, or_port, control_port, metrics_port
+#
+# If omitted, or_port uses first relay's value
+# If omitted, control_port/metrics_port auto-increment from first relay
+# If lan_ip is empty, only WAN IP is used (no LAN binding)
+#
+# Example - 18 relays with auto-incrementing ports:
+relay01,192.168.1.100,203.0.113.100,443,13001,35001
+relay02,,203.0.113.101,,,
+relay03,,203.0.113.102,,,
+relay04,,203.0.113.103,,,
+relay05,,203.0.113.104,,,
+relay06,,203.0.113.105,,,
+relay07,,203.0.113.106,,,
+relay08,,203.0.113.107,,,
+relay09,,203.0.113.108,,,
+relay10,,203.0.113.109,,,
+relay11,,203.0.113.110,,,
+relay12,,203.0.113.111,,,
+relay13,,203.0.113.112,,,
+relay14,,203.0.113.113,,,
+relay15,,203.0.113.114,,,
+relay16,,203.0.113.115,,,
+relay17,,203.0.113.116,,,
+relay18,,203.0.113.117,,,
+
