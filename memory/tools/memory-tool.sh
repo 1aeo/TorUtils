@@ -77,6 +77,12 @@ cmd_csv() {
 }
 
 cmd_collect() {
+    # Deprecation warning
+    print_warning "⚠️  DEPRECATED: 'memory-tool.sh collect' is replaced by collect.sh"
+    echo "   Use: ./collect.sh --output <file>"
+    echo "   See README.md for details."
+    echo ""
+    
     local output_dir="" auto_dir=""
     
     # Parse arguments

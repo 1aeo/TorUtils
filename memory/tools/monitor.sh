@@ -2,6 +2,10 @@
 #
 # monitor.sh - Tor relay memory time-series monitoring
 #
+# ⚠️  DEPRECATED: This tool is replaced by collect.sh
+#     collect.sh provides the same functionality plus per-relay detail.
+#     Use: ./collect.sh --output /var/log/tor/memory.csv
+#
 # Collects aggregate memory statistics and appends to a CSV file.
 # Designed to run via cron for continuous monitoring.
 #
@@ -14,6 +18,12 @@
 #   0 2 * * * /path/to/monitor.sh --output /var/log/tor_memory_stats.csv
 
 set -euo pipefail
+
+# Deprecation warning
+echo "⚠️  DEPRECATED: monitor.sh is replaced by collect.sh" >&2
+echo "   Use: ./collect.sh --output <file>" >&2
+echo "   See README.md for details." >&2
+echo "" >&2
 
 # Load shared functions
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
