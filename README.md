@@ -31,6 +31,31 @@ Tool for adding /24 IP ranges. Auto-detects netplan or NetworkManager.
 
 - `configure_ip_range.sh` - Add /24 ranges (works on Ubuntu 24.04 and Debian 13)
 
+### `memory/` - Memory Analysis
+
+Tools and reports for investigating Tor relay memory usage.
+
+- `tools/monitor.sh` - Time-series monitoring (for cron)
+- `tools/diagnostics.sh` - System diagnostics for troubleshooting
+- `tools/memory-tool.sh` - Point-in-time analysis and experiments
+- `tools/timeseries-charts.py` - Charts from monitor.sh data
+- `tools/generate-charts.py` - Charts from experiment data
+- `reports/` - Date-organized analysis reports
+
+```bash
+cd memory/tools
+
+# Time-series monitoring (run via cron)
+./monitor.sh --output /var/log/tor_memory.csv
+./monitor.sh --output /var/log/tor_memory.csv --with-diagnostics
+
+# Point-in-time analysis
+./memory-tool.sh status                    # Show current memory
+./memory-tool.sh collect --auto-dir "test" # Collect to dated directory
+```
+
+See [memory/README.md](memory/README.md)
+
 ## Requirements
 
 - Ubuntu 24.04 or Debian 13 (or other Debian-based Linux)
