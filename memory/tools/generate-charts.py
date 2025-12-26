@@ -22,7 +22,7 @@ import sys
 # Add lib directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'lib'))
 
-from chart_utils import check_matplotlib, style_axis, style_figure, save_chart, THEME
+from chart_utils import check_matplotlib, save_chart
 
 check_matplotlib()
 
