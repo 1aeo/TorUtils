@@ -84,7 +84,7 @@ def style_figure(fig):
     fig.set_facecolor(THEME['background'])
 
 
-def save_chart(fig, output_path, dpi: int = 150):
+def save_chart(fig, output_path, dpi: int = 150, facecolor: str | None = None):
     """
     Save chart with consistent settings.
     
@@ -92,13 +92,18 @@ def save_chart(fig, output_path, dpi: int = 150):
         fig: Matplotlib figure object
         output_path: Path to save the chart
         dpi: Resolution (default 150)
+        facecolor: Background color. If None, uses figure's current facecolor.
+                   Use THEME['background'] for dark theme charts.
     """
     import matplotlib.pyplot as plt
-    fig.savefig(output_path, 
-                facecolor=THEME['background'], 
-                edgecolor='none', 
-                bbox_inches='tight',
-                dpi=dpi)
+    save_kwargs = {
+        'bbox_inches': 'tight',
+        'dpi': dpi,
+        'edgecolor': 'none',
+    }
+    if facecolor is not None:
+        save_kwargs['facecolor'] = facecolor
+    fig.savefig(output_path, **save_kwargs)
     plt.close(fig)
 
 

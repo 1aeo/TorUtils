@@ -51,11 +51,11 @@ DAYS = [0, 1, 2, 3, 4, 5, 9]
 
 
 def load_data(csv_path: str) -> list[dict]:
-    """Load and parse the CSV data, skipping comment lines."""
+    """Load and parse the CSV data, skipping comment and empty lines."""
     rows = []
     with open(csv_path, 'r') as f:
-        # Skip comment lines
-        lines = [line for line in f if not line.strip().startswith('#')]
+        # Skip comment and empty lines
+        lines = [line for line in f if line.strip() and not line.strip().startswith('#')]
     
     reader = csv.DictReader(lines)
     for row in reader:
@@ -135,7 +135,7 @@ def chart1_memory_over_time(rows: list[dict], output_path: Path):
 
 def chart2_final_comparison(rows: list[dict], output_path: Path):
     """Chart 2: Horizontal bar chart showing final memory (Day 9) by configuration."""
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(12, 7))
     
     # Calculate group averages for day 9
     results = []
@@ -156,9 +156,9 @@ def chart2_final_comparison(rows: list[dict], output_path: Path):
     y_pos = range(len(results))
     bars = ax.barh(y_pos, [r['memory'] for r in results], 
                    color=[r['color'] for r in results],
-                   height=0.6, edgecolor='white', linewidth=1)
+                   height=0.6, edgecolor='black', linewidth=1)
     
-    # Add value labels
+    # Add value labels on bars
     for bar, result in zip(bars, results):
         width = bar.get_width()
         if result['group'] in ['A', 'E']:
@@ -166,31 +166,31 @@ def chart2_final_comparison(rows: list[dict], output_path: Path):
             label = f"{width:.2f} GB  ({reduction:.0f}% reduction)"
         else:
             label = f"{width:.2f} GB"
-        ax.text(width + 0.1, bar.get_y() + bar.get_height()/2,
-                label, va='center', fontsize=11, fontweight='bold')
+        ax.text(width + 0.15, bar.get_y() + bar.get_height()/2,
+                label, va='center', fontsize=11, fontweight='bold', color='black')
+    
+    # Build y-axis labels with status indicators
+    y_labels = []
+    for result in results:
+        status = "⚠ Loses Guard" if result['group'] in ['A', 'E'] else "✓ Keeps Guard"
+        y_labels.append(f"{result['label']}\n({status})")
     
     ax.set_yticks(y_pos)
-    ax.set_yticklabels([r['label'] for r in results], fontsize=11)
+    ax.set_yticklabels(y_labels, fontsize=10)
     ax.set_xlabel('RSS Memory (GB)', fontsize=12, fontweight='bold')
     ax.set_title('Final Memory Usage (Day 9) by Configuration\nLower is Better', 
                  fontsize=14, fontweight='bold', pad=20)
-    ax.set_xlim(0, 6.5)
+    ax.set_xlim(0, 7)
     
-    ax.axvline(x=1.0, color='green', linestyle='--', alpha=0.5, linewidth=2)
-    ax.text(1.05, len(results)-0.3, 'Tor docs:\n500-1000 MB\nnormal', 
-            fontsize=9, color='green', va='top')
-    ax.axvline(x=5.35, color='red', linestyle='--', alpha=0.5, linewidth=2)
-    ax.text(5.4, 0.3, 'Original\nbaseline', fontsize=9, color='red', va='bottom')
-    
-    # Status indicators
-    for i, result in enumerate(results):
-        status_text = "⚠ Loses Guard Status" if result['group'] in ['A', 'E'] else "✓ Keeps Guard Status"
-        status_color = 'orange' if result['group'] in ['A', 'E'] else 'green'
-        ax.text(-0.05, i, status_text, ha='right', va='center', 
-                fontsize=9, color=status_color, style='italic',
-                transform=ax.get_yaxis_transform())
+    # Reference lines
+    ax.axvline(x=1.0, color='darkgreen', linestyle='--', alpha=0.7, linewidth=2)
+    ax.text(1.0, -0.6, 'Tor docs:\n500-1000 MB\nnormal', 
+            fontsize=9, color='darkgreen', ha='center', va='top')
+    ax.axvline(x=5.35, color='darkred', linestyle='--', alpha=0.7, linewidth=2)
+    ax.text(5.35, -0.6, 'Original\nbaseline', fontsize=9, color='darkred', ha='center', va='top')
     
     ax.invert_yaxis()
+    plt.subplots_adjust(left=0.25)
     plt.tight_layout()
     save_chart(fig, output_path)
     print(f"✓ Chart 2 saved: {output_path}")
