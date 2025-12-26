@@ -1,0 +1,59 @@
+# Tor Guard Relay Memory Investigation
+# Investigation Period: September 9-18, 2025
+# All memory values in GB
+#
+# Finding: DirCache 0 solves memory but removes guard status (not viable)
+# Next step: Test alternative allocators (jemalloc, tcmalloc)
+
+# GROUP DEFINITIONS
+# group,relay,config,dircache,maxmem
+# A,22gz,DirCache 0 + MaxMem 2GB,0,2GB
+# A,24kgoldn,DirCache 0 + MaxMem 2GB,0,2GB
+# A,42dugg,DirCache 0 + MaxMem 2GB,0,2GB
+# B,armanicaesar,Control (none),default,default
+# C,arsonaldarebel,MaxMem 2GB only,default,2GB
+# C,autumntwinuzis,MaxMem 2GB only,default,2GB
+# C,ayeverb,MaxMem 2GB only,default,2GB
+# D,babyfaceray,MaxMem 4GB only,default,4GB
+# D,babysmoove,MaxMem 4GB only,default,4GB
+# D,bbno,MaxMem 4GB only,default,4GB
+# E,bfbdapackman,DirCache 0 only,0,default
+# E,biggk,DirCache 0 only,0,default
+# E,bigpokeyhouston,DirCache 0 only,0,default
+
+# DAILY RSS MEASUREMENTS (GB)
+group,relay,day0,day1,day2,day3,day4,day5,day9
+A,22gz,5.03,0.28,0.32,0.34,0.32,0.33,0.27
+A,24kgoldn,5.40,0.33,0.37,0.38,0.37,0.38,0.32
+A,42dugg,5.61,0.31,0.36,0.37,0.36,0.36,0.29
+B,armanicaesar,,0.57,5.15,5.40,5.41,5.62,5.14
+C,arsonaldarebel,,0.55,0.55,3.86,4.03,4.17,4.17
+C,autumntwinuzis,,0.55,0.55,3.19,3.52,3.62,4.06
+C,ayeverb,,0.56,0.56,3.78,3.84,4.18,4.29
+D,babyfaceray,,0.54,0.54,3.85,4.32,4.43,4.62
+D,babysmoove,,0.55,0.55,3.82,4.31,4.38,4.78
+D,bbno,,0.54,0.54,3.69,4.01,4.25,4.87
+E,bfbdapackman,,,,,0.42,0.39,0.32
+E,biggk,,,,,0.44,0.40,0.34
+E,bigpokeyhouston,,,,,0.42,0.36,0.32
+
+# BASELINE DETAILED METRICS (Day 0 - before optimization)
+# relay,vmrss_kb,vmsize_kb,vmpeak_kb,vmhwm_kb,frag_ratio
+# 22gz,5283116,10493740,12492716,6085236,1.99
+# 24kgoldn,5667604,10356180,12827320,6072344,1.94
+# 42dugg,5888444,10438608,12754620,6107360,2.01
+
+# POST-OPTIMIZATION METRICS (Day 1 - after DirCache 0 + MaxMem 2GB)
+# relay,vmrss_kb,vmsize_kb,vmpeak_kb,vmhwm_kb,frag_ratio
+# 22gz,340584,9818128,9818128,340584,14.23
+# 24kgoldn,488784,9944184,10008308,595664,10.40
+# 42dugg,467688,9927592,9992612,566696,10.92
+
+# FINAL SUMMARY (Day 9)
+# group,config,avg_rss_gb,reduction_pct,status
+# A,DirCache 0 + MaxMem 2GB,0.29,94.6,STABLE
+# E,DirCache 0 only,0.33,93.8,STABLE
+# C,MaxMem 2GB only,4.17,22.1,FRAGMENTED
+# D,MaxMem 4GB only,4.76,11.0,FRAGMENTED
+# B,No optimization,5.14,3.9,FRAGMENTED
+
