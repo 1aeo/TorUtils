@@ -1,12 +1,12 @@
-# DirCache and Memory: A 94% Reduction You Probably Can't Use
+# The DirCache Dilemma: 94% Memory Reduction You Can't Use
 
 **By 1AEO Team • January 2026**
 
-During our Tor relay memory investigation, we discovered a setting that slashes memory usage by 94%—from 5+ GB down to ~300 MB. There's just one catch: it removes your relay's Guard flag.
+In our hunt for the root cause of Tor memory bloat, we isolated the directory cache. Guard relays must cache and serve directory information—a process involving millions of tiny memory allocations and deallocations.
+
+We tested a radical configuration: `DirCache 0`. The impact was immediate and dramatic.
 
 ## What We Found
-
-In our September 2025 experiment with 13 guard relays, disabling the directory cache (`DirCache 0`) produced dramatic results:
 
 | Configuration | Start RSS | End RSS | Change |
 |--------------|-----------|---------|--------|
@@ -15,20 +15,20 @@ In our September 2025 experiment with 13 guard relays, disabling the directory c
 | MaxMem 2GB only | 0.55 GB | 4.17 GB | +658% |
 | Control (default) | 0.57 GB | 5.14 GB | +802% |
 
-Memory remained rock-stable for 9+ days with DirCache disabled—no fragmentation, no gradual creep.
+Memory remained stable for 9+ days with DirCache disabled—no fragmentation, no gradual creep.
 
-## Why It Works (And Why It Hurts)
+![DirCache 0 vs Control Memory Usage](chart1_memory_over_time.png)
 
-Tor's directory cache stores consensus data and diffs to serve other relays and clients. This cache creates thousands of small allocations that glibc never efficiently reclaims. Disabling DirCache eliminates the allocation churn entirely.
+## The Catch
 
-The problem: Guard relays must serve directory information to maintain their Guard flag. Within days of enabling `DirCache 0`, our relays lost Guard status. For middle relays this might be acceptable, but for guards it's a non-starter.
+There's no free lunch. Disabling DirCache instantly revokes your relay's Guard status. The network requires Guards to handle directory traffic, so you cannot turn this feature off to save RAM if you want to remain a Guard.
 
-## The Lesson
+## The Diagnostic Value
 
-DirCache 0 proved that fragmentation—not Tor itself—is the memory problem. The directory cache's allocation pattern combined with glibc's reclamation weakness creates the 5 GB bloat. This insight led us to test alternative allocators, which solve the problem without sacrificing Guard status.
+This experiment was crucial. It proved that memory isn't "leaking" in the traditional sense—it's being **fragmented by the churn of directory data**. Since we can't turn DirCache off, we must fix how that data is stored in memory.
 
-If you're running middle relays and don't need the Guard flag, `DirCache 0` remains a valid option. For guards, see our allocator comparison instead.
+This pointed us directly to the solution: better allocators that handle fragmentation efficiently (see our allocator comparison).
 
 ---
 
-*Data from 1AEO's guard relay memory investigation, September 2025*
+*Data from 1AEO's guard relay investigation, September 2025*

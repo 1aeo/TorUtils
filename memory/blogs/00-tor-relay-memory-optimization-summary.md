@@ -1,51 +1,45 @@
-# Solving Tor Relay Memory Bloat: What Actually Works
+# Tor Memory Optimization: What Actually Works
 
 **By 1AEO Team • January 2026**
 
-Tor guard relays on Linux commonly balloon to 5+ GB of RAM within 48 hours of starting—even on servers with abundant memory. We spent four months and 100+ relay-days investigating why, and what to do about it.
+Over the past four months, we conducted extensive memory experiments across 100+ relay-days on high-bandwidth Tor relays. Our goal: understand why Guard relays on Linux consistently consume excessive RAM (5+ GB) and how to fix it.
 
-## The Problem
+## Key Findings
 
-Memory fragmentation in glibc's default allocator causes Tor relays to consume 5-10x more RAM than necessary. The directory cache creates thousands of small allocations that glibc cannot efficiently return to the OS, resulting in permanent RSS growth.
+1. **The Culprit:** Memory fragmentation in glibc's allocator, caused by high churn of Directory Cache objects
+2. **False Hopes:** Standard config tweaks like `MaxMemInQueues` don't fix this. Disabling `DirCache` works but disqualifies you as a Guard
+3. **The Fix:** Changing the memory allocator is the only viable solution
 
 ## What We Tested
 
 | Approach | Result | Viable? |
 |----------|--------|---------|
-| **mimalloc allocator** | 1.16 GB (79% reduction) | ✅ Yes |
-| **jemalloc allocator** | 1.63 GB (71% reduction) | ✅ Yes |
-| **tcmalloc allocator** | 3.68 GB (35% reduction) | ⚠️ Partial |
-| DirCache 0 | 0.29 GB (94% reduction) | ❌ Loses Guard flag |
-| MaxMemInQueues | 4-5 GB (no improvement) | ❌ No |
-| MaxConsensusAgeForDiffs | 5.7 GB (no improvement) | ❌ No |
-| Scheduled restarts | 4.5-5 GB (minimal) | ⚠️ Workaround |
+| **mimalloc allocator** | 1.16 GB (79% ↓) | ✅ Yes |
+| **jemalloc allocator** | 1.63 GB (71% ↓) | ✅ Yes |
+| tcmalloc allocator | 3.68 GB (35% ↓) | ⚠️ Partial |
+| DirCache 0 | 0.29 GB (94% ↓) | ❌ Loses Guard |
+| MaxMemInQueues | ~5 GB (no change) | ❌ No |
+| MaxConsensusAgeForDiffs | ~5.7 GB (no change) | ❌ No |
+| Scheduled restarts | 4.5–5 GB (minimal) | ⚠️ Workaround |
 
-## The Solution
+## The Problem Visualized
 
-Deploy mimalloc or jemalloc via `LD_PRELOAD`. No recompilation needed:
+![Memory Fragmentation by Group](memory_by_group.png)
+
+The chart shows the stark difference: glibc groups (D, E, Z) plateau at 5–6 GB while mimalloc (B) and jemalloc (A) stay under 2 GB. This isn't a gradual leak—it's a sudden expansion around Day 2 that never recovers under glibc.
+
+## Recommendation
+
+For operators running Guard relays on Linux, move away from the default allocator. Switching to **mimalloc** or **jemalloc** reduced our memory footprint by 70–80% without any loss in performance, stability, or Guard status.
 
 ```bash
-# Install
-sudo apt install libmimalloc2.0  # or libjemalloc2
-
-# Enable per-relay
+# Quick deploy
+sudo apt install libmimalloc2.0
 sudo systemctl edit tor@relay_name
-[Service]
-Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2"
+# Add: Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2"
 ```
 
-Restart your relay, and memory will stabilize around 1-2 GB instead of 5+ GB—while maintaining Guard status and full bandwidth.
-
-## Key Takeaways
-
-1. **The problem is glibc, not Tor.** Configuration tuning doesn't help because glibc's allocator is the bottleneck.
-2. **Modern allocators work.** mimalloc and jemalloc handle fragmentation efficiently with no performance penalty.
-3. **DirCache 0 is a proof point.** The 94% reduction proves fragmentation is the issue, but disabling DirCache costs Guard status.
-4. **Deploy is simple.** LD_PRELOAD swaps allocators without rebuilding Tor.
-
-If you're running multiple Tor relays, switching allocators will save significant memory per server—capacity you can reinvest in more relays for the network.
-
-![Memory by Group](memory_by_group.png)
+With this single change, you can run more relays on the same hardware—capacity you can reinvest in the network.
 
 ---
 
