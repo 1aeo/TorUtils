@@ -62,7 +62,7 @@ def load_relay_config(exp_dir: Path) -> dict:
 
 
 def load_measurements(exp_dir: Path) -> dict:
-    """Load measurements.csv into structured data."""
+    """Load memory_measurements.csv into structured data."""
     data = {
         'dates': [],
         'aggregates': [],
@@ -70,7 +70,7 @@ def load_measurements(exp_dir: Path) -> dict:
         'groups': defaultdict(lambda: {'dates': [], 'total_rss': [], 'count': 0, 'relays': set()}),
     }
     
-    measurements_path = exp_dir / 'measurements.csv'
+    measurements_path = exp_dir / 'memory_measurements.csv'
     if not measurements_path.exists():
         return data
     
@@ -345,7 +345,7 @@ Examples:
     python3 generate-report.py -e reports/2025-12-25-server-test/ --charts-only
 
 The tool will:
-  1. Load experiment.json, relay_config.csv, and measurements.csv
+  1. Load experiment.json, relay_config.csv, and memory_measurements.csv
   2. Generate charts in the charts/ subdirectory
   3. Create/update REPORT.md with auto-populated data
         """

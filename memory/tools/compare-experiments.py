@@ -51,7 +51,7 @@ def load_experiment(exp_dir: Path) -> dict:
             data['name'] = data['metadata'].get('name', exp_dir.name)
     
     # Load measurements
-    measurements_path = exp_dir / 'measurements.csv'
+    measurements_path = exp_dir / 'memory_measurements.csv'
     if measurements_path.exists():
         relays = defaultdict(lambda: {'dates': [], 'rss_kb': [], 'group': '', 'nickname': ''})
         

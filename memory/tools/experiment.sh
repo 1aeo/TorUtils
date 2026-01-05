@@ -113,9 +113,9 @@ fingerprint,nickname,group,dircache,maxmem,notes
 EOF
     print_success "✓ Created: relay_config.csv"
     
-    # Create measurements.csv with header (with group column)
-    echo "$CSV_HEADER_WITH_GROUP" > "${output_dir}/measurements.csv"
-    print_success "✓ Created: measurements.csv"
+    # Create memory_measurements.csv with header (with group column)
+    echo "$CSV_HEADER_WITH_GROUP" > "${output_dir}/memory_measurements.csv"
+    print_success "✓ Created: memory_measurements.csv"
     
     # Copy REPORT.md template if exists
     if [[ -f "${TEMPLATES_DIR}/REPORT.md" ]]; then
@@ -142,7 +142,7 @@ EOF
 
 - \`experiment.json\` - Experiment metadata and group definitions
 - \`relay_config.csv\` - Relay-to-group assignments
-- \`measurements.csv\` - Collected data
+- \`memory_measurements.csv\` - Collected data
 - \`charts/\` - Generated visualizations
 - \`REPORT.md\` - Full analysis report (after completion)
 
@@ -151,7 +151,7 @@ EOF
 \`\`\`bash
 # Collect data (run daily)
 cd tools
-./collect.sh --output ${output_dir}/measurements.csv --config ${output_dir}/relay_config.csv
+./collect.sh --output ${output_dir}/memory_measurements.csv --config ${output_dir}/relay_config.csv
 \`\`\`
 
 ## Generate Report
@@ -170,7 +170,7 @@ EOF
     echo "  1. Edit relay_config.csv to assign relays to groups"
     echo "  2. Apply configurations to relays (edit torrc files)"
     echo "  3. Collect data:"
-    echo "     ./collect.sh --output ${output_dir}/measurements.csv --config ${output_dir}/relay_config.csv"
+    echo "     ./collect.sh --output ${output_dir}/memory_measurements.csv --config ${output_dir}/relay_config.csv"
     echo "  4. Generate report when done:"
     echo "     ./generate-report.py --experiment ${output_dir}/"
 }
@@ -218,13 +218,13 @@ cmd_status() {
     fi
     
     # Count measurements
-    if [[ -f "${exp_dir}/measurements.csv" ]]; then
-        local total_rows=$(wc -l < "${exp_dir}/measurements.csv" | tr -d ' ')
+    if [[ -f "${exp_dir}/memory_measurements.csv" ]]; then
+        local total_rows=$(wc -l < "${exp_dir}/memory_measurements.csv" | tr -d ' ')
         # grep -c outputs count even on no match (exits 1), so capture output regardless
         local agg_rows
-        agg_rows=$(grep -c ',aggregate,' "${exp_dir}/measurements.csv" 2>/dev/null) || agg_rows=0
+        agg_rows=$(grep -c ',aggregate,' "${exp_dir}/memory_measurements.csv" 2>/dev/null) || agg_rows=0
         local relay_rows
-        relay_rows=$(grep -c ',relay,' "${exp_dir}/measurements.csv" 2>/dev/null) || relay_rows=0
+        relay_rows=$(grep -c ',relay,' "${exp_dir}/memory_measurements.csv" 2>/dev/null) || relay_rows=0
         
         echo "Measurements: $((total_rows - 1)) rows total"
         echo "  - $agg_rows aggregate rows (data points)"
@@ -232,8 +232,8 @@ cmd_status() {
         
         # Date range
         if [[ "$agg_rows" -gt 0 ]]; then
-            local first_date=$(grep ',aggregate,' "${exp_dir}/measurements.csv" | head -1 | cut -d',' -f1)
-            local last_date=$(grep ',aggregate,' "${exp_dir}/measurements.csv" | tail -1 | cut -d',' -f1)
+            local first_date=$(grep ',aggregate,' "${exp_dir}/memory_measurements.csv" | head -1 | cut -d',' -f1)
+            local last_date=$(grep ',aggregate,' "${exp_dir}/memory_measurements.csv" | tail -1 | cut -d',' -f1)
             echo "  - Period: $first_date to $last_date"
         fi
     fi
@@ -273,7 +273,7 @@ cmd_list() {
         local has_data=""
         local has_report=""
         
-        [[ -f "${exp_dir}measurements.csv" ]] && has_data="✓ data"
+        [[ -f "${exp_dir}memory_measurements.csv" ]] && has_data="✓ data"
         [[ -f "${exp_dir}REPORT.md" ]] && has_report="✓ report"
         
         echo "  $name  $has_data $has_report"
@@ -313,7 +313,7 @@ Workflow:
   1. Initialize:  $0 init --name "my-experiment" --groups A,B
   2. Configure:   Edit relay_config.csv to assign relays to groups
   3. Apply:       Update torrc files based on group configs
-  4. Collect:     ./collect.sh --output .../measurements.csv --config .../relay_config.csv
+  4. Collect:     ./collect.sh --output .../memory_measurements.csv --config .../relay_config.csv
   5. Report:      ./generate-report.py --experiment .../
 
 See docs/experiments.md for detailed documentation.

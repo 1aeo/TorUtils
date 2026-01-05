@@ -150,7 +150,7 @@ timestamp,server,type,fingerprint,nickname,group,rss_kb,vmsize_kb,hwm_kb,frag_ra
 To enable group assignments, provide a relay config file:
 
 ```bash
-./collect.sh --output measurements.csv --config relay_config.csv
+./collect.sh --output memory_measurements.csv --config relay_config.csv
 ```
 
 The config file maps fingerprints to groups:
