@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The MaxMemInQueues Myth | 1st Amendment Encrypted Openness</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; text-align: center; background-color: #121212; color: #ffffff; }
+    .nav { background-color: #1e1e1e; padding: 10px 0; box-shadow: 0 2px 10px rgba(0, 255, 127, 0.2); position: sticky; top: 0; z-index: 1000; }
+    .nav-toggle { display: none; background: none; border: none; font-size: 24px; color: #00ff7f; position: absolute; top: 10px; right: 20px; cursor: pointer; }
+    .nav-links { display: flex; justify-content: center; flex-wrap: wrap; }
+    .nav-links a { color: #00ff7f; text-decoration: none; margin: 0 15px; font-size: 18px; }
+    .nav-links a:hover { text-decoration: underline; }
+    @media (max-width: 600px) { .nav-links { display: none; flex-direction: column; margin-top: 40px; } .nav-links.show { display: flex; } .nav-toggle { display: block; } }
+    .container { max-width: 800px; margin: 50px auto; padding: 20px; background: #1e1e1e; box-shadow: 0px 0px 15px rgba(0, 255, 127, 0.6); border-radius: 10px; text-align: left; }
+    h1, h2, h3 { color: #00ff7f; }
+    h1 { text-align: center; }
+    p { font-size: 18px; color: #cccccc; line-height: 1.6; margin-bottom: 1em; }
+    .meta { font-size: 14px; color: #888; margin-bottom: 20px; text-align: center; }
+    ul, ol { color: #cccccc; margin-bottom: 1em; }
+    li { font-size: 18px; margin-bottom: 8px; line-height: 1.6; }
+    code { background-color: #2d2d2d; padding: 2px 6px; border-radius: 3px; font-family: monospace; color: #00ff7f; }
+    a { color: #00ff7f; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container img { display: block; margin: 20px auto; max-width: 100%; height: auto; border-radius: 5px; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #444; }
+    th { background-color: #2d2d2d; color: #00ff7f; }
+    td { color: #cccccc; }
+    tr:hover { background-color: #252525; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #333; font-size: 14px; color: #777; text-align: center; }
+    .btn { display: inline-block; margin-top: 20px; padding: 12px 24px; font-size: 18px; color: #121212; background-color: #00ff7f; text-decoration: none; font-weight: bold; border-radius: 5px; transition: background 0.3s; }
+    .btn:hover { background-color: #00cc66; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="nav">
+    <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('show')">&#9776;</button>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/blog">Blog</a>
+      <a href="https://metrics.1aeo.com">Metrics</a>
+      <a href="https://aroivalidator.1aeo.com">AROI Validator</a>
+      <a href="https://routefluxmap.1aeo.com">RouteFluxMap</a>
+      <a href="/#contact">Contact</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <h1>The MaxMemInQueues Myth</h1>
+    <p class="meta"><em>By 1AEO Team • January 2026</em></p>
+
+    <p>A common piece of advice for high-memory relays: "Just set <code>MaxMemInQueues</code> to a lower value." We put this to the test. It doesn't work. Neither does <code>MaxConsensusAgeForDiffs</code>.</p>
+
+    <h2>MaxMemInQueues: Why It Fails</h2>
+    <p>We configured test groups with strict limits: <code>MaxMemInQueues 2GB</code> and <code>4GB</code>. Logic suggests the process should stay within these bounds. In reality, both groups fragmented just as badly as the control—hitting ~5 GB within 48 hours.</p>
+
+    <table>
+      <thead>
+        <tr><th>Configuration</th><th>Avg Memory</th><th>Result</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>MaxMemInQueues 2GB</td><td>4.17 GB</td><td>Fragmented</td></tr>
+        <tr><td>MaxMemInQueues 4GB</td><td>4.76 GB</td><td>Fragmented</td></tr>
+        <tr><td>Control (default)</td><td>5.14 GB</td><td>Fragmented</td></tr>
+      </tbody>
+    </table>
+
+    <p><strong>Why it failed:</strong> <code>MaxMemInQueues</code> strictly limits memory for circuit and connection buffers. It does <em>not</em> control the directory cache or the overhead from the allocator itself. The fragmentation happens in memory glibc won't release, not in Tor's queues.</p>
+
+    <img src="chart_maxmem.png" alt="MaxMemInQueues Comparison">
+
+    <h2>MaxConsensusAgeForDiffs: No Better</h2>
+    <p>We hypothesized that limiting consensus diff cache age might reduce allocation churn:</p>
+
+    <table>
+      <thead>
+        <tr><th>Configuration</th><th>Avg Memory</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>MaxConsensusAgeForDiffs 4h</td><td>5.76 GB</td></tr>
+        <tr><td>MaxConsensusAgeForDiffs 8h</td><td>5.72 GB</td></tr>
+        <tr><td>Control (glibc)</td><td>5.64 GB</td></tr>
+      </tbody>
+    </table>
+
+    <p>Both performed identically to control—or slightly worse. The fragmentation pattern was unchanged.</p>
+
+    <h2>The Real Fix</h2>
+    <p>Treat <code>MaxMemInQueues</code> as a <strong>congestion/buffer safety setting</strong>—not a solution to allocator-driven fragmentation. It's still good practice for overload protection, but if you're seeing RSS "stick" high on guards, you need allocator-level changes (jemalloc/mimalloc) rather than a larger or smaller MaxMem cap.</p>
+
+    <p style="text-align: center;"><a href="/#get-involved" class="btn">Join the Mission</a></p>
+
+    <div class="footer">
+      <p><em>Data from 1AEO's memory experiments, September 2025 and December 2025 – January 2026</em></p>
+      <p>© 2026 1st Amendment Encrypted Openness | Privacy First | No Logs | No Borders</p>
+    </div>
+  </div>
+</body>
+</html>

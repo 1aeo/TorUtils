@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Periodic Restarts: A Brute-Force Workaround | 1st Amendment Encrypted Openness</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; text-align: center; background-color: #121212; color: #ffffff; }
+    .nav { background-color: #1e1e1e; padding: 10px 0; box-shadow: 0 2px 10px rgba(0, 255, 127, 0.2); position: sticky; top: 0; z-index: 1000; }
+    .nav-toggle { display: none; background: none; border: none; font-size: 24px; color: #00ff7f; position: absolute; top: 10px; right: 20px; cursor: pointer; }
+    .nav-links { display: flex; justify-content: center; flex-wrap: wrap; }
+    .nav-links a { color: #00ff7f; text-decoration: none; margin: 0 15px; font-size: 18px; }
+    .nav-links a:hover { text-decoration: underline; }
+    @media (max-width: 600px) { .nav-links { display: none; flex-direction: column; margin-top: 40px; } .nav-links.show { display: flex; } .nav-toggle { display: block; } }
+    .container { max-width: 800px; margin: 50px auto; padding: 20px; background: #1e1e1e; box-shadow: 0px 0px 15px rgba(0, 255, 127, 0.6); border-radius: 10px; text-align: left; }
+    h1, h2, h3 { color: #00ff7f; }
+    h1 { text-align: center; }
+    p { font-size: 18px; color: #cccccc; line-height: 1.6; margin-bottom: 1em; }
+    .meta { font-size: 14px; color: #888; margin-bottom: 20px; text-align: center; }
+    ul, ol { color: #cccccc; margin-bottom: 1em; }
+    li { font-size: 18px; margin-bottom: 8px; line-height: 1.6; }
+    code { background-color: #2d2d2d; padding: 2px 6px; border-radius: 3px; font-family: monospace; color: #00ff7f; }
+    pre { background-color: #2d2d2d; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    pre code { background: none; padding: 0; color: #ffffff; }
+    a { color: #00ff7f; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container img { display: block; margin: 20px auto; max-width: 100%; height: auto; border-radius: 5px; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #444; }
+    th { background-color: #2d2d2d; color: #00ff7f; }
+    td { color: #cccccc; }
+    tr:hover { background-color: #252525; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #333; font-size: 14px; color: #777; text-align: center; }
+    .btn { display: inline-block; margin-top: 20px; padding: 12px 24px; font-size: 18px; color: #121212; background-color: #00ff7f; text-decoration: none; font-weight: bold; border-radius: 5px; transition: background 0.3s; }
+    .btn:hover { background-color: #00cc66; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="nav">
+    <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('show')">&#9776;</button>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/blog">Blog</a>
+      <a href="https://metrics.1aeo.com">Metrics</a>
+      <a href="https://aroivalidator.1aeo.com">AROI Validator</a>
+      <a href="https://routefluxmap.1aeo.com">RouteFluxMap</a>
+      <a href="/#contact">Contact</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <h1>Periodic Restarts: A Brute-Force Workaround</h1>
+    <p class="meta"><em>By 1AEO Team • January 2026</em></p>
+
+    <p>If you can't change your memory allocator, scheduled restarts offer a fallback strategy. We tested three restart intervals across 30 relays to measure effectiveness—and the tradeoffs.</p>
+
+    <h2>The Results</h2>
+    <table>
+      <thead>
+        <tr><th>Restart Interval</th><th>Avg Memory</th><th>vs Control</th><th>Tradeoff</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Every 24 hours</td><td>4.88 GB</td><td>-13%</td><td>High churn</td></tr>
+        <tr><td>Every 48 hours</td><td>4.56 GB</td><td>-19%</td><td>Moderate</td></tr>
+        <tr><td>Every 72 hours</td><td>5.29 GB</td><td>-6%</td><td>Low impact</td></tr>
+        <tr><td>Control (no restarts)</td><td>5.64 GB</td><td>—</td><td>Baseline</td></tr>
+      </tbody>
+    </table>
+
+    <img src="chart_restarts.png" alt="Restart Interval Memory Comparison">
+
+    <p>The 48-hour interval performed best, but even then memory averaged 4.56 GB—still 3-4x higher than what modern allocators achieve (1.1–1.6 GB).</p>
+
+    <h2>Why Restarts Help (A Little)</h2>
+    <p>Restarting a Tor relay forces the process to release all memory back to the OS and start fresh. For the first 24-48 hours after restart, memory usage is reasonable. Then fragmentation kicks in and RSS climbs back toward 5+ GB.</p>
+
+    <p>The sawtooth pattern is predictable:</p>
+    <ul>
+      <li><strong>Hour 0:</strong> Fresh start, ~500 MB</li>
+      <li><strong>Hour 24:</strong> Climbing, ~2-3 GB</li>
+      <li><strong>Hour 48:</strong> Fragmented, ~4-5 GB</li>
+      <li><strong>Hour 72+:</strong> Plateau at 5+ GB</li>
+    </ul>
+
+    <h2>The Tradeoffs</h2>
+    <p>Scheduled restarts come with costs:</p>
+    <ol>
+      <li><strong>Circuit disruption:</strong> Active circuits are terminated, forcing clients to rebuild</li>
+      <li><strong>Warmup period:</strong> Relay must re-establish connections and rebuild routing tables</li>
+      <li><strong>Operational overhead:</strong> Requires cron/systemd timers and monitoring</li>
+      <li><strong>Diminishing returns:</strong> 24h restarts only save ~13% vs no restarts</li>
+    </ol>
+
+    <h2>Implementation</h2>
+    <p>If you must use restarts, here's a systemd timer approach:</p>
+
+    <pre><code># Create timer: /etc/systemd/system/tor-restart@.timer
+[Unit]
+Description=Restart Tor relay %i every 48 hours
+
+[Timer]
+OnBootSec=48h
+OnUnitActiveSec=48h
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target</code></pre>
+
+    <pre><code># Enable for a relay
+sudo systemctl enable --now tor-restart@relay_name.timer</code></pre>
+
+    <p>The <code>RandomizedDelaySec</code> staggers restarts across relays to avoid simultaneous disruption.</p>
+
+    <h2>When to Use Restarts</h2>
+    <ul>
+      <li><strong>Temporary measure</strong> while planning allocator migration</li>
+      <li><strong>Constrained environments</strong> where you can't install packages</li>
+      <li><strong>Monitoring validation</strong> to confirm memory returns to baseline</li>
+    </ul>
+
+    <h2>Better Alternative</h2>
+    <p>Restarts are a band-aid. Switching to mimalloc or jemalloc eliminates the need entirely—memory stays flat at 1-2 GB indefinitely without any service interruption.</p>
+
+    <table>
+      <thead>
+        <tr><th>Approach</th><th>Memory</th><th>Service Impact</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>mimalloc 2.1</td><td>1.16 GB</td><td>None</td></tr>
+        <tr><td>jemalloc 5.3</td><td>1.63 GB</td><td>None</td></tr>
+        <tr><td>48h restarts</td><td>4.56 GB</td><td>Every 48 hours</td></tr>
+        <tr><td>No action</td><td>5.64 GB</td><td>None (but wasted RAM)</td></tr>
+      </tbody>
+    </table>
+
+    <p style="text-align: center;"><a href="/#get-involved" class="btn">Join the Mission</a></p>
+
+    <div class="footer">
+      <p><em>Data from 1AEO's 90-relay memory experiment on Ubuntu 24.04, Dec 2025 – Jan 2026</em></p>
+      <p>© 2026 1st Amendment Encrypted Openness | Privacy First | No Logs | No Borders</p>
+    </div>
+  </div>
+</body>
+</html>
