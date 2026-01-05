@@ -1,21 +1,21 @@
-# Periodic Restarts: A Brute-Force Workaround
+# Periodic Restarts: A Brute-Force Workaround For Reducing Guard Memory
 
-**By 1AEO Team • January 2026**
+*By 1AEO Team • January 2026*
 
-*Experiment: 40 relays over 10 days (Dec 2025–Jan 2026) testing 24h, 48h, 72h intervals vs control*
+*Experiment: 40 relays over 10 days (Dec 2025–Jan 2026) testing 24h, 48h, 72h intervals vs glibc (control)*
 
-If you can't change your memory allocator, scheduled restarts offer a fallback strategy. We tested three restart intervals to measure effectiveness—and the tradeoffs.
+If you can't change your memory allocator, scheduled restarts offer a fallback strategy. We tested three restart intervals across 30 relays to measure effectiveness—and the tradeoffs.
 
 ## The Results
 
 | Restart Interval | Avg Memory | vs Control | Tradeoff |
-|-----------------|------------|------------|----------|
+|------------------|------------|------------|----------|
 | Every 24 hours | 4.88 GB | -13% | High churn |
 | Every 48 hours | 4.56 GB | -19% | Moderate |
 | Every 72 hours | 5.29 GB | -6% | Low impact |
 | Control (no restarts) | 5.64 GB | — | Baseline |
 
-![Restart Interval Memory Comparison](chart_restarts.png)
+![Restart Interval Memory Comparison](images/periodic-restarts-workaround-guard-memory.png)
 
 The 48-hour interval performed best, but even then memory averaged 4.56 GB—still 3-4x higher than what modern allocators achieve (1.1–1.6 GB).
 
@@ -24,8 +24,9 @@ The 48-hour interval performed best, but even then memory averaged 4.56 GB—sti
 Restarting a Tor relay forces the process to release all memory back to the OS and start fresh. For the first 24-48 hours after restart, memory usage is reasonable. Then fragmentation kicks in and RSS climbs back toward 5+ GB.
 
 The sawtooth pattern is predictable:
+
 - **Hour 0:** Fresh start, ~500 MB
-- **Hour 24:** Climbing, ~2-3 GB  
+- **Hour 24:** Climbing, ~2-3 GB
 - **Hour 48:** Fragmented, ~4-5 GB
 - **Hour 72+:** Plateau at 5+ GB
 
@@ -42,7 +43,7 @@ Scheduled restarts come with costs:
 
 If you must use restarts, here's a systemd timer approach:
 
-```bash
+```ini
 # Create timer: /etc/systemd/system/tor-restart@.timer
 [Unit]
 Description=Restart Tor relay %i every 48 hours
@@ -79,9 +80,5 @@ Restarts are a band-aid. Switching to mimalloc or jemalloc eliminates the need e
 | jemalloc 5.3 | 1.63 GB | None |
 | 48h restarts | 4.56 GB | Every 48 hours |
 | No action | 5.64 GB | None (but wasted RAM) |
-
----
-
-*Data from 1AEO's 90-relay memory experiment on Ubuntu 24.04, Dec 2025 – Jan 2026*
 
 📊 **Raw data:** [View experiment data and relay configs on GitHub](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test)

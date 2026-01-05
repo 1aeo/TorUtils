@@ -1,10 +1,10 @@
 # Tor Memory Optimization: What Actually Works
 
-**By 1AEO Team • January 2026**
+*By 1AEO Team • January 2026*
 
 *Experiment: 103 relays across two studies — 13 relays over 9 days (Sept 2025) and 90 relays over 10 days (Dec 2025–Jan 2026) on Ubuntu 24.04 with Tor 0.4.8.x*
 
-Over the past four months, we conducted extensive memory experiments on high-bandwidth Tor guard relays. Our goal: understand why Guard relays on Linux consistently see memory "stick" at 5–6 GB after ~48 hours—and how to fix it.
+Over the past four months, we conducted extensive memory experiments across 100+ relay-days on high-bandwidth Tor relays running **Ubuntu 24.04** with **Tor 0.4.8.x**. Our goal: understand why Guard relays on Linux consistently see memory "stick" at 5–6 GB after ~48 hours—and how to fix it.
 
 ## Key Findings
 
@@ -26,7 +26,7 @@ Over the past four months, we conducted extensive memory experiments on high-ban
 
 ## The Problem Visualized
 
-![Memory Fragmentation by Group](memory_by_group.png)
+![Memory Fragmentation by Group](images/tor-memory-optimizations-what-actually-works-chart.png)
 
 The chart shows the stark difference: glibc groups (D, E, Z) plateau at 5–6 GB while mimalloc (B) and jemalloc (A) stay under 2 GB. This isn't a gradual leak—it's a sudden expansion around Day 2 that never recovers under glibc.
 
@@ -43,8 +43,4 @@ sudo systemctl edit tor@relay_name
 
 With this single change, you can run more relays on the same hardware—capacity you can reinvest in the network.
 
----
-
-*Based on 1AEO's memory experiments across 100+ relays on Ubuntu 24.04, September 2025 – January 2026*
-
-📊 **Raw data:** [Sept 2025 experiment](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-09-18-co-guard-fragmentation) | [Dec 2025 experiment](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test)
+📊 **Raw data:** [View experiment data and relay configs on GitHub](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test)

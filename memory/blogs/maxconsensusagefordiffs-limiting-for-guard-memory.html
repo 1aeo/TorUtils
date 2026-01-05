@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>The DirCache Dilemma: The Fix We Can't Use (Yet) | 1st Amendment Encrypted Openness</title>
+  <title>MaxConsensusAgeForDiffs: Why Limiting Consensus Cache Doesn't Help Guard Memory | 1st Amendment Encrypted Openness</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; text-align: center; background-color: #121212; color: #ffffff; }
     .nav { background-color: #1e1e1e; padding: 10px 0; box-shadow: 0 2px 10px rgba(0, 255, 127, 0.2); position: sticky; top: 0; z-index: 1000; }
@@ -47,42 +47,57 @@
   </div>
 
   <div class="container">
-    <h1>The DirCache Dilemma: The Fix We Can't Use (Yet)</h1>
+    <h1>MaxConsensusAgeForDiffs: Why Limiting Consensus Cache Doesn't Help Guard Memory</h1>
     <p class="meta"><em>By 1AEO Team • January 2026</em></p>
-    <p class="meta"><em>Experiment: 13 relays over 9 days (Sept 9–18, 2025) on Ubuntu with glibc allocator</em></p>
 
-    <p>In September 2025 we investigated a pattern on our guard relays: memory looked normal after restart (~0.5 GB), then after ~48 hours RSS jumped and "stuck" around 5 GB. That's costly at fleet scale and a reliability risk.</p>
+    <p class="meta"><em>Experiment: 30 relays over 10 days (Dec 2025–Jan 2026) testing 4h and 8h limits vs control</em></p>
 
-    <p>We tested a radical configuration: <code>DirCache 0</code>. The impact was immediate and dramatic.</p>
+    <p>When investigating Tor relay memory fragmentation, we hypothesized that the consensus diff cache might be a major contributor. Tor stores multiple versions of network consensus documents to serve diffs to clients—perhaps limiting how long these are kept would reduce allocation churn?</p>
 
-    <h2>What We Found</h2>
+    <p>We tested <code>MaxConsensusAgeForDiffs</code> at 4 hours and 8 hours against the default. The results: no improvement whatsoever.</p>
+
+    <h2>The Results</h2>
     <table>
       <thead>
-        <tr><th>Configuration</th><th>Start RSS</th><th>End RSS</th><th>Change</th></tr>
+        <tr><th>Configuration</th><th>Avg Memory</th><th>vs Control</th></tr>
       </thead>
       <tbody>
-        <tr><td>DirCache 0</td><td>—</td><td>0.33 GB</td><td><strong>-93.8%</strong></td></tr>
-        <tr><td>Control (default)</td><td>0.57 GB</td><td>5.14 GB</td><td>+802%</td></tr>
+        <tr><td>MaxConsensusAgeForDiffs 4h</td><td>5.76 GB</td><td>+2% (worse)</td></tr>
+        <tr><td>MaxConsensusAgeForDiffs 8h</td><td>5.72 GB</td><td>+1% (worse)</td></tr>
+        <tr><td>Control (default)</td><td>5.64 GB</td><td>—</td></tr>
       </tbody>
     </table>
 
-    <p>Memory remained stable for 9+ days with DirCache disabled—no fragmentation, no gradual creep.</p>
+    <p>All three groups followed nearly identical fragmentation curves, converging at 5.6–5.8 GB.</p>
 
-    <img src="chart_dircache.png" alt="DirCache 0 vs Control Memory Usage">
+    <img src="images/maxconsensusagefordiffs-limiting-for-guard-memory.png" alt="MaxConsensusAgeForDiffs Comparison">
 
-    <h2>The Catch</h2>
-    <p>There's no free lunch. Disabling DirCache instantly revokes your relay's Guard status. The network requires Guards to handle directory traffic, so you cannot turn this feature off to save RAM if you want to remain a Guard.</p>
+    <h2>Why It Didn't Work</h2>
+    <p>The consensus diff cache is only one part of Tor's directory caching. Even with aggressive limits on diff retention, the relay still:</p>
+    <ol>
+      <li><strong>Caches full consensus documents</strong> for serving to clients</li>
+      <li><strong>Maintains descriptor caches</strong> for router information</li>
+      <li><strong>Handles continuous allocation churn</strong> from network updates</li>
+    </ol>
 
-    <h2>The Diagnostic Value</h2>
-    <p>The control relay shows the signature "fragmentation spike" inside the ~48-hour window, while the <code>DirCache 0</code> relay remains flat. This experiment proved that memory isn't "leaking" in the traditional sense—it's being <strong>fragmented by the churn of directory data</strong>.</p>
+    <p>The fundamental problem remains: glibc's allocator fragments memory under this workload pattern, regardless of how long individual cache entries are retained.</p>
 
-    <p>Since <code>DirCache 0</code> is incompatible with Guard operation, the practical path is allocator-level mitigation (jemalloc/mimalloc) so guards can keep caching <em>without</em> ballooning to 5–6 GB RSS.</p>
+    <h2>When MaxConsensusAgeForDiffs Matters</h2>
+    <p>This setting isn't useless—it just doesn't solve fragmentation:</p>
+    <ul>
+      <li><strong>Disk space:</strong> Lower values reduce consensus storage on disk</li>
+      <li><strong>Bandwidth:</strong> Clients with very old consensuses get full documents instead of diffs</li>
+      <li><strong>Specific debugging:</strong> Useful when investigating consensus-related issues</li>
+    </ul>
+
+    <h2>The Real Fix</h2>
+    <p>Like <code>MaxMemInQueues</code>, this is a configuration knob that controls Tor behavior but doesn't address the underlying allocator problem. For memory fragmentation, the solution is switching to mimalloc or jemalloc—which reduced memory from 5.6 GB to 1.1–1.6 GB in our tests.</p>
+
+    <p>📊 <strong>Raw data:</strong> <a href="https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test">View experiment data and relay configs on GitHub</a></p>
 
     <p style="text-align: center;"><a href="/#get-involved" class="btn">Join the Mission</a></p>
 
     <div class="footer">
-      <p><em>Data from 1AEO's guard relay investigation, September 2025</em></p>
-      <p>📊 <strong>Raw data:</strong> <a href="https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-09-18-co-guard-fragmentation">View experiment data and relay configs on GitHub</a></p>
       <p>© 2026 1st Amendment Encrypted Openness | Privacy First | No Logs | No Borders</p>
     </div>
   </div>

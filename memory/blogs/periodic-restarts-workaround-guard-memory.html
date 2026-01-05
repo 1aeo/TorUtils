@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Periodic Restarts: A Brute-Force Workaround | 1st Amendment Encrypted Openness</title>
+  <title>Periodic Restarts: A Brute-Force Workaround For Reducing Guard Memory | 1st Amendment Encrypted Openness</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; text-align: center; background-color: #121212; color: #ffffff; }
     .nav { background-color: #1e1e1e; padding: 10px 0; box-shadow: 0 2px 10px rgba(0, 255, 127, 0.2); position: sticky; top: 0; z-index: 1000; }
@@ -49,11 +49,12 @@
   </div>
 
   <div class="container">
-    <h1>Periodic Restarts: A Brute-Force Workaround</h1>
+    <h1>Periodic Restarts: A Brute-Force Workaround For Reducing Guard Memory</h1>
     <p class="meta"><em>By 1AEO Team • January 2026</em></p>
-    <p class="meta"><em>Experiment: 40 relays over 10 days (Dec 2025–Jan 2026) testing 24h, 48h, 72h intervals vs control</em></p>
 
-    <p>If you can't change your memory allocator, scheduled restarts offer a fallback strategy. We tested three restart intervals to measure effectiveness—and the tradeoffs.</p>
+    <p class="meta"><em>Experiment: 40 relays over 10 days (Dec 2025–Jan 2026) testing 24h, 48h, 72h intervals vs glibc (control)</em></p>
+
+    <p>If you can't change your memory allocator, scheduled restarts offer a fallback strategy. We tested three restart intervals across 30 relays to measure effectiveness—and the tradeoffs.</p>
 
     <h2>The Results</h2>
     <table>
@@ -68,7 +69,7 @@
       </tbody>
     </table>
 
-    <img src="chart_restarts.png" alt="Restart Interval Memory Comparison">
+    <img src="images/periodic-restarts-workaround-guard-memory.png" alt="Restart Interval Memory Comparison">
 
     <p>The 48-hour interval performed best, but even then memory averaged 4.56 GB—still 3-4x higher than what modern allocators achieve (1.1–1.6 GB).</p>
 
@@ -134,11 +135,11 @@ sudo systemctl enable --now tor-restart@relay_name.timer</code></pre>
       </tbody>
     </table>
 
+    <p>📊 <strong>Raw data:</strong> <a href="https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test">View experiment data and relay configs on GitHub</a></p>
+
     <p style="text-align: center;"><a href="/#get-involved" class="btn">Join the Mission</a></p>
 
     <div class="footer">
-      <p><em>Data from 1AEO's 90-relay memory experiment on Ubuntu 24.04, Dec 2025 – Jan 2026</em></p>
-      <p>📊 <strong>Raw data:</strong> <a href="https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test">View experiment data and relay configs on GitHub</a></p>
       <p>© 2026 1st Amendment Encrypted Openness | Privacy First | No Logs | No Borders</p>
     </div>
   </div>
