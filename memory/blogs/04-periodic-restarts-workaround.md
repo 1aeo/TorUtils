@@ -13,7 +13,7 @@ If you can't change your memory allocator, scheduled restarts offer a fallback s
 | Every 72 hours | 5.29 GB | -6% | Low impact |
 | Control (no restarts) | 5.64 GB | — | Baseline |
 
-![Restart Interval Memory Comparison](chart3_fragmentation_timeline.png)
+![Restart Interval Memory Comparison](chart_restarts.png)
 
 The 48-hour interval performed best, but even then memory averaged 4.56 GB—still 3-4x higher than what modern allocators achieve (1.1–1.6 GB).
 
