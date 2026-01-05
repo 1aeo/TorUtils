@@ -1,0 +1,48 @@
+{
+  "id": "2025-09-18-co-guard-fragmentation",
+  "name": "Guard Relay Memory Fragmentation Investigation",
+  "server": "co",
+  "start_date": "2025-09-09",
+  "end_date": "2025-09-18",
+  "hypothesis": "DirCache 0 and/or MaxMemInQueues will reduce memory while maintaining guard status",
+  "description": "Testing memory impact of DirCache and MaxMemInQueues settings on guard relays experiencing ~5GB memory fragmentation due to glibc malloc",
+  "groups": {
+    "A": {
+      "name": "DirCache 0 + MaxMem 2GB",
+      "config": {
+        "dircache": 0,
+        "maxmem": "2GB"
+      }
+    },
+    "B": {
+      "name": "Control (default)",
+      "config": {
+        "dircache": "default",
+        "maxmem": "default"
+      }
+    },
+    "C": {
+      "name": "MaxMem 2GB only",
+      "config": {
+        "dircache": "default",
+        "maxmem": "2GB"
+      }
+    },
+    "D": {
+      "name": "MaxMem 4GB only",
+      "config": {
+        "dircache": "default",
+        "maxmem": "4GB"
+      }
+    },
+    "E": {
+      "name": "DirCache 0 only",
+      "config": {
+        "dircache": 0,
+        "maxmem": "default"
+      }
+    }
+  },
+  "tor_version": "unknown",
+  "allocator": "glibc"
+}

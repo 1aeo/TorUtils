@@ -1,378 +1,277 @@
-# Tor Relay Memory Investigation Report
+# Guard Relay Memory Fragmentation Investigation
 
 ## Executive Summary
 
-**Problem:** Tor guard relays consuming ~5 GB RAM each  
-**Cause:** Memory fragmentation from directory caching + glibc malloc  
-**Goal:** Reduce memory while maintaining guard relay status
+**Problem:** Tor guard relays consuming ~5 GB RAM each due to memory fragmentation  
+**Hypothesis:** DirCache 0 and/or MaxMemInQueues will reduce memory while maintaining guard status  
+**Result:** DirCache 0 reduces memory by 94% but removes guard status; MaxMemInQueues alone does not prevent fragmentation  
+**Recommendation:** Investigate alternative memory allocators (jemalloc, tcmalloc, OpenBSD malloc) that handle fragmentation better while maintaining guard status
 
-> **Note:** This is a known issue. The Tor Project acknowledges that "On Linux, glibc's malloc implementation has bugs that can lead to memory fragmentation" and recommends alternative allocators.  
-> — [Tor Support: Relay Memory](https://support.torproject.org/relay-operators/relay-memory/)
+## Experiment Setup
 
-### Investigation Results
+| Parameter | Value |
+|-----------|-------|
+| Server | co |
+| Period | 2025-09-09 to 2025-09-18 |
+| Tor Version | unknown |
+| Allocator | glibc |
+| Relay Count | 13 |
 
-| Configuration | Memory | Guard Status | Viable? |
-|---------------|--------|--------------|---------|
-| Default (DirCache enabled) | ~5 GB/relay | ✅ Maintained | ❌ Too much memory |
-| `DirCache 0` | ~0.3 GB/relay | ❌ Lost | ❌ Unacceptable |
-| `MaxMemInQueues` only | ~4-5 GB/relay | ✅ Maintained | ❌ Doesn't help |
+### Groups
 
-**Conclusion:** No acceptable solution found yet. `DirCache 0` solves memory but removes guard status. Guard relays require directory caching, which causes fragmentation with glibc malloc.
+| Group | Configuration | Relays | Description |
+|-------|---------------|--------|-------------|
+| A | DirCache 0 + MaxMem 2GB | 3 | Test combined optimization |
+| B | Control (default) | 1 | No optimization baseline |
+| C | MaxMem 2GB only | 3 | Test MaxMemInQueues alone |
+| D | MaxMem 4GB only | 3 | Test higher MaxMemInQueues |
+| E | DirCache 0 only | 3 | Test DirCache alone |
 
-### Root Cause Confirmed
+## Results
 
-The memory issue is caused by:
-1. Directory caching (required for guard relays) creates fragmented allocations
-2. glibc malloc does not efficiently release fragmented memory
-3. Physical memory grows to match virtual memory over ~48 hours
+### Key Metrics
 
-**Next step:** Investigate alternative memory allocators (jemalloc, tcmalloc) that handle fragmentation better.
+| Group | Configuration | Start RSS | End RSS | Change | Status |
+|-------|---------------|-----------|---------|--------|--------|
+| A | DirCache 0 + MaxMem 2GB | 5.35 GB | 0.29 GB | -94.6% | STABLE |
+| E | DirCache 0 only | - | 0.33 GB | -93.8% | STABLE |
+| C | MaxMem 2GB only | 0.55 GB | 4.17 GB | +658% | FRAGMENTED |
+| D | MaxMem 4GB only | 0.55 GB | 4.76 GB | +766% | FRAGMENTED |
+| B | Control (default) | 0.57 GB | 5.14 GB | +802% | FRAGMENTED |
 
-### Key Results (9-Day Study)
+### Charts
 
-| Configuration | Final RSS | Reduction | Stable? | Guard Status |
-|---------------|-----------|-----------|---------|--------------|
-| DirCache 0 + MaxMem 2GB | 0.29 GB | 94.6% | ✅ | ❌ Lost |
-| DirCache 0 only | 0.33 GB | 93.8% | ✅ | ❌ Lost |
-| MaxMem 2GB only | 4.17 GB | 22% | ❌ | ✅ Kept |
-| MaxMem 4GB only | 4.76 GB | 11% | ❌ | ✅ Kept |
-| No optimization | 5.14 GB | - | ❌ | ✅ Kept |
+#### A/B Experiment Charts
 
-**Conclusion:** `DirCache 0` solves memory fragmentation but is not viable for guard relays. Alternative approaches needed.
+![Memory Over Time by Group](charts/chart1_memory_over_time.png)
 
----
+![Final Comparison by Configuration](charts/chart2_final_comparison.png)
 
-## Experiments
+![Fragmentation Timeline](charts/chart3_fragmentation_timeline.png)
 
-### Experiment 1: Baseline (Day 0)
+#### Time-Series Charts
 
-**Goal:** Measure unoptimized relay memory usage
+![Memory Usage Over Time](charts/memory_usage.png)
 
-| Relay | RSS (GB) | VmSize (GB) | Frag Ratio |
-|-------|----------|-------------|------------|
-| 22gz | 5.03 | 10.00 | 1.99:1 |
-| 24kgoldn | 5.40 | 9.88 | 1.94:1 |
-| 42dugg | 5.61 | 9.95 | 2.01:1 |
-| **Avg** | **5.35** | **9.94** | **1.98:1** |
+![Weekly Memory Trends](charts/memory_weekly.png)
 
-**Finding:** Each relay uses ~5 GB physical memory with poor efficiency.
+## Analysis
 
----
+### What Worked
 
-### Experiment 2: DirCache 0 + MaxMem 2GB (Days 0-9)
+- **DirCache 0** immediately reduced memory from ~5 GB to ~0.3 GB (94% reduction)
+- Memory remained stable for 9+ days with DirCache 0 enabled
+- DirCache 0 alone (without MaxMemInQueues) achieves similar results
 
-**Goal:** Test combined optimization  
-**Config:** `DirCache 0` + `MaxMemInQueues 2 GB`  
-**Relays:** 22gz, 24kgoldn, 42dugg
+### What Didn't Work
 
-| Relay | Day 0 | Day 1 | Day 2 | Day 3 | Day 4 | Day 5 | Day 9 |
-|-------|-------|-------|-------|-------|-------|-------|-------|
-| 22gz | 5.03 | 0.28 | 0.32 | 0.34 | 0.32 | 0.33 | 0.27 |
-| 24kgoldn | 5.40 | 0.33 | 0.37 | 0.38 | 0.37 | 0.38 | 0.32 |
-| 42dugg | 5.61 | 0.31 | 0.36 | 0.37 | 0.36 | 0.36 | 0.29 |
-| **Avg** | **5.35** | **0.31** | **0.35** | **0.36** | **0.35** | **0.36** | **0.29** |
+- **MaxMemInQueues alone** does not prevent fragmentation - memory still explodes after 48 hours
+- MaxMemInQueues only limits circuit/connection buffers, not directory cache
+- Control relays fragmented from 0.57 GB to 5.15 GB within 24 hours
 
-**Finding:** ✅ Immediate 94% reduction, stable for 9+ days.
+### Unexpected Observations
 
----
-
-### Experiment 3: Control - No Optimization (Days 1-9)
-
-**Goal:** Confirm fragmentation without optimization  
-**Config:** None (default)  
-**Relay:** armanicaesar
-
-| Day 1 | Day 2 | Day 3 | Day 4 | Day 5 | Day 9 |
-|-------|-------|-------|-------|-------|-------|
-| 0.57 | **5.15** | 5.40 | 5.41 | 5.62 | 5.14 |
-
-**Finding:** 🚨 Memory explodes from 0.57 GB to 5.15 GB within 24 hours.
-
----
-
-### Experiment 4: MaxMemInQueues Only (Days 1-9)
-
-**Goal:** Test if MaxMemInQueues alone prevents fragmentation  
-**Config:** `MaxMemInQueues 2 GB` (no DirCache 0)  
-**Relays:** arsonaldarebel, autumntwinuzis, ayeverb
-
-| Relay | Day 1 | Day 2 | Day 3 | Day 4 | Day 5 | Day 9 |
-|-------|-------|-------|-------|-------|-------|-------|
-| arsonaldarebel | 0.55 | 0.55 | **3.86** | 4.03 | 4.17 | 4.17 |
-| autumntwinuzis | 0.55 | 0.55 | **3.19** | 3.52 | 3.62 | 4.06 |
-| ayeverb | 0.56 | 0.56 | **3.78** | 3.84 | 4.18 | 4.29 |
-| **Avg** | **0.55** | **0.55** | **3.61** | **3.80** | **3.99** | **4.17** |
-
-**Finding:** ❌ Stable for 2 days, then fragments on Day 3. MaxMemInQueues alone fails.
-
-Also tested `MaxMemInQueues 4 GB` (relays: babyfaceray, babysmoove, bbno) - same result, slightly worse (4.76 GB by Day 9).
-
----
-
-### Experiment 5: DirCache 0 Only (Days 4-9)
-
-**Goal:** Test if DirCache 0 alone is sufficient  
-**Config:** `DirCache 0` (no MaxMemInQueues)  
-**Relays:** bfbdapackman, biggk, bigpokeyhouston
-
-| Relay | Day 4 | Day 5 | Day 9 |
-|-------|-------|-------|-------|
-| bfbdapackman | 0.42 | 0.39 | 0.32 |
-| biggk | 0.44 | 0.40 | 0.34 |
-| bigpokeyhouston | 0.42 | 0.36 | 0.32 |
-| **Avg** | **0.43** | **0.38** | **0.33** |
-
-**Finding:** ✅ DirCache 0 alone achieves 93.8% reduction and remains stable.
-
----
+- Fragmentation occurs suddenly around Day 2-3, not gradually
+- Higher MaxMemInQueues (4GB) performs slightly worse than 2GB
+- DirCache 0 causes loss of Guard relay status (expected but confirmed)
 
 ## Root Cause
 
-**Why it happens:**
-1. Tor's directory cache creates many small allocations
-2. glibc malloc doesn't efficiently release fragmented memory
-3. After ~48 hours, fragmentation causes RSS to explode
+The memory issue is caused by:
 
-> "Bugs in Linux's glibc malloc can cause memory fragmentation, preventing Tor from returning memory to the operating system."  
-> — [Tor Support: Relay Memory](https://support.torproject.org/relay-operators/relay-memory/)
+1. **Directory caching** (required for guard status) creates many small fragmented allocations
+2. **glibc malloc** does not efficiently release fragmented memory back to the OS
+3. After ~48 hours of operation, fragmentation causes RSS to explode to ~5 GB
 
-**Why DirCache 0 reduces memory:**
-- Disables directory caching
-- Prevents allocation churn that causes fragmentation
-- But: Guard relays REQUIRE directory caching for Guard flag
+> "If you're on Linux, you may be encountering memory fragmentation bugs in glibc's malloc implementation. That is, when Tor releases memory back to the system, the pieces of memory are fragmented so they're hard to reuse."  
+> — [Tor FAQ: Why is my Tor relay using so much memory?](https://2019.www.torproject.org/docs/faq.html.en#RelayMemory)
 
-**Why MaxMemInQueues doesn't help:**
-- Only limits circuit/connection buffers (default 8GB on systems with >8GB RAM)
-- Does NOT limit directory cache (the actual problem)
+**Why DirCache 0 works:** Disables directory caching, eliminating the allocation churn that causes fragmentation.
 
-> "For servers with 8 GB of memory, the default queue size limit of 8GB may lead to overload states."  
-> — [Tor Support: Relay Overload](https://support.torproject.org/relay-operators/relay-bridge-overloaded/)
+**Why it's not viable:** Guard relays REQUIRE directory caching to maintain Guard flag status.
 
-**The Core Problem:**
-- Guard relays must have `DirCache` enabled (default)
-- Directory caching + glibc malloc = memory fragmentation
-- Need to fix the allocator, not disable caching
+## Alternative Memory Allocators for Ubuntu 24.04
 
-**Additional Memory Factors (per Tor docs):**
-- Fast relays use ~38KB per TLS socket for OpenSSL buffers
-- Normal memory usage for fast exit relays: 500-1000 MB
-- Our 5GB usage is ~5x higher than documented norms
+The following allocators can be used with Tor on Ubuntu 24.04 to potentially reduce fragmentation.
 
----
+### Allocator Comparison
 
-## Reproduction
+| Allocator | Installation | CPU Overhead | Fragmentation | Security |
+|-----------|-------------|--------------|---------------|----------|
+| glibc (default) | Built-in | Low | High | Standard |
+| jemalloc | apt + LD_PRELOAD | Low-Medium | Low | Standard |
+| tcmalloc | apt + LD_PRELOAD | Low | Low | Standard |
+| mimalloc | apt + LD_PRELOAD | Very Low | Very Low | Standard |
+| OpenBSD malloc | Recompile Tor | High | Very Low | High |
 
-### Check Current Memory Usage
+### Option 1: jemalloc (Recommended)
 
+jemalloc is designed to reduce fragmentation and is widely used in production systems (Firefox, Redis, Facebook). Can be used via LD_PRELOAD without recompiling Tor.
+
+**Installation:**
 ```bash
-# Quick summary
-ps aux | grep tor | grep -v grep | awk '{sum+=$6} END {print sum/1024/1024 " GB total"}'
-
-# Per-relay detail
-./tor_memory_tool.sh status
+sudo apt install libjemalloc2
 ```
 
-### Monitor a Relay
-
+**Usage via LD_PRELOAD:**
 ```bash
-# Watch specific relay
-./tor_memory_tool.sh watch 22gz
-
-# Get detailed metrics
-./tor_memory_tool.sh detail 22gz
+# Edit systemd service file
+sudo systemctl edit tor@relay_name
+# Add:
+[Service]
+Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2"
 ```
 
-### Collect Data for Analysis
+### Option 2: tcmalloc (Google)
 
+Google's thread-caching malloc, good for multi-threaded applications.
+
+**Installation:**
 ```bash
-# CSV output for all relays
-./tor_memory_tool.sh csv > memory_snapshot_$(date +%Y%m%d).csv
+sudo apt install libgoogle-perftools4
 ```
 
-### Test DirCache 0 (Converts to Middle Relay)
-
+**Usage via LD_PRELOAD:**
 ```bash
-# Only use if willing to lose guard status
-./tor_memory_tool.sh apply --dry-run  # Preview
-./tor_memory_tool.sh apply relay1     # Apply to test relay
+Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4"
 ```
 
----
+### Option 3: mimalloc (Microsoft)
+
+Modern allocator with excellent fragmentation handling.
+
+**Installation:**
+```bash
+sudo apt install libmimalloc2.0
+```
+
+**Usage via LD_PRELOAD:**
+```bash
+Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so"
+```
+
+### Option 4: OpenBSD malloc (Tor Recommended)
+
+Officially recommended by Tor Project. More secure but uses more CPU. Requires recompiling Tor from source.
+
+**Compile Tor from source:**
+```bash
+sudo apt install build-essential libevent-dev libssl-dev zlib1g-dev
+git clone https://gitlab.torproject.org/tpo/core/tor.git
+cd tor
+./autogen.sh
+./configure --enable-openbsd-malloc
+make && sudo make install
+```
+
+## Recommendations
+
+1. **Test jemalloc via LD_PRELOAD** - Easiest to deploy, no recompilation needed
+2. **Test mimalloc** - Modern allocator with excellent performance characteristics
+3. **Periodic Restarts** - Schedule rolling restarts as interim workaround
+4. **MaxConsensusAgeForDiffs** - Test limiting consensus diff cache age
+5. **Report to Tor Project** - Submit findings to GitLab
 
 ## Next Steps
 
-The investigation confirmed that memory fragmentation from glibc malloc is the root cause. Since `DirCache 0` is not viable for guard relays, alternative approaches to explore:
+### Proposed Experiments
 
-### 1. Alternative Memory Allocators (Recommended by Tor Project)
+#### Experiment 1: jemalloc vs glibc (10 days)
 
-The Tor Project officially recommends compiling Tor with OpenBSD's malloc to avoid glibc fragmentation:
+**Objective:** Compare memory usage with jemalloc allocator vs default glibc
 
-> "You can compile Tor with OpenBSD malloc instead of glibc's malloc. If you do, Tor will be less vulnerable to memory fragmentation [...] This can be done by configuring Tor with the `--enable-openbsd-malloc` option."  
-> — [Tor Support: Relay Memory](https://support.torproject.org/relay-operators/relay-memory/)
+| Group | Relays | Configuration |
+|-------|--------|---------------|
+| A | 5 | jemalloc via LD_PRELOAD |
+| B | 5 | Control (glibc default) |
 
-```bash
-# OpenBSD malloc - Officially recommended by Tor Project
-# Download Tor source and compile with:
-./configure --enable-openbsd-malloc
-make && sudo make install
+**Settings:**
+- DirCache: default (enabled)
+- MaxMemInQueues: default
+- Collection: Daily via `collect.sh`
 
-# jemalloc - Alternative, good fragmentation handling
-sudo apt install libjemalloc-dev
-./configure --with-malloc=jemalloc
-make && sudo make install
+**Expected Outcome:** jemalloc relays will show lower fragmentation and stable memory around 1-2 GB instead of 5 GB.
 
-# tcmalloc - Google's allocator
-sudo apt install libgoogle-perftools-dev
-./configure --with-malloc=tcmalloc
-make && sudo make install
-```
+#### Experiment 2: mimalloc vs tcmalloc (10 days)
 
-> **Trade-off:** "OpenBSD malloc uses more CPU than glibc's malloc."  
-> — [Tor Support: Relay Memory](https://support.torproject.org/relay-operators/relay-memory/)
+**Objective:** Compare modern allocators for fragmentation handling
 
-**Expected outcome:** Reduced fragmentation while keeping DirCache enabled.
+| Group | Relays | Configuration |
+|-------|--------|---------------|
+| A | 4 | mimalloc via LD_PRELOAD |
+| B | 4 | tcmalloc via LD_PRELOAD |
+| C | 2 | Control (glibc) |
 
-### 2. Periodic Relay Restarts
+**Settings:**
+- DirCache: default (enabled)
+- MaxMemInQueues: default
+- Collection: Daily via `collect.sh`
 
-Schedule rolling restarts to reset memory fragmentation. While the Tor Project doesn't provide explicit guidance on restart schedules, it is a common administrative practice for long-running services experiencing memory fragmentation.
+**Expected Outcome:** Identify which allocator provides best memory efficiency while maintaining guard status.
 
-> Note: The Tor Project recommends running relays with sufficient RAM rather than frequent restarts. However, restarts can be a practical workaround until a proper fix is implemented.  
-> — [Tor Support: Relay Overload](https://support.torproject.org/relay-operators/relay-bridge-overloaded/)
+#### Experiment 3: MaxConsensusAgeForDiffs (7 days)
 
-```bash
-# Restart one relay per hour via cron (rolling restarts across 24 hours)
-0 * * * * /usr/bin/systemctl restart tor@$(ls /etc/tor/instances | sed -n "$(($(date +\%H) + 1))p")
-```
+**Objective:** Test if limiting consensus diff cache reduces fragmentation
 
-**Trade-off:** Brief service interruption, but maintains guard status. Schedule during low-traffic periods.
+| Group | Relays | Configuration |
+|-------|--------|---------------|
+| A | 3 | MaxConsensusAgeForDiffs 4 hours |
+| B | 3 | MaxConsensusAgeForDiffs 8 hours |
+| C | 3 | Control (default - no limit) |
 
-### 3. Reduce Advertised Bandwidth
+**Settings:**
+- DirCache: default (enabled)
+- Allocator: glibc (isolate one variable)
+- Collection: Daily via `collect.sh`
 
-The Tor Project suggests reducing bandwidth to reduce memory load:
+**Expected Outcome:** Lower diff cache age may reduce memory pressure without losing guard status.
 
-> "You can try reducing your relay's bandwidth by using the `MaxAdvertisedBandwidth` option in your `torrc`."  
-> — [Tor Support: Relay Memory](https://support.torproject.org/relay-operators/relay-memory/)
+#### Experiment 4: Rolling Restart Impact (14 days)
 
-```
-# Reduce advertised bandwidth to decrease load
-MaxAdvertisedBandwidth 20 MB
-```
+**Objective:** Measure effectiveness of periodic restarts as workaround
 
-**Trade-off:** Lower bandwidth attracts fewer users but reduces memory pressure.
+| Group | Relays | Configuration |
+|-------|--------|---------------|
+| A | 3 | Restart every 24 hours |
+| B | 3 | Restart every 48 hours |
+| C | 3 | Restart every 72 hours |
+| D | 3 | Control (no restarts) |
 
-### 4. Limit Consensus Diff Cache
+**Settings:**
+- DirCache: default
+- Allocator: glibc
+- Collection: Every 6 hours via `collect.sh`
 
-The `MaxConsensusAgeForDiffs` option limits how long consensus documents are retained for generating diffs, reducing cache size and memory pressure.
+**Expected Outcome:** Determine optimal restart interval that balances memory usage with service continuity.
 
-> "When this option is nonzero, Tor caches will not try to generate consensus diffs for any consensus older than this amount of time. [...] You should not set this option unless your cache is severely low on disk space or CPU. If you need to set it, keeping it above 3 or 4 hours will help clients much more than setting it to zero."  
-> — [Tor Manual](https://2019.www.torproject.org/docs/tor-manual.html.en)
+### Implementation Checklist
 
-```
-# Limit consensus diff cache age (reduces memory/disk from diff-cache)
-MaxConsensusAgeForDiffs 4 hours
-```
-
-Community reports indicate this significantly reduces files in the `diff-cache` directory.  
-— [Tor Forum Discussion](https://forum.torproject.org/t/tor-fills-tmp-space-and-crashes/17725)
-
-For more details on directory cache behavior, see:  
-— [Tor Spec: Directory Cache Operation](https://spec.torproject.org/dir-spec/directory-cache-operation.html)
-
-### 5. Kernel Memory Settings (Linux Administration)
-
-These are general Linux kernel tuning options, not Tor-specific guidance. They may help with memory management but are not officially recommended by the Tor Project.
-
-```bash
-# Trigger memory compaction (one-time)
-echo 1 > /proc/sys/vm/compact_memory
-
-# Tune writeback thresholds (may help with memory pressure)
-sysctl -w vm.dirty_ratio=10
-sysctl -w vm.dirty_background_ratio=5
-```
-
-**Note:** These settings affect system-wide behavior. Test carefully before applying to production systems.
-
-### 6. Monitor and Document
-
-Continue monitoring to establish patterns:
-
-```bash
-# Daily memory snapshot
-./tor_memory_tool.sh csv >> /var/log/tor_memory_history.csv
-```
-
-### 7. Report to Tor Project
-
-No existing GitLab issues were found documenting this specific guard relay memory problem. Consider submitting our findings:
-
-- **GitLab:** https://gitlab.torproject.org/tpo/core/tor/-/issues
-- Include: Data from this investigation, reproduction steps, system specs
-- This could help other operators and inform future Tor development
-
----
+- [ ] **Experiment 1**: Deploy jemalloc on 5 test relays
+- [ ] **Experiment 2**: Deploy mimalloc and tcmalloc comparison
+- [ ] **Experiment 3**: Test MaxConsensusAgeForDiffs settings
+- [ ] **Experiment 4**: Implement rolling restart schedule
+- [ ] **Report to Tor Project**: Submit findings to GitLab with data
 
 ## Data Reference
 
-Complete raw data in `tor_memory_data.csv`:
-- 13 relays across 5 test groups
-- 9 days of measurements
-- RSS, VmSize, and fragmentation metrics
-
----
+- **Experiment directory**: `reports/2025-09-18-co-guard-fragmentation/`
+- **Legacy data**: `data.csv` (13 relays, 9 days, day-column format)
+- **Unified data**: `measurements.csv` (72 relay measurements, 7 aggregate rows)
+- **Relay config**: `relay_config.csv` (13 relays across 5 groups)
+- **Raw data period**: 2025-09-09 to 2025-09-18
 
 ## References
 
-### Official Tor Project Documentation
-
-1. **Tor Support: My relay is using too much memory**  
-   https://support.torproject.org/relay-operators/relay-memory/  
-   - Documents glibc malloc fragmentation issue
-   - Recommends `--enable-openbsd-malloc` compile option
-   - Notes OpenSSL buffer memory (~38KB per socket)
-   - Recommends `MaxAdvertisedBandwidth` to reduce load
-   - States fast exit relays use 500-1000 MB normally
-
-2. **Tor Support: How can I tell if my relay is overloaded?**  
-   https://support.torproject.org/relay-operators/relay-bridge-overloaded/  
-   - `MaxMemInQueues` default is 8GB on systems with ≥8GB RAM
-   - OOM handler triggers at 75% of available memory
-   - Recommends minimum 2GB RAM (4GB for 64-bit)
-
-3. **Tor Manual (torrc options)**  
-   https://2019.www.torproject.org/docs/tor-manual.html.en  
-   - `MaxConsensusAgeForDiffs` - limits consensus diff cache age
-   - `MaxMemInQueues` - limits queue memory
-   - `MaxAdvertisedBandwidth` - limits advertised bandwidth
-
-4. **Tor Specification: Directory Cache Operation**  
-   https://spec.torproject.org/dir-spec/directory-cache-operation.html  
-   - Details on consensus diff generation and caching
-   - Technical specification for directory caches
-
-5. **Tor Specification: Memory Exhaustion Attacks**  
-   https://spec.torproject.org/dos-spec/memory-exhaustion.html  
-   - Documents memory-based DoS vulnerabilities
-   - Explains how buffers and queues can be exploited
-
-### Community Resources
-
-6. **Tor Forum: Tor fills /tmp space and crashes**  
-   https://forum.torproject.org/t/tor-fills-tmp-space-and-crashes/17725  
-   - Community reports on `MaxConsensusAgeForDiffs` effectiveness
-   - Practical experience reducing diff-cache size
-
-7. **Tor GitLab Issues**  
-   https://gitlab.torproject.org/tpo/core/tor/-/issues  
-   - No existing issues found for guard relay memory fragmentation
-   - Consider submitting our findings as a new issue
-
-8. **Tor Blog: Release 0.4.5.6**  
-   https://blog.torproject.org/new-release-tor-0456/  
-   - Introduced consensus diff cache limit (64 items on Windows)
-   - Addressed high CPU usage from consensus diff generation
+1. [Tor FAQ: Why is my Tor relay using so much memory?](https://2019.www.torproject.org/docs/faq.html.en#RelayMemory) - Documents glibc malloc fragmentation and `--enable-openbsd-malloc` solution
+2. [Tor Community: Relay Post-Install](https://community.torproject.org/relay/setup/post-install/) - General relay setup and maintenance guidance
+3. [Tor Manual (torrc options)](https://2019.www.torproject.org/docs/tor-manual.html.en) - Configuration reference for `MaxMemInQueues`, `MaxConsensusAgeForDiffs`, etc.
+4. [Tor Specification: Directory Cache Operation](https://spec.torproject.org/dir-spec/directory-cache-operation.html) - Technical details on consensus diff caching
+5. [Tor GitLab Issue Tracker](https://gitlab.torproject.org/tpo/core/tor/-/issues) - For reporting findings and tracking related issues
+6. [jemalloc Documentation](https://jemalloc.net/) - Alternative allocator with better fragmentation handling
+7. [mimalloc GitHub](https://github.com/microsoft/mimalloc) - Microsoft's high-performance allocator
+8. [Tor Forum](https://forum.torproject.org/) - Community discussions on relay operation
 
 ---
 
-*Investigation: September 9-18, 2025 | Report: December 24, 2025*
-
+*Experiment conducted: 2025-09-09 to 2025-09-18*  
+*Report generated: 2025-12-26*
