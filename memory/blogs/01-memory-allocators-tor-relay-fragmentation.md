@@ -2,7 +2,9 @@
 
 **By 1AEO Team • January 2026**
 
-Running high-capacity Tor relays on Linux often leads to a familiar headache: memory that looks fine after restart, then "sticks" at 5–6 GB after ~48 hours. Our 90-relay experiment on **Ubuntu 24.04** with **Tor 0.4.8.21** confirms that the default system allocator (`glibc 2.39`) is the bottleneck—not Tor itself.
+*Experiment: 40 relays (10 per allocator group) over 10 days on Ubuntu 24.04 with Tor 0.4.8.21*
+
+Running high-capacity Tor relays on Linux often leads to a familiar headache: memory that looks fine after restart, then "sticks" at 5–6 GB after ~48 hours. Our experiment confirms that the default system allocator (`glibc 2.39`) is the bottleneck—not Tor itself.
 
 ## The Results
 

@@ -2,7 +2,9 @@
 
 **By 1AEO Team • January 2026**
 
-Over the past four months, we conducted extensive memory experiments across 100+ relay-days on high-bandwidth Tor relays running **Ubuntu 24.04** with **Tor 0.4.8.x**. Our goal: understand why Guard relays on Linux consistently see memory "stick" at 5–6 GB after ~48 hours—and how to fix it.
+*Experiment: 103 relays across two studies — 13 relays over 9 days (Sept 2025) and 90 relays over 10 days (Dec 2025–Jan 2026) on Ubuntu 24.04 with Tor 0.4.8.x*
+
+Over the past four months, we conducted extensive memory experiments on high-bandwidth Tor guard relays. Our goal: understand why Guard relays on Linux consistently see memory "stick" at 5–6 GB after ~48 hours—and how to fix it.
 
 ## Key Findings
 

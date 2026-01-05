@@ -2,6 +2,8 @@
 
 **By 1AEO Team • January 2026**
 
+*Experiment: 13 relays over 9 days (Sept 9–18, 2025) on Ubuntu with glibc allocator*
+
 In September 2025 we investigated a pattern on our guard relays: memory looked normal after restart (~0.5 GB), then after ~48 hours RSS jumped and "stuck" around 5 GB. That's costly at fleet scale and a reliability risk.
 
 We tested a radical configuration: `DirCache 0`. The impact was immediate and dramatic.

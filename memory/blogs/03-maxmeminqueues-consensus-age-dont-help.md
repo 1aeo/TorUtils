@@ -2,6 +2,8 @@
 
 **By 1AEO Team • January 2026**
 
+*Experiment: 7 relays over 9 days (Sept 2025) testing 2GB and 4GB limits vs control*
+
 A common piece of advice for high-memory relays: "Just set `MaxMemInQueues` to a lower value." We put this to the test. It doesn't work.
 
 ## MaxMemInQueues: Why It Fails

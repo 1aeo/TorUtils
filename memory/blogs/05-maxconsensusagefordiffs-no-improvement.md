@@ -2,6 +2,8 @@
 
 **By 1AEO Team • January 2026**
 
+*Experiment: 30 relays over 10 days (Dec 2025–Jan 2026) testing 4h and 8h limits vs control*
+
 When investigating Tor relay memory fragmentation, we hypothesized that the consensus diff cache might be a major contributor. Tor stores multiple versions of network consensus documents to serve diffs to clients—perhaps limiting how long these are kept would reduce allocation churn?
 
 We tested `MaxConsensusAgeForDiffs` at 4 hours and 8 hours against the default. The results: no improvement whatsoever.
