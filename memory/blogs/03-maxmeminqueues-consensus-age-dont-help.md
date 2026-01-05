@@ -30,16 +30,6 @@ We hypothesized that limiting consensus diff cache age might reduce allocation c
 
 Both performed identically to control—or slightly worse. The fragmentation pattern was unchanged.
 
-## Periodic Restarts: A Partial Workaround
-
-| Restart Interval | Avg Memory |
-|-----------------|------------|
-| Every 24 hours | 4.88 GB |
-| Every 48 hours | 4.56 GB |
-| Every 72 hours | 5.29 GB |
-
-Restarts help, but not dramatically—and they interrupt circuit continuity.
-
 ## The Real Fix
 
 Configuring queue limits is good practice for overload protection, but don't rely on it to fix memory fragmentation. The root cause is glibc's inability to handle fragmented allocations—only changing the allocator solves the underlying problem.

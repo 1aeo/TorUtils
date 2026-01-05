@@ -20,7 +20,7 @@ Over the past four months, we conducted extensive memory experiments across 100+
 | DirCache 0 | 0.29 GB (94% ↓) | ❌ Loses Guard |
 | MaxMemInQueues | ~5 GB (no change) | ❌ No |
 | MaxConsensusAgeForDiffs | ~5.7 GB (no change) | ❌ No |
-| Scheduled restarts | 4.5–5 GB (minimal) | ⚠️ Workaround |
+| Periodic restarts | 4.5–5 GB (minimal) | ⚠️ Workaround only |
 
 ## The Problem Visualized
 
