@@ -158,7 +158,7 @@ def chart2_final_comparison(rows: list[dict], output_path: Path):
                    color=[r['color'] for r in results],
                    height=0.6, edgecolor='black', linewidth=1)
     
-    # Add value labels on bars
+    # Add value labels on bars with contrasting colors
     for bar, result in zip(bars, results):
         width = bar.get_width()
         if result['group'] in ['A', 'E']:
@@ -166,10 +166,11 @@ def chart2_final_comparison(rows: list[dict], output_path: Path):
             label = f"{width:.2f} GB  ({reduction:.0f}% reduction)"
         else:
             label = f"{width:.2f} GB"
+        # Position labels to the right of bars with black text for visibility
         ax.text(width + 0.15, bar.get_y() + bar.get_height()/2,
                 label, va='center', fontsize=11, fontweight='bold', color='black')
     
-    # Build y-axis labels with status indicators
+    # Build y-axis labels with status indicators included
     y_labels = []
     for result in results:
         status = "⚠ Loses Guard" if result['group'] in ['A', 'E'] else "✓ Keeps Guard"
@@ -182,7 +183,7 @@ def chart2_final_comparison(rows: list[dict], output_path: Path):
                  fontsize=14, fontweight='bold', pad=20)
     ax.set_xlim(0, 7)
     
-    # Reference lines
+    # Reference lines with better positioning
     ax.axvline(x=1.0, color='darkgreen', linestyle='--', alpha=0.7, linewidth=2)
     ax.text(1.0, -0.6, 'Tor docs:\n500-1000 MB\nnormal', 
             fontsize=9, color='darkgreen', ha='center', va='top')
@@ -190,6 +191,8 @@ def chart2_final_comparison(rows: list[dict], output_path: Path):
     ax.text(5.35, -0.6, 'Original\nbaseline', fontsize=9, color='darkred', ha='center', va='top')
     
     ax.invert_yaxis()
+    
+    # Add more left margin for y-labels
     plt.subplots_adjust(left=0.25)
     plt.tight_layout()
     save_chart(fig, output_path)
