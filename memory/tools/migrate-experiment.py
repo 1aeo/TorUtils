@@ -9,11 +9,11 @@ Old format (data.csv):
   group,relay,day0,day1,day2,...,dayN
   A,22gz,5.03,0.28,0.32,...
 
-New format (measurements.csv):
+New format (memory_measurements.csv):
   timestamp,server,type,fingerprint,nickname,group,rss_kb,vmsize_kb,hwm_kb,frag_ratio,count,total_kb,avg_kb,min_kb,max_kb
 
 Usage:
-    python3 migrate-experiment.py --input reports/old-experiment/data.csv --output reports/old-experiment/measurements.csv
+    python3 migrate-experiment.py --input reports/old-experiment/data.csv --output reports/old-experiment/memory_measurements.csv
     python3 migrate-experiment.py --experiment reports/old-experiment/
 
 Requirements:
@@ -266,7 +266,7 @@ def main():
         epilog="""
 Examples:
     python3 migrate-experiment.py --experiment reports/2025-09-18-co-guard-fragmentation/
-    python3 migrate-experiment.py --input data.csv --output measurements.csv --start-date 2025-09-09
+    python3 migrate-experiment.py --input data.csv --output memory_measurements.csv --start-date 2025-09-09
 
 The migration will:
   1. Convert day-column data to timestamped rows
@@ -292,7 +292,7 @@ The migration will:
     if args.experiment:
         exp_dir = Path(args.experiment)
         input_path = exp_dir / 'data.csv'
-        output_path = exp_dir / 'measurements.csv'
+        output_path = exp_dir / 'memory_measurements.csv'
         
         # Extract server from directory name (e.g., "2025-09-18-co-guard-fragmentation" -> "co")
         parts = exp_dir.name.split('-')

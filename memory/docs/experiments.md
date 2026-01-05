@@ -24,7 +24,7 @@ nano reports/2025-12-25-server-dircache-test/relay_config.csv
 # (manual step - edit torrc files per relay_config.csv)
 
 # 4. Collect data daily
-./collect.sh --output reports/.../measurements.csv --config reports/.../relay_config.csv
+./collect.sh --output reports/.../memory_measurements.csv --config reports/.../relay_config.csv
 
 # 5. Generate report
 python3 generate-report.py --experiment reports/2025-12-25-server-dircache-test/
@@ -45,7 +45,7 @@ This creates:
 reports/YYYY-MM-DD-server-description/
 ├── experiment.json       # Metadata template
 ├── relay_config.csv      # Empty relay assignments
-├── measurements.csv      # Empty with header
+├── memory_measurements.csv      # Empty with header
 ├── charts/               # For generated charts
 └── README.md             # Basic documentation
 ```
@@ -122,7 +122,7 @@ sudo systemctl restart tor@relay1
 
 ```bash
 ./collect.sh \
-  --output reports/2025-12-25-server-dircache-test/measurements.csv \
+  --output reports/2025-12-25-server-dircache-test/memory_measurements.csv \
   --config reports/2025-12-25-server-dircache-test/relay_config.csv
 ```
 
@@ -133,7 +133,7 @@ Add to crontab for daily collection:
 ```bash
 # Daily at 2am
 0 2 * * * /path/to/TorUtils/memory/tools/collect.sh \
-  --output /path/to/experiment/measurements.csv \
+  --output /path/to/experiment/memory_measurements.csv \
   --config /path/to/experiment/relay_config.csv
 ```
 
@@ -229,7 +229,7 @@ This generates:
 | `maxmem` | No | MaxMemInQueues setting |
 | `notes` | No | Additional notes |
 
-### measurements.csv
+### memory_measurements.csv
 
 See [schema.md](schema.md) for full column documentation.
 
@@ -273,7 +273,7 @@ This converts:
 group,relay,day0,day1,day2
 A,22gz,5.03,0.28,0.32
 
-# New format (measurements.csv)
+# New format (memory_measurements.csv)
 timestamp,server,type,fingerprint,nickname,group,rss_kb,...
 2025-09-09T00:00:00,server,relay,,22gz,A,5277491,...
 ```
@@ -296,10 +296,10 @@ cat /etc/tor/instances/relay_name/fingerprint
 
 ### Charts show no data
 
-Check that `measurements.csv` has data:
+Check that `memory_measurements.csv` has data:
 ```bash
-wc -l measurements.csv
-grep ",relay," measurements.csv | head
+wc -l memory_measurements.csv
+grep ",relay," memory_measurements.csv | head
 ```
 
 ## See Also

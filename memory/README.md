@@ -178,7 +178,7 @@ reports/
 ├── YYYY-MM-DD-hostname-description/
 │   ├── README.md          # Summary
 │   ├── REPORT.md          # Full analysis (optional)
-│   ├── measurements.csv   # Collected data (unified format)
+│   ├── memory_measurements.csv   # Collected data (unified format)
 │   └── charts/            # Generated visualizations
 ```
 
@@ -202,7 +202,7 @@ cd tools
 nano reports/2025-12-25-server-dircache-test/relay_config.csv
 
 # Collect data (run daily)
-./collect.sh --output reports/.../measurements.csv --config reports/.../relay_config.csv
+./collect.sh --output reports/.../memory_measurements.csv --config reports/.../relay_config.csv
 
 # Generate report and charts
 python3 generate-report.py --experiment reports/2025-12-25-server-dircache-test/
