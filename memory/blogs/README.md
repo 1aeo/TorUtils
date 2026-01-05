@@ -10,13 +10,14 @@ Four blog posts summarizing findings from 1AEO's memory experiments under `TorUt
 | 01 | [Solving Tor Memory Fragmentation with Custom Allocators](01-memory-allocators-tor-relay-fragmentation.md) | jemalloc, mimalloc, tcmalloc | memory_by_group.png |
 | 02 | [The DirCache Dilemma](02-dircache-memory-tradeoff-tor-relays.md) | 94% reduction tradeoff | chart1_memory_over_time.png |
 | 03 | [The MaxMemInQueues Myth](03-maxmeminqueues-consensus-age-dont-help.md) | Config tuning myths | chart2_final_comparison.png |
+| 04 | [Periodic Restarts: A Brute-Force Workaround](04-periodic-restarts-workaround.md) | Restart intervals | chart3_fragmentation_timeline.png |
 
 ---
 
 ## Key Takeaways
 
 1. **The Culprit:** Memory fragmentation in glibc's allocator, caused by Directory Cache churn
-2. **False Hopes:** `MaxMemInQueues` and `MaxConsensusAgeForDiffs` don't help
+2. **False Hopes:** `MaxMemInQueues`, `MaxConsensusAgeForDiffs`, and periodic restarts don't solve root cause
 3. **The Fix:** Modern allocators (mimalloc, jemalloc) reduce memory 70-80%
 
 ## Results Summary (Ubuntu 24.04)
@@ -37,7 +38,7 @@ Four blog posts summarizing findings from 1AEO's memory experiments under `TorUt
 | `memory_by_group.png` | Allocator comparison (Dec 2025 experiment) | Blog 00, 01 |
 | `chart1_memory_over_time.png` | DirCache 0 vs control timeline | Blog 02 |
 | `chart2_final_comparison.png` | MaxMemInQueues comparison | Blog 03 |
-| `chart3_fragmentation_timeline.png` | Fragmentation timeline | Reference |
+| `chart3_fragmentation_timeline.png` | Restart interval comparison | Blog 04 |
 | `bandwidth_by_group.png` | Bandwidth by allocator group | Reference |
 | `bandwidth_over_time.png` | Bandwidth timeline | Reference |
 
