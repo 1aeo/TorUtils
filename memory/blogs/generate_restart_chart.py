@@ -89,8 +89,11 @@ def main():
     ax.text(group_series['Z'][0][-1], 5.15, '5 GB', fontsize=9, color='#888888', ha='right')
     
     # Add reference for allocator performance
-    ax.axhline(y=1.5, color='#00ff7f', linestyle='--', alpha=0.4, linewidth=1)
-    ax.text(group_series['Z'][0][-1], 1.65, 'mimalloc/jemalloc', fontsize=9, color='#00ff7f', alpha=0.7, ha='right')
+    ax.axhline(y=1.16, color='#3498db', linestyle='--', alpha=0.6, linewidth=1.5)
+    ax.text(group_series['Z'][0][-1], 1.28, 'mimalloc 2.1 (1.16 GB)', fontsize=9, color='#3498db', alpha=0.9, ha='right')
+    
+    ax.axhline(y=1.63, color='#2ecc71', linestyle='--', alpha=0.6, linewidth=1.5)
+    ax.text(group_series['Z'][0][-1], 1.75, 'jemalloc 5.3 (1.63 GB)', fontsize=9, color='#2ecc71', alpha=0.9, ha='right')
     
     for spine in ax.spines.values():
         spine.set_color('#444444')
