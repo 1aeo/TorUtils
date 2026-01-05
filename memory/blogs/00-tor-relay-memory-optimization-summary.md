@@ -44,3 +44,5 @@ With this single change, you can run more relays on the same hardware—capacity
 ---
 
 *Based on 1AEO's memory experiments across 100+ relays on Ubuntu 24.04, September 2025 – January 2026*
+
+📊 **Raw data:** [Sept 2025 experiment](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-09-18-co-guard-fragmentation) | [Dec 2025 experiment](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test)

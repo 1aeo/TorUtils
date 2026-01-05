@@ -37,3 +37,5 @@ Treat `MaxMemInQueues` as a **congestion/buffer safety setting**—not a solutio
 ---
 
 *Data from 1AEO's memory experiments, September 2025 and December 2025 – January 2026*
+
+📊 **Raw data:** [Sept 2025 experiment](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-09-18-co-guard-fragmentation) | [Dec 2025 experiment](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test)

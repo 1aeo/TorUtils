@@ -30,3 +30,5 @@ Since `DirCache 0` is incompatible with Guard operation, the practical path is a
 ---
 
 *Data from 1AEO's guard relay investigation, September 2025*
+
+📊 **Raw data:** [View experiment data and relay configs on GitHub](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-09-18-co-guard-fragmentation)
