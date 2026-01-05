@@ -1,67 +1,112 @@
 #!/usr/bin/env python3
 """
-Generate chart for periodic restarts blog post.
-Data from Dec 2025 unified memory experiment (Groups F, G, H, Z).
+Generate time series chart for periodic restarts blog.
+Shows: restart-24h (F), restart-48h (G), restart-72h (H), glibc control (Z)
 """
 
+import csv
 import matplotlib.pyplot as plt
-import numpy as np
+import matplotlib.dates as mdates
+from datetime import datetime
+from collections import defaultdict
+from pathlib import Path
 
-def setup_dark_theme():
+CSV_FILE = Path("/workspace/memory/reports/2025-12-26-co-unified-memory-test/memory_measurements.csv")
+OUTPUT_FILE = Path("/workspace/memory/blogs/chart_restarts.png")
+
+# Only restart groups + control
+GROUP_CONFIG = {
+    'F': {'name': 'Restart 24h', 'color': '#1abc9c'},       # teal
+    'G': {'name': 'Restart 48h', 'color': '#16a085'},       # dark teal
+    'H': {'name': 'Restart 72h', 'color': '#27ae60'},       # green
+    'Z': {'name': 'glibc (control)', 'color': '#e74c3c'},   # red
+}
+
+def main():
+    print(f"Reading {CSV_FILE}...")
+    
+    data = defaultdict(lambda: defaultdict(list))
+    
+    with open(CSV_FILE, 'r') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row['type'] != 'relay':
+                continue
+            
+            group = row.get('group', '')
+            if not group or group not in GROUP_CONFIG:
+                continue
+            
+            try:
+                timestamp = datetime.fromisoformat(row['timestamp'])
+                rss_kb = float(row['rss_kb'])
+                rss_gb = rss_kb / 1024 / 1024
+                data[group][timestamp].append(rss_gb)
+            except (ValueError, KeyError):
+                continue
+    
+    # Calculate averages
+    group_series = {}
+    for group in GROUP_CONFIG.keys():
+        timestamps = sorted(data[group].keys())
+        averages = [sum(data[group][t]) / len(data[group][t]) for t in timestamps]
+        group_series[group] = (timestamps, averages)
+    
+    # Create figure with dark theme
     plt.style.use('dark_background')
-    plt.rcParams['figure.facecolor'] = '#0d1117'
-    plt.rcParams['axes.facecolor'] = '#0d1117'
-    plt.rcParams['axes.edgecolor'] = '#444444'
-    plt.rcParams['axes.labelcolor'] = '#ffffff'
-    plt.rcParams['text.color'] = '#ffffff'
-    plt.rcParams['xtick.color'] = '#888888'
-    plt.rcParams['ytick.color'] = '#888888'
-    plt.rcParams['grid.color'] = '#444444'
-    plt.rcParams['grid.alpha'] = 0.3
-
-def create_restart_bar_chart():
-    """Create a bar chart comparing restart intervals."""
-    setup_dark_theme()
+    fig, ax = plt.subplots(figsize=(12, 7))
+    fig.set_facecolor('#0d1117')
+    ax.set_facecolor('#0d1117')
     
-    fig, ax = plt.subplots(figsize=(10, 6))
+    # Plot each group
+    for group, config in GROUP_CONFIG.items():
+        timestamps, values = group_series.get(group, ([], []))
+        if timestamps:
+            ax.plot(timestamps, values, 
+                   label=f"{config['name']}", 
+                   color=config['color'],
+                   linewidth=2.5,
+                   marker='o',
+                   markersize=5)
     
-    # Data from unified experiment
-    configs = ['24h Restarts', '48h Restarts', '72h Restarts', 'No Restarts\n(Control)']
-    values = [4.88, 4.56, 5.29, 5.64]
-    colors = ['#ffd93d', '#00d4aa', '#6bcb77', '#ff6b6b']
+    # Formatting
+    ax.set_xlabel('Date', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Memory (GB)', fontsize=12, fontweight='bold')
+    ax.set_title('Periodic Restarts vs Control: Memory Over Time\nUbuntu 24.04, Tor 0.4.8.x (10 relays per group)', 
+                 fontsize=14, fontweight='bold', pad=15)
     
-    x = np.arange(len(configs))
-    bars = ax.bar(x, values, color=colors, edgecolor='white', linewidth=1.5, width=0.6)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+    ax.xaxis.set_major_locator(mdates.DayLocator(interval=2))
+    plt.xticks(rotation=45, ha='right')
     
-    # Add value labels on bars
-    for bar, val in zip(bars, values):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.08,
-                f'{val:.2f} GB', ha='center', va='bottom', fontsize=12, fontweight='bold')
+    ax.grid(True, alpha=0.3, color='#444444')
+    ax.legend(loc='upper left', fontsize=11, framealpha=0.9)
     
-    # Add reduction percentages
-    reductions = ['-13%', '-19%', '-6%', '—']
-    for i, (bar, red) in enumerate(zip(bars, reductions)):
-        if red != '—':
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() - 0.5,
-                    red, ha='center', va='top', fontsize=10, color='white', alpha=0.8)
+    ax.set_ylim(bottom=0, top=7)
     
-    ax.set_ylabel('Average Memory (GB)', fontsize=12, fontweight='bold')
-    ax.set_title('Periodic Restart Intervals: Memory Comparison', fontsize=14, fontweight='bold', pad=15)
+    # Reference lines
+    ax.axhline(y=5, color='#666666', linestyle='--', alpha=0.5, linewidth=1)
+    ax.text(group_series['Z'][0][-1], 5.15, '5 GB', fontsize=9, color='#888888', ha='right')
     
-    ax.set_xticks(x)
-    ax.set_xticklabels(configs, fontsize=11)
-    ax.set_ylim(0, 6.5)
-    ax.grid(True, axis='y', alpha=0.3)
+    # Add reference for allocator performance
+    ax.axhline(y=1.5, color='#00ff7f', linestyle='--', alpha=0.4, linewidth=1)
+    ax.text(group_series['Z'][0][-1], 1.65, 'mimalloc/jemalloc', fontsize=9, color='#00ff7f', alpha=0.7, ha='right')
     
-    # Add horizontal reference line for allocator performance
-    ax.axhline(y=1.5, color='#00d4aa', linestyle='--', alpha=0.5, linewidth=2)
-    ax.text(3.5, 1.65, 'mimalloc/jemalloc range', fontsize=9, color='#00d4aa', alpha=0.8, ha='right')
+    for spine in ax.spines.values():
+        spine.set_color('#444444')
+    ax.tick_params(colors='#888888')
     
     plt.tight_layout()
-    fig.savefig('/workspace/memory/blogs/chart_restarts.png', 
-                facecolor='#0d1117', edgecolor='none', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print("Created: /workspace/memory/blogs/chart_restarts.png")
+    
+    print(f"Saving to {OUTPUT_FILE}...")
+    plt.savefig(OUTPUT_FILE, dpi=150, bbox_inches='tight', facecolor='#0d1117', edgecolor='none')
+    print(f"Done!")
+    
+    print("\n--- Final Memory ---")
+    for group, (timestamps, values) in sorted(group_series.items(), key=lambda x: x[1][1][-1] if x[1][1] else 99):
+        if values:
+            config = GROUP_CONFIG[group]
+            print(f"  {config['name']}: {values[-1]:.2f} GB")
 
 if __name__ == '__main__':
-    create_restart_bar_chart()
+    main()
