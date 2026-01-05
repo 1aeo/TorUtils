@@ -17,9 +17,10 @@ TOR_INSTANCES_DIR="/etc/tor/instances"
 
 # Get PID for a relay by name
 # Usage: pid=$(get_relay_pid "relay_name")
+# Returns empty string if relay not running (pipefail-safe)
 get_relay_pid() {
     local relay="$1"
-    pgrep -f "tor.*instances/${relay}" | head -1
+    pgrep -f "tor.*instances/${relay}" 2>/dev/null | head -1 || true
 }
 
 # List all relay names
