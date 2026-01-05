@@ -78,7 +78,7 @@
 ## Data Reference
 
 - **Experiment directory**: `[path]`
-- **Measurements**: `measurements.csv` ([N] data points, [N] relays)
+- **Measurements**: `memory_measurements.csv` ([N] data points, [N] relays)
 - **Relay config**: `relay_config.csv`
 - **Raw data period**: [start] to [end]
 
