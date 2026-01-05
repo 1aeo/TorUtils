@@ -2,7 +2,7 @@
 
 **By 1AEO Team • January 2026**
 
-Over the past four months, we conducted extensive memory experiments across 100+ relay-days on high-bandwidth Tor relays. Our goal: understand why Guard relays on Linux consistently consume excessive RAM (5+ GB) and how to fix it.
+Over the past four months, we conducted extensive memory experiments across 100+ relay-days on high-bandwidth Tor relays running **Ubuntu 24.04**. Our goal: understand why Guard relays on Linux consistently consume excessive RAM (5+ GB) and how to fix it.
 
 ## Key Findings
 
@@ -14,9 +14,9 @@ Over the past four months, we conducted extensive memory experiments across 100+
 
 | Approach | Result | Viable? |
 |----------|--------|---------|
-| **mimalloc allocator** | 1.16 GB (79% ↓) | ✅ Yes |
-| **jemalloc allocator** | 1.63 GB (71% ↓) | ✅ Yes |
-| tcmalloc allocator | 3.68 GB (35% ↓) | ⚠️ Partial |
+| **mimalloc 2.1** | 1.16 GB (79% ↓) | ✅ Yes |
+| **jemalloc 5.3** | 1.63 GB (71% ↓) | ✅ Yes |
+| tcmalloc 4.5 | 3.68 GB (35% ↓) | ⚠️ Partial |
 | DirCache 0 | 0.29 GB (94% ↓) | ❌ Loses Guard |
 | MaxMemInQueues | ~5 GB (no change) | ❌ No |
 | MaxConsensusAgeForDiffs | ~5.7 GB (no change) | ❌ No |
@@ -30,11 +30,11 @@ The chart shows the stark difference: glibc groups (D, E, Z) plateau at 5–6 GB
 
 ## Recommendation
 
-For operators running Guard relays on Linux, move away from the default allocator. Switching to **mimalloc** or **jemalloc** reduced our memory footprint by 70–80% without any loss in performance, stability, or Guard status.
+For operators running Guard relays on Ubuntu 24.04, move away from the default allocator. Switching to **mimalloc** or **jemalloc** reduced our memory footprint by 70–80% without any loss in performance, stability, or Guard status.
 
 ```bash
-# Quick deploy
-sudo apt install libmimalloc2.0
+# Ubuntu 24.04 - Quick deploy
+sudo apt install libmimalloc2.0  # mimalloc 2.1.2
 sudo systemctl edit tor@relay_name
 # Add: Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2"
 ```
@@ -43,4 +43,4 @@ With this single change, you can run more relays on the same hardware—capacity
 
 ---
 
-*Based on 1AEO's memory experiments across 100+ relays, September 2025 – January 2026*
+*Based on 1AEO's memory experiments across 100+ relays on Ubuntu 24.04, September 2025 – January 2026*

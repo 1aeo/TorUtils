@@ -8,6 +8,12 @@ A common piece of advice for high-memory relays: "Just set `MaxMemInQueues` to a
 
 We configured test groups with strict limits: `MaxMemInQueues 2GB` and `4GB`. Logic suggests the process should stay within these bounds. In reality, both groups fragmented just as badly as the control—hitting ~5 GB within 48 hours.
 
+| Configuration | Avg Memory | Result |
+|--------------|------------|--------|
+| MaxMemInQueues 2GB | 4.17 GB | Fragmented |
+| MaxMemInQueues 4GB | 4.76 GB | Fragmented |
+| Control (default) | 5.14 GB | Fragmented |
+
 **Why it failed:** `MaxMemInQueues` strictly limits memory for circuit and connection buffers. It does *not* control the directory cache or the overhead from the allocator itself. The fragmentation happens in memory glibc won't release, not in Tor's queues.
 
 ![MaxMemInQueues Comparison](chart2_final_comparison.png)

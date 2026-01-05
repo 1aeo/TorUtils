@@ -10,9 +10,7 @@ We tested a radical configuration: `DirCache 0`. The impact was immediate and dr
 
 | Configuration | Start RSS | End RSS | Change |
 |--------------|-----------|---------|--------|
-| DirCache 0 + MaxMem 2GB | 5.35 GB | 0.29 GB | **-94.6%** |
-| DirCache 0 only | — | 0.33 GB | **-93.8%** |
-| MaxMem 2GB only | 0.55 GB | 4.17 GB | +658% |
+| DirCache 0 | — | 0.33 GB | **-93.8%** |
 | Control (default) | 0.57 GB | 5.14 GB | +802% |
 
 Memory remained stable for 9+ days with DirCache disabled—no fragmentation, no gradual creep.
