@@ -1,30 +1,30 @@
-# MaxMemInQueues Won't Save Your Relay's Memory
+# The MaxMemInQueues Myth
 
 **By 1AEO Team • January 2026**
 
-Tor's `MaxMemInQueues` setting sounds like the answer to memory bloat—set a cap and Tor will respect it. We tested it. It doesn't work for fragmentation. Neither does `MaxConsensusAgeForDiffs`.
+A common piece of advice for high-memory relays: "Just set `MaxMemInQueues` to a lower value." We put this to the test. It doesn't work. Neither does `MaxConsensusAgeForDiffs`.
 
-## MaxMemInQueues: The Wrong Target
+## MaxMemInQueues: Why It Fails
 
-In our first experiment, relays with `MaxMemInQueues 2GB` fragmented from 0.55 GB to 4.17 GB in under a week—a 658% increase. The 4GB setting performed even worse. Control relays hit 5.14 GB.
+We configured test groups with strict limits: `MaxMemInQueues 2GB` and `4GB`. Logic suggests the process should stay within these bounds. In reality, both groups fragmented just as badly as the control—hitting ~5 GB within 48 hours.
 
-The problem: MaxMemInQueues only limits circuit and connection buffers. Directory cache allocations—the actual source of fragmentation—are unaffected. Tor respects your limit; glibc's fragmentation doesn't.
+**Why it failed:** `MaxMemInQueues` strictly limits memory for circuit and connection buffers. It does *not* control the directory cache or the overhead from the allocator itself. The fragmentation happens in memory glibc won't release, not in Tor's queues.
+
+![MaxMemInQueues Comparison](chart2_final_comparison.png)
 
 ## MaxConsensusAgeForDiffs: No Better
 
-We hypothesized that limiting how long Tor keeps consensus diffs might reduce allocation churn. Our 90-relay experiment tested two settings:
+We hypothesized that limiting consensus diff cache age might reduce allocation churn:
 
 | Configuration | Avg Memory |
 |--------------|------------|
-| MaxConsensusAgeForDiffs 4 hours | 5.76 GB |
-| MaxConsensusAgeForDiffs 8 hours | 5.72 GB |
-| Control (glibc, no tuning) | 5.64 GB |
+| MaxConsensusAgeForDiffs 4h | 5.76 GB |
+| MaxConsensusAgeForDiffs 8h | 5.72 GB |
+| Control (glibc) | 5.64 GB |
 
-Both performed *identically* to the control group—or slightly worse. The fragmentation pattern remained unchanged.
+Both performed identically to control—or slightly worse. The fragmentation pattern was unchanged.
 
 ## Periodic Restarts: A Partial Workaround
-
-We also tested scheduled restarts as a brute-force solution:
 
 | Restart Interval | Avg Memory |
 |-----------------|------------|
@@ -32,11 +32,11 @@ We also tested scheduled restarts as a brute-force solution:
 | Every 48 hours | 4.56 GB |
 | Every 72 hours | 5.29 GB |
 
-Restarts help, but not dramatically—and they interrupt relay availability and circuit continuity. The 48-hour interval performed best, but even then memory averaged 4.56 GB.
+Restarts help, but not dramatically—and they interrupt circuit continuity.
 
 ## The Real Fix
 
-Tor's memory problem isn't about configuration limits—it's about glibc's inability to handle fragmented allocations. Alternative allocators like mimalloc and jemalloc solve the root cause. MaxMemInQueues and consensus tuning are useful for other purposes, but they won't fix your 5 GB memory problem.
+Configuring queue limits is good practice for overload protection, but don't rely on it to fix memory fragmentation. The root cause is glibc's inability to handle fragmented allocations—only changing the allocator solves the underlying problem.
 
 ---
 
