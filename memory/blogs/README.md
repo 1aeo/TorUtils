@@ -39,7 +39,7 @@ Four blog posts summarizing findings from 1AEO's memory experiments under `TorUt
 | `memory_by_group.png` | Allocator comparison (Dec 2025 experiment) | Blog 00, 01 |
 | `chart_dircache.png` | DirCache 0 vs Control timeline | Blog 02 |
 | `chart_maxmem.png` | MaxMemInQueues comparison | Blog 03 |
-| `chart3_fragmentation_timeline.png` | Restart interval comparison | Blog 04 |
+| `chart_restarts.png` | Restart interval comparison | Blog 04 |
 | `bandwidth_by_group.png` | Bandwidth by allocator group | Reference |
 | `bandwidth_over_time.png` | Bandwidth timeline | Reference |
 
