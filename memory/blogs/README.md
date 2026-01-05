@@ -1,6 +1,8 @@
 # Tor Relay Memory Optimization Blog Series
 
-Four blog posts summarizing findings from 1AEO's memory experiments under `TorUtils/memory/reports`.
+Five blog posts summarizing findings from 1AEO's memory experiments under `TorUtils/memory/reports`.
+
+**Available in both Markdown (.md) and HTML (.html) formats** — HTML files match 1aeo.com/blog styling.
 
 ## Blog Overview
 
