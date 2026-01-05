@@ -45,7 +45,7 @@ Restart your relay, and memory will stabilize around 1-2 GB instead of 5+ GB—w
 
 If you're running multiple Tor relays, switching allocators will save significant memory per server—capacity you can reinvest in more relays for the network.
 
-![Memory by Group](../reports/2025-12-26-co-unified-memory-test/charts/memory_by_group.png)
+![Memory by Group](memory_by_group.png)
 
 ---
 
