@@ -15,7 +15,7 @@ The difference was stark. While glibc relays bloated to nearly 6 GB, relays usin
 | tcmalloc 4.5 | `libgoogle-perftools4` | 3.68 GB | 35% |
 | glibc 2.39 | (default) | 5.64 GB | — |
 
-![Memory Usage by Allocator Group](memory_by_group.png)
+![Memory Usage by Allocator Group](chart_allocators.png)
 
 ## Why Modern Allocators Work
 

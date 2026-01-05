@@ -37,7 +37,8 @@ Five blog posts summarizing findings from 1AEO's memory experiments under `TorUt
 
 | File | Description | Used In |
 |------|-------------|---------|
-| `memory_by_group.png` | Allocator comparison (Dec 2025 experiment) | Blog 00, 01 |
+| `memory_by_group.png` | All groups comparison (Dec 2025 experiment) | Blog 00 |
+| `chart_allocators.png` | Allocators only (A, B, C, Z) | Blog 01 |
 | `chart_dircache.png` | DirCache 0 vs Control timeline | Blog 02 |
 | `chart_maxmem.png` | MaxMemInQueues comparison | Blog 03 |
 | `chart_restarts.png` | Restart interval comparison | Blog 04 |
