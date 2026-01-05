@@ -32,7 +32,7 @@ Both performed identically to control—or slightly worse. The fragmentation pat
 
 ## The Real Fix
 
-Configuring queue limits is good practice for overload protection, but don't rely on it to fix memory fragmentation. The root cause is glibc's inability to handle fragmented allocations—only changing the allocator solves the underlying problem.
+Treat `MaxMemInQueues` as a **congestion/buffer safety setting**—not a solution to allocator-driven fragmentation. It's still good practice for overload protection, but if you're seeing RSS "stick" high on guards, you need allocator-level changes (jemalloc/mimalloc) rather than a larger or smaller MaxMem cap.
 
 ---
 

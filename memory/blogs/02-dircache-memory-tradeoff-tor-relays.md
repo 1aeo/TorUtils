@@ -1,8 +1,8 @@
-# The DirCache Dilemma: 94% Memory Reduction You Can't Use
+# The DirCache Dilemma: The Fix We Can't Use (Yet)
 
 **By 1AEO Team • January 2026**
 
-In our hunt for the root cause of Tor memory bloat, we isolated the directory cache. Guard relays must cache and serve directory information—a process involving millions of tiny memory allocations and deallocations.
+In September 2025 we investigated a pattern on our guard relays: memory looked normal after restart (~0.5 GB), then after ~48 hours RSS jumped and "stuck" around 5 GB. That's costly at fleet scale and a reliability risk.
 
 We tested a radical configuration: `DirCache 0`. The impact was immediate and dramatic.
 
@@ -23,9 +23,9 @@ There's no free lunch. Disabling DirCache instantly revokes your relay's Guard s
 
 ## The Diagnostic Value
 
-This experiment was crucial. It proved that memory isn't "leaking" in the traditional sense—it's being **fragmented by the churn of directory data**. Since we can't turn DirCache off, we must fix how that data is stored in memory.
+The control relay shows the signature "fragmentation spike" inside the ~48-hour window, while the `DirCache 0` relay remains flat. This experiment proved that memory isn't "leaking" in the traditional sense—it's being **fragmented by the churn of directory data**.
 
-This pointed us directly to the solution: better allocators that handle fragmentation efficiently (see our allocator comparison).
+Since `DirCache 0` is incompatible with Guard operation, the practical path is allocator-level mitigation (jemalloc/mimalloc) so guards can keep caching *without* ballooning to 5–6 GB RSS.
 
 ---
 
