@@ -17,13 +17,10 @@ Over the past four months, we conducted extensive memory experiments across 100+
 | **mimalloc 2.1** | 1.16 GB (79% ↓) | ✅ Yes |
 | **jemalloc 5.3** | 1.63 GB (71% ↓) | ✅ Yes |
 | tcmalloc 4.5 | 3.68 GB (35% ↓) | ⚠️ Partial |
-| mimalloc 3.0 | ~5.6 GB (no change) | ⚠️ Needs validation |
 | DirCache 0 | 0.29 GB (94% ↓) | ❌ Loses Guard |
 | MaxMemInQueues | ~5 GB (no change) | ❌ No |
 | MaxConsensusAgeForDiffs | ~5.7 GB (no change) | ❌ No |
 | Periodic restarts | 4.5–5 GB (minimal) | ⚠️ Workaround only |
-
-**Note:** mimalloc 3.0.1 behaved like control in our tests—likely a packaging or path issue rather than allocator regression. Stick with mimalloc 2.1.x until validated.
 
 ## The Problem Visualized
 
