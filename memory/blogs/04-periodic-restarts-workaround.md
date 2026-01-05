@@ -81,3 +81,5 @@ Restarts are a band-aid. Switching to mimalloc or jemalloc eliminates the need e
 ---
 
 *Data from 1AEO's 90-relay memory experiment on Ubuntu 24.04, Dec 2025 – Jan 2026*
+
+📊 **Raw data:** [View experiment data and relay configs on GitHub](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test)
