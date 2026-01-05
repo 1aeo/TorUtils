@@ -43,10 +43,6 @@ Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2"
 
 For jemalloc, use: `/usr/lib/x86_64-linux-gnu/libjemalloc.so.2`
 
-## Caution: mimalloc 3.x
-
-We also tested `mimalloc 3.0.1` (group I) and it behaved like the control group—memory climbed to ~5.6 GB. This may be a packaging or library path issue rather than allocator regression. **Stick with mimalloc 2.1.x** until we validate the newer version.
-
 ## Bottom Line
 
 If you're running a Guard relay on Ubuntu 24.04, the single most effective optimization isn't in your `torrc`—it's swapping your allocator. We recommend **mimalloc 2.1** (best results) or **jemalloc 5.3** (battle-tested in Firefox/Redis) to reclaim gigabytes of wasted RAM while maintaining Guard status and full bandwidth.
