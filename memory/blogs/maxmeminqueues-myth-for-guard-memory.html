@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MaxConsensusAgeForDiffs: Why Limiting Consensus Cache Doesn't Help | 1st Amendment Encrypted Openness</title>
+  <title>The MaxMemInQueues Myth For Guard Memory | 1st Amendment Encrypted Openness</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; text-align: center; background-color: #121212; color: #ffffff; }
     .nav { background-color: #1e1e1e; padding: 10px 0; box-shadow: 0 2px 10px rgba(0, 255, 127, 0.2); position: sticky; top: 0; z-index: 1000; }
@@ -47,56 +47,39 @@
   </div>
 
   <div class="container">
-    <h1>MaxConsensusAgeForDiffs: Why Limiting Consensus Cache Doesn't Help</h1>
+    <h1>The MaxMemInQueues Myth For Guard Memory</h1>
     <p class="meta"><em>By 1AEO Team • January 2026</em></p>
-    <p class="meta"><em>Experiment: 30 relays over 10 days (Dec 2025–Jan 2026) testing 4h and 8h limits vs control</em></p>
 
-    <p>When investigating Tor relay memory fragmentation, we hypothesized that the consensus diff cache might be a major contributor. Tor stores multiple versions of network consensus documents to serve diffs to clients—perhaps limiting how long these are kept would reduce allocation churn?</p>
+    <p class="meta"><em>Experiment: 7 relays over 9 days (Sept 2025) testing 2GB and 4GB limits vs control</em></p>
+    
+    <p>A common piece of advice for high-memory relays: "Just set <code>MaxMemInQueues</code> to a lower value." We put this to the test. It doesn't work.</p>
 
-    <p>We tested <code>MaxConsensusAgeForDiffs</code> at 4 hours and 8 hours against the default. The results: no improvement whatsoever.</p>
+    <h2>MaxMemInQueues: Why It Fails</h2>
+    <p>We configured test groups with strict limits: <code>MaxMemInQueues 2GB</code> and <code>4GB</code>. Logic suggests the process should stay within these bounds. In reality, both groups fragmented just as badly as the control—hitting ~5 GB within 48 hours.</p>
 
-    <h2>The Results</h2>
     <table>
       <thead>
-        <tr><th>Configuration</th><th>Avg Memory</th><th>vs Control</th></tr>
+        <tr><th>Configuration</th><th>Avg Memory</th><th>Result</th></tr>
       </thead>
       <tbody>
-        <tr><td>MaxConsensusAgeForDiffs 4h</td><td>5.76 GB</td><td>+2% (worse)</td></tr>
-        <tr><td>MaxConsensusAgeForDiffs 8h</td><td>5.72 GB</td><td>+1% (worse)</td></tr>
-        <tr><td>Control (default)</td><td>5.64 GB</td><td>—</td></tr>
+        <tr><td>MaxMemInQueues 2GB</td><td>4.17 GB</td><td>Fragmented</td></tr>
+        <tr><td>MaxMemInQueues 4GB</td><td>4.76 GB</td><td>Fragmented</td></tr>
+        <tr><td>Control (default)</td><td>5.14 GB</td><td>Fragmented</td></tr>
       </tbody>
     </table>
 
-    <p>All three groups followed nearly identical fragmentation curves, converging at 5.6–5.8 GB.</p>
+    <p><strong>Why it failed:</strong> <code>MaxMemInQueues</code> strictly limits memory for circuit and connection buffers. It does <em>not</em> control the directory cache or the overhead from the allocator itself. The fragmentation happens in memory glibc won't release, not in Tor's queues.</p>
 
-    <img src="chart_consensus.png" alt="MaxConsensusAgeForDiffs Comparison">
-
-    <h2>Why It Didn't Work</h2>
-    <p>The consensus diff cache is only one part of Tor's directory caching. Even with aggressive limits on diff retention, the relay still:</p>
-    <ol>
-      <li><strong>Caches full consensus documents</strong> for serving to clients</li>
-      <li><strong>Maintains descriptor caches</strong> for router information</li>
-      <li><strong>Handles continuous allocation churn</strong> from network updates</li>
-    </ol>
-
-    <p>The fundamental problem remains: glibc's allocator fragments memory under this workload pattern, regardless of how long individual cache entries are retained.</p>
-
-    <h2>When MaxConsensusAgeForDiffs Matters</h2>
-    <p>This setting isn't useless—it just doesn't solve fragmentation:</p>
-    <ul>
-      <li><strong>Disk space:</strong> Lower values reduce consensus storage on disk</li>
-      <li><strong>Bandwidth:</strong> Clients with very old consensuses get full documents instead of diffs</li>
-      <li><strong>Specific debugging:</strong> Useful when investigating consensus-related issues</li>
-    </ul>
+    <img src="images/maxmeminqueues_myth_guard_memory.png" alt="MaxMemInQueues Comparison">
 
     <h2>The Real Fix</h2>
-    <p>Like <code>MaxMemInQueues</code>, this is a configuration knob that controls Tor behavior but doesn't address the underlying allocator problem. For memory fragmentation, the solution is switching to mimalloc or jemalloc—which reduced memory from 5.6 GB to 1.1–1.6 GB in our tests.</p>
+    <p>Treat <code>MaxMemInQueues</code> as a <strong>congestion/buffer safety setting</strong>—not a solution to allocator-driven fragmentation. It's still good practice for overload protection, but if you're seeing RSS "stick" high on guards, you need allocator-level changes (jemalloc/mimalloc) rather than a larger or smaller MaxMem cap.</p>
+
+    <p>📊 <strong>Raw data:</strong> <a href="https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-09-18-co-guard-fragmentation">View experiment data and relay configs on GitHub</a></p>
 
     <p style="text-align: center;"><a href="/#get-involved" class="btn">Join the Mission</a></p>
 
     <div class="footer">
-      <p><em>Data from 1AEO's 90-relay memory experiment on Ubuntu 24.04, Dec 2025 – Jan 2026</em></p>
-      <p>📊 <strong>Raw data:</strong> <a href="https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test">View experiment data and relay configs on GitHub</a></p>
       <p>© 2026 1st Amendment Encrypted Openness | Privacy First | No Logs | No Borders</p>
     </div>
   </div>

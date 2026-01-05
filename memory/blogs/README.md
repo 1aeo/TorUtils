@@ -1,65 +1,75 @@
 # Tor Relay Memory Optimization Blog Series
 
-Six blog posts summarizing findings from 1AEO's memory experiments under `TorUtils/memory/reports`.
+This directory contains the blog posts and supporting materials for our Tor relay memory optimization research.
 
-**Available in both Markdown (.md) and HTML (.html) formats** — HTML files match 1aeo.com/blog styling.
+## Blog Posts
 
-## Blog Overview
+1. **[Tor Memory Optimization: What Actually Works](tor-memory-optizations-what-actually-works.md)** (Summary)
+   - Executive overview of all findings from 103 relays across two studies
+   - Chart: `images/tor-memory-optimizations-what-actually-works-chart.png`
 
-| # | Title | Focus | Chart |
-|---|-------|-------|-------|
-| 00 | [Tor Memory Optimization: What Actually Works](00-tor-relay-memory-optimization-summary.md) | Executive summary | memory_by_group.png |
-| 01 | [Solving Tor Memory Fragmentation with Custom Allocators](01-memory-allocators-tor-relay-fragmentation.md) | jemalloc, mimalloc, tcmalloc | chart_allocators.png |
-| 02 | [The DirCache Dilemma](02-dircache-memory-tradeoff-tor-relays.md) | 94% reduction tradeoff | chart_dircache.png |
-| 03 | [The MaxMemInQueues Myth](03-maxmeminqueues-consensus-age-dont-help.md) | Queue buffer limits | chart_maxmem.png |
-| 04 | [Periodic Restarts: A Brute-Force Workaround](04-periodic-restarts-workaround.md) | Restart intervals | chart_restarts.png |
-| 05 | [MaxConsensusAgeForDiffs: Why It Doesn't Help](05-maxconsensusagefordiffs-no-improvement.md) | Consensus cache limits | chart_consensus.png |
+2. **[Solving Tor Memory Fragmentation with Custom Allocators](memory-allocators-tor-relay-fragmentation-with-custom-allocators.md)**
+   - Detailed comparison of memory allocators (mimalloc, jemalloc, tcmalloc vs glibc)
+   - Chart: `images/memory-allocators-tor-relay-fragmentation-with-custom-allocators-chart.png`
 
----
+3. **[The DirCache Dilemma: The Fix We Can't Reduce Guard Memory With](dircache-memory-trade-off-tor-guard-relays.md)**
+   - Analysis of DirCache 0 effectiveness and Guard status tradeoff
+   - Chart: `images/dircache-memory-trade-off-tor-guard-relays.png`
+
+4. **[The MaxMemInQueues Myth For Guard Memory](maxmeminqueues-myth-for-guard-memory.md)**
+   - Why MaxMemInQueues doesn't solve memory fragmentation
+   - Chart: `images/maxmeminqueues_myth_guard_memory.png`
+
+5. **[Periodic Restarts: A Brute-Force Workaround For Reducing Guard Memory](periodic-restarts-workaround-guard-memory.md)**
+   - Evaluation of scheduled restarts as a workaround
+   - Chart: `images/periodic-restarts-workaround-guard-memory.png`
+
+6. **[MaxConsensusAgeForDiffs: Why Limiting Consensus Cache Doesn't Help Guard Memory](maxconsensusagefordiffs-limiting-for-guard-memory.md)**
+   - Testing consensus diff cache limits for memory reduction
+   - Chart: `images/maxconsensusagefordiffs-limiting-for-guard-memory.png`
+
+## One-Sentence Summaries (for index)
+
+- **Summary Blog:** After testing allocators, config tweaks, and restarts across 100+ relays, we found that switching to mimalloc or jemalloc is the only fix that actually stops Tor guard memory from ballooning to 5+ GB.
+- **Allocators Blog:** Our 90-relay experiment on Ubuntu 24.04 proves that swapping glibc for mimalloc (79% reduction) or jemalloc (71% reduction) keeps Tor guards under 2 GB without recompiling or losing Guard status.
+- **DirCache Blog:** Disabling DirCache cuts memory by 94%, but it also removes your Guard flag—making it a diagnostic proof point rather than a viable solution for production Guard relays.
+- **MaxMemInQueues Blog:** Despite its promising name, MaxMemInQueues only limits circuit buffers—not the directory cache fragmentation that actually causes Tor relays to bloat to 5 GB.
+- **Restarts Blog:** Scheduled restarts can reduce memory by up to 19%, but they disrupt circuits and still leave you at 4.5 GB—use them only as a stopgap while migrating to a better allocator.
+- **Consensus Age Blog:** Limiting how long Tor keeps consensus diffs had zero impact on memory—all test groups ended at 5.6–5.8 GB, proving the fragmentation problem lies in glibc, not cache retention.
 
 ## Key Takeaways
 
-1. **The Culprit:** Memory fragmentation in glibc's allocator, caused by Directory Cache churn
-2. **False Hopes:** `MaxMemInQueues`, `MaxConsensusAgeForDiffs`, and periodic restarts don't solve root cause
-3. **The Fix:** Modern allocators (mimalloc, jemalloc) reduce memory 70-80%
+1. **Root Cause:** Memory fragmentation in glibc's allocator caused by directory cache churn
+2. **Best Solution:** Switch to mimalloc 2.1 (79% reduction) or jemalloc 5.3 (71% reduction)
+3. **Config Tweaks Don't Work:** MaxMemInQueues and MaxConsensusAgeForDiffs don't address fragmentation
+4. **DirCache 0:** Effective but incompatible with Guard status
+5. **Periodic Restarts:** Workaround only, doesn't solve root cause
 
-## Results Summary (Ubuntu 24.04, Tor 0.4.8.x)
+## Results Summary
 
-| Allocator | Package | Avg Memory | vs Control |
-|-----------|---------|------------|------------|
-| mimalloc 2.1 | `libmimalloc2.0` | 1.16 GB | -79% |
-| jemalloc 5.3 | `libjemalloc2` | 1.63 GB | -71% |
-| tcmalloc 4.5 | `libgoogle-perftools4` | 3.68 GB | -35% |
-| glibc 2.39 | (default) | 5.64 GB | baseline |
+| Approach | Memory | Reduction | Notes |
+|----------|--------|-----------|-------|
+| mimalloc 2.1 | 1.16 GB | 79% | Recommended (Ubuntu 24.04: libmimalloc2.0) |
+| jemalloc 5.3 | 1.63 GB | 71% | Battle-tested (Ubuntu 24.04: libjemalloc2) |
+| tcmalloc 4.5 | 3.68 GB | 35% | Partial improvement |
+| DirCache 0 | 0.29 GB | 94% | Loses Guard status |
+| MaxMemInQueues | ~5 GB | 0% | Doesn't address fragmentation |
+| MaxConsensusAgeForDiffs | ~5.7 GB | 0% | No improvement |
+| Periodic restarts | 4.5 GB | 19% | Workaround only |
+| glibc (control) | 5.64 GB | — | Baseline (Tor 0.4.8.21, Ubuntu 24.04) |
 
----
+## Charts
 
-## Charts Included
+All charts are located in the `images/` subdirectory:
 
-| File | Description | Used In |
-|------|-------------|---------|
-| `memory_by_group.png` | All groups comparison (Dec 2025 experiment) | Blog 00 |
-| `chart_allocators.png` | Allocators only (A, B, C, Z) | Blog 01 |
-| `chart_dircache.png` | DirCache 0 vs Control timeline | Blog 02 |
-| `chart_maxmem.png` | MaxMemInQueues comparison | Blog 03 |
-| `chart_restarts.png` | Restart interval comparison | Blog 04 |
-| `chart_consensus.png` | MaxConsensusAgeForDiffs comparison | Blog 05 |
-| `bandwidth_by_group.png` | Bandwidth by allocator group | Reference |
-| `bandwidth_over_time.png` | Bandwidth timeline | Reference |
-
----
+- `tor-memory-optimizations-what-actually-works-chart.png` - Summary comparison (Blog 1)
+- `memory-allocators-tor-relay-fragmentation-with-custom-allocators-chart.png` - Allocator time series (Blog 2)
+- `dircache-memory-trade-off-tor-guard-relays.png` - DirCache comparison (Blog 3)
+- `maxmeminqueues_myth_guard_memory.png` - MaxMemInQueues comparison (Blog 4)
+- `periodic-restarts-workaround-guard-memory.png` - Restart intervals time series (Blog 5)
+- `maxconsensusagefordiffs-limiting-for-guard-memory.png` - Consensus age comparison (Blog 6)
 
 ## Data Sources
 
-- `../reports/2025-09-18-co-guard-fragmentation/` — DirCache and MaxMemInQueues (13 relays, 9 days)
-- `../reports/2025-12-26-co-unified-memory-test/` — Allocator comparison (90 relays, 14 days)
-
-## Style Notes
-
-Posts follow 1aeo.com/blog conventions:
-- Short paragraphs (2-4 sentences)
-- Bullet point summaries
-- One chart per post
-- Data tables with specific numbers
-- <7 paragraphs per post
-- Actionable deployment instructions
+- [September 2025 Experiment](../reports/2025-09-18-co-guard-fragmentation/) - 13 relays, 9 days
+- [December 2025 Experiment](../reports/2025-12-26-co-unified-memory-test/) - 90 relays, 10 days

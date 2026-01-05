@@ -1,6 +1,6 @@
-# MaxConsensusAgeForDiffs: Why Limiting Consensus Cache Doesn't Help
+# MaxConsensusAgeForDiffs: Why Limiting Consensus Cache Doesn't Help Guard Memory
 
-**By 1AEO Team • January 2026**
+*By 1AEO Team • January 2026*
 
 *Experiment: 30 relays over 10 days (Dec 2025–Jan 2026) testing 4h and 8h limits vs control*
 
@@ -11,14 +11,14 @@ We tested `MaxConsensusAgeForDiffs` at 4 hours and 8 hours against the default. 
 ## The Results
 
 | Configuration | Avg Memory | vs Control |
-|--------------|------------|------------|
+|---------------|------------|------------|
 | MaxConsensusAgeForDiffs 4h | 5.76 GB | +2% (worse) |
 | MaxConsensusAgeForDiffs 8h | 5.72 GB | +1% (worse) |
 | Control (default) | 5.64 GB | — |
 
 All three groups followed nearly identical fragmentation curves, converging at 5.6–5.8 GB.
 
-![MaxConsensusAgeForDiffs Comparison](chart_consensus.png)
+![MaxConsensusAgeForDiffs Comparison](images/maxconsensusagefordiffs-limiting-for-guard-memory.png)
 
 ## Why It Didn't Work
 
@@ -41,9 +41,5 @@ This setting isn't useless—it just doesn't solve fragmentation:
 ## The Real Fix
 
 Like `MaxMemInQueues`, this is a configuration knob that controls Tor behavior but doesn't address the underlying allocator problem. For memory fragmentation, the solution is switching to mimalloc or jemalloc—which reduced memory from 5.6 GB to 1.1–1.6 GB in our tests.
-
----
-
-*Data from 1AEO's 90-relay memory experiment on Ubuntu 24.04, Dec 2025 – Jan 2026*
 
 📊 **Raw data:** [View experiment data and relay configs on GitHub](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test)

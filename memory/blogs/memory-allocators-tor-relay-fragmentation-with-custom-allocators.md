@@ -1,10 +1,10 @@
 # Solving Tor Memory Fragmentation with Custom Allocators
 
-**By 1AEO Team • January 2026**
+*By 1AEO Team • January 2026*
 
 *Experiment: 40 relays (10 per allocator group) over 10 days on Ubuntu 24.04 with Tor 0.4.8.21*
 
-Running high-capacity Tor relays on Linux often leads to a familiar headache: memory that looks fine after restart, then "sticks" at 5–6 GB after ~48 hours. Our experiment confirms that the default system allocator (`glibc 2.39`) is the bottleneck—not Tor itself.
+Running high-capacity Tor relays on Linux often leads to a familiar headache: memory that looks fine after restart, then "sticks" at 5–6 GB after ~48 hours. Our 90-relay experiment on **Ubuntu 24.04** with **Tor 0.4.8.21** confirms that the default system allocator (`glibc 2.39`) is the bottleneck—not Tor itself.
 
 ## The Results
 
@@ -17,7 +17,7 @@ The difference was stark. While glibc relays bloated to nearly 6 GB, relays usin
 | tcmalloc 4.5 | `libgoogle-perftools4` | 3.68 GB | 35% |
 | glibc 2.39 | (default) | 5.64 GB | — |
 
-![Memory Usage by Allocator Group](chart_allocators.png)
+![Memory Usage by Allocator Group](images/memory-allocators-tor-relay-fragmentation-with-custom-allocators-chart.png)
 
 ## Why Modern Allocators Work
 
@@ -48,9 +48,5 @@ For jemalloc, use: `/usr/lib/x86_64-linux-gnu/libjemalloc.so.2`
 ## Bottom Line
 
 If you're running a Guard relay on Ubuntu 24.04, the single most effective optimization isn't in your `torrc`—it's swapping your allocator. We recommend **mimalloc 2.1** (best results) or **jemalloc 5.3** (battle-tested in Firefox/Redis) to reclaim gigabytes of wasted RAM while maintaining Guard status and full bandwidth.
-
----
-
-*Data from 1AEO's 90-relay memory experiment on Ubuntu 24.04, Dec 2025 – Jan 2026*
 
 📊 **Raw data:** [View experiment data and relay configs on GitHub](https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test)
