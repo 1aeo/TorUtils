@@ -16,7 +16,7 @@ We configured test groups with strict limits: `MaxMemInQueues 2GB` and `4GB`. Lo
 
 **Why it failed:** `MaxMemInQueues` strictly limits memory for circuit and connection buffers. It does *not* control the directory cache or the overhead from the allocator itself. The fragmentation happens in memory glibc won't release, not in Tor's queues.
 
-![MaxMemInQueues Comparison](chart2_final_comparison.png)
+![MaxMemInQueues Comparison](chart_maxmem.png)
 
 ## MaxConsensusAgeForDiffs: No Better
 

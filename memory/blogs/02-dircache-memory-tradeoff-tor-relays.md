@@ -15,7 +15,7 @@ We tested a radical configuration: `DirCache 0`. The impact was immediate and dr
 
 Memory remained stable for 9+ days with DirCache disabled—no fragmentation, no gradual creep.
 
-![DirCache 0 vs Control Memory Usage](chart1_memory_over_time.png)
+![DirCache 0 vs Control Memory Usage](chart_dircache.png)
 
 ## The Catch
 
