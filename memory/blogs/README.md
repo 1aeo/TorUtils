@@ -65,8 +65,8 @@ Four blog posts summarizing findings from 1AEO's memory experiments under `TorUt
 
 ## Data Sources
 
-- `reports/2025-09-18-co-guard-fragmentation/` — DirCache and MaxMemInQueues experiment (13 relays, 9 days)
-- `reports/2025-12-26-co-unified-memory-test/` — Allocator comparison experiment (90 relays, 14 days)
+- `../reports/2025-09-18-co-guard-fragmentation/` — DirCache and MaxMemInQueues experiment (13 relays, 9 days)
+- `../reports/2025-12-26-co-unified-memory-test/` — Allocator comparison experiment (90 relays, 14 days)
 
 ## Style Notes
 

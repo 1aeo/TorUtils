@@ -15,7 +15,7 @@ If you're running Tor guard relays on Linux, you've likely watched memory usage 
 
 We ran 90 Tor relays across 9 test groups for 14 days, collecting memory data every 6 hours. Groups A, B, and C tested jemalloc, mimalloc, and tcmalloc respectively—all deployed via `LD_PRELOAD` without recompiling Tor. Group Z ran the default glibc allocator as our control.
 
-![Memory by Group](../reports/2025-12-26-co-unified-memory-test/charts/memory_by_group.png)
+![Memory by Group](memory_by_group.png)
 
 ## Why Alternative Allocators Work
 
