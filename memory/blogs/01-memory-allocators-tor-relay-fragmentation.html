@@ -70,7 +70,7 @@
       </tbody>
     </table>
 
-    <img src="memory_by_group.png" alt="Memory Usage by Allocator Group">
+    <img src="chart_allocators.png" alt="Memory Usage by Allocator Group">
 
     <h2>Why Modern Allocators Work</h2>
     <p>Tor's directory cache creates millions of small allocations that glibc struggles to release back to the OS. Modern allocators like jemalloc and mimalloc handle this fragmentation pattern efficiently—returning memory promptly without the permanent RSS bloat.</p>
