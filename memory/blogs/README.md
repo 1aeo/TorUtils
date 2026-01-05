@@ -1,6 +1,6 @@
 # Tor Relay Memory Optimization Blog Series
 
-Five blog posts summarizing findings from 1AEO's memory experiments under `TorUtils/memory/reports`.
+Six blog posts summarizing findings from 1AEO's memory experiments under `TorUtils/memory/reports`.
 
 **Available in both Markdown (.md) and HTML (.html) formats** — HTML files match 1aeo.com/blog styling.
 
@@ -9,10 +9,11 @@ Five blog posts summarizing findings from 1AEO's memory experiments under `TorUt
 | # | Title | Focus | Chart |
 |---|-------|-------|-------|
 | 00 | [Tor Memory Optimization: What Actually Works](00-tor-relay-memory-optimization-summary.md) | Executive summary | memory_by_group.png |
-| 01 | [Solving Tor Memory Fragmentation with Custom Allocators](01-memory-allocators-tor-relay-fragmentation.md) | jemalloc, mimalloc, tcmalloc | memory_by_group.png |
-| 02 | [The DirCache Dilemma](02-dircache-memory-tradeoff-tor-relays.md) | 94% reduction tradeoff | chart1_memory_over_time.png |
-| 03 | [The MaxMemInQueues Myth](03-maxmeminqueues-consensus-age-dont-help.md) | Config tuning myths | chart2_final_comparison.png |
-| 04 | [Periodic Restarts: A Brute-Force Workaround](04-periodic-restarts-workaround.md) | Restart intervals | chart3_fragmentation_timeline.png |
+| 01 | [Solving Tor Memory Fragmentation with Custom Allocators](01-memory-allocators-tor-relay-fragmentation.md) | jemalloc, mimalloc, tcmalloc | chart_allocators.png |
+| 02 | [The DirCache Dilemma](02-dircache-memory-tradeoff-tor-relays.md) | 94% reduction tradeoff | chart_dircache.png |
+| 03 | [The MaxMemInQueues Myth](03-maxmeminqueues-consensus-age-dont-help.md) | Queue buffer limits | chart_maxmem.png |
+| 04 | [Periodic Restarts: A Brute-Force Workaround](04-periodic-restarts-workaround.md) | Restart intervals | chart_restarts.png |
+| 05 | [MaxConsensusAgeForDiffs: Why It Doesn't Help](05-maxconsensusagefordiffs-no-improvement.md) | Consensus cache limits | chart_consensus.png |
 
 ---
 
@@ -42,6 +43,7 @@ Five blog posts summarizing findings from 1AEO's memory experiments under `TorUt
 | `chart_dircache.png` | DirCache 0 vs Control timeline | Blog 02 |
 | `chart_maxmem.png` | MaxMemInQueues comparison | Blog 03 |
 | `chart_restarts.png` | Restart interval comparison | Blog 04 |
+| `chart_consensus.png` | MaxConsensusAgeForDiffs comparison | Blog 05 |
 | `bandwidth_by_group.png` | Bandwidth by allocator group | Reference |
 | `bandwidth_over_time.png` | Bandwidth timeline | Reference |
 
