@@ -2,7 +2,7 @@
 
 **By 1AEO Team • January 2026**
 
-Running high-capacity Tor relays on Linux often leads to a familiar headache: memory usage that creeps up to 5+ GB despite configuration limits. Our 90-relay experiment on **Ubuntu 24.04** confirms that the default system allocator (`glibc 2.39`) is the bottleneck—not Tor itself.
+Running high-capacity Tor relays on Linux often leads to a familiar headache: memory that looks fine after restart, then "sticks" at 5–6 GB after ~48 hours. Our 90-relay experiment on **Ubuntu 24.04** with **Tor 0.4.8.21** confirms that the default system allocator (`glibc 2.39`) is the bottleneck—not Tor itself.
 
 ## The Results
 
@@ -42,6 +42,10 @@ Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2"
 ```
 
 For jemalloc, use: `/usr/lib/x86_64-linux-gnu/libjemalloc.so.2`
+
+## Caution: mimalloc 3.x
+
+We also tested `mimalloc 3.0.1` (group I) and it behaved like the control group—memory climbed to ~5.6 GB. This may be a packaging or library path issue rather than allocator regression. **Stick with mimalloc 2.1.x** until we validate the newer version.
 
 ## Bottom Line
 

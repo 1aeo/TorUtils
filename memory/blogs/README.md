@@ -20,7 +20,7 @@ Four blog posts summarizing findings from 1AEO's memory experiments under `TorUt
 2. **False Hopes:** `MaxMemInQueues`, `MaxConsensusAgeForDiffs`, and periodic restarts don't solve root cause
 3. **The Fix:** Modern allocators (mimalloc, jemalloc) reduce memory 70-80%
 
-## Results Summary (Ubuntu 24.04)
+## Results Summary (Ubuntu 24.04, Tor 0.4.8.x)
 
 | Allocator | Package | Avg Memory | vs Control |
 |-----------|---------|------------|------------|
@@ -28,6 +28,7 @@ Four blog posts summarizing findings from 1AEO's memory experiments under `TorUt
 | jemalloc 5.3 | `libjemalloc2` | 1.63 GB | -71% |
 | tcmalloc 4.5 | `libgoogle-perftools4` | 3.68 GB | -35% |
 | glibc 2.39 | (default) | 5.64 GB | baseline |
+| mimalloc 3.0 | (manual build) | ~5.6 GB | ⚠️ needs validation |
 
 ---
 
