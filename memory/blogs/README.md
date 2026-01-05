@@ -19,14 +19,14 @@ Four blog posts summarizing findings from 1AEO's memory experiments under `TorUt
 2. **False Hopes:** `MaxMemInQueues` and `MaxConsensusAgeForDiffs` don't help
 3. **The Fix:** Modern allocators (mimalloc, jemalloc) reduce memory 70-80%
 
-## Results Summary
+## Results Summary (Ubuntu 24.04)
 
-| Allocator | Avg Memory | vs Control |
-|-----------|------------|------------|
-| mimalloc | 1.16 GB | -79% |
-| jemalloc | 1.63 GB | -71% |
-| tcmalloc | 3.68 GB | -35% |
-| glibc | 5.64 GB | baseline |
+| Allocator | Package | Avg Memory | vs Control |
+|-----------|---------|------------|------------|
+| mimalloc 2.1 | `libmimalloc2.0` | 1.16 GB | -79% |
+| jemalloc 5.3 | `libjemalloc2` | 1.63 GB | -71% |
+| tcmalloc 4.5 | `libgoogle-perftools4` | 3.68 GB | -35% |
+| glibc 2.39 | (default) | 5.64 GB | baseline |
 
 ---
 
