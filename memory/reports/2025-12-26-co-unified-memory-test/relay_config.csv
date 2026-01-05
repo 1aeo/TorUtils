@@ -1,0 +1,101 @@
+fingerprint,nickname,group,allocator,config,notes
+FC06B52C9F6F114921EF0D82009A180BDE662022,22gz,A,jemalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2,jemalloc allocator
+461168F1303D580838A80E1E1ACDB44156973386,24kgoldn,A,jemalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2,jemalloc allocator
+04068B4C8137109D53374E6F53F0FF422807E636,42dugg,A,jemalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2,jemalloc allocator
+1CA4D551B50A36BED55235F86C4D6CF464DA5336,armanicaesar,A,jemalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2,jemalloc allocator
+9DDCEF83ACCBDAE8D02AB08BE3D952529B736E32,arsonaldarebel,A,jemalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2,jemalloc allocator
+1697603886588CA2E946B961A6A33A9202301857,autumntwinuzis,A,jemalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2,jemalloc allocator
+860E59B15F8EE2EA45E431C533FE683F0FED3B7B,ayeverb,A,jemalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2,jemalloc allocator
+10EC76BFCE2789E302FFA40A5BD51A3D59C19290,babyfaceray,A,jemalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2,jemalloc allocator
+958AE9B8A9236A00BE18B4430A9B1C063B36B6EA,babysmoove,A,jemalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2,jemalloc allocator
+2B9DD6814C558A6C47642E98E8162A98D373ABC0,bbno,A,jemalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2,jemalloc allocator
+D0B02612CA2AFFCAC071BC30CAD406D869B22EB0,bfbdapackman,B,mimalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2,mimalloc allocator
+3BF6BB4DDB78E3031D6FC9D1CB4260E4015B15C7,biggk,B,mimalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2,mimalloc allocator
+42981531330E0742B18C58AD34796EC386695F53,bigpokeyhouston,B,mimalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2,mimalloc allocator
+9C7BBC5D77EB893BFDDBD24DD99CFE627706EA58,bigtuckdfw,B,mimalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2,mimalloc allocator
+9D98766220B32CBD882C1B799D20BE71C3BEAAF6,bigwalkdog,B,mimalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2,mimalloc allocator
+B6795D6A0E59920950614CEFAF5069D7426DB8D2,blovee,B,mimalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2,mimalloc allocator
+FC0E2422AB8D18BB43A1566135D9EB8405401F86,bluefacebaby,B,mimalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2,mimalloc allocator
+DE1C3E79DA6D3801392D18E7109299E5C62AF609,boldyjames,B,mimalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2,mimalloc allocator
+8473B67993C6A5C5432AE38A335204DBD268469A,bonethugs,B,mimalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2,mimalloc allocator
+A427035F72137D891AC85BAE033E13E07F7BCCBE,calicoe,B,mimalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2,mimalloc allocator
+B13EE4C87C057B773C95FCB5C69E47A1C48DE1A2,caseyveggies,C,tcmalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4,tcmalloc allocator
+48DBD74B23960DBB7F2CB44E2550B55FD7337817,cashkidd,C,tcmalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4,tcmalloc allocator
+17215BDAB17AC339E29362B022EF05275BEF1CF5,charlieclips,C,tcmalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4,tcmalloc allocator
+6694B1008936127A01ABD046255D56CA148B00F1,chiefkeef,C,tcmalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4,tcmalloc allocator
+22A51E0AFDFBE6E85F202A7B526FAF32A237E1D4,chiiild,C,tcmalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4,tcmalloc allocator
+E8EE6EADAB4C824B36617E88316C93DFE2204175,cjwhoopty,C,tcmalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4,tcmalloc allocator
+637DEB4156914705FE0356CB85F3C59528E535FE,cocash,C,tcmalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4,tcmalloc allocator
+ADF035802B413F387BFE73CD6CE19180D3494E98,comethazine,C,tcmalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4,tcmalloc allocator
+DAFA880110E74B7CCD794920A7F8CB1E2D80705C,conceitedwildnout,C,tcmalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4,tcmalloc allocator
+F45B4778480A727BA45C61DFF14DD797841E52F4,daveeast,C,tcmalloc,LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4,tcmalloc allocator
+C01276D019AD3E2A526440345C5ADCDCC7A910E6,davesantan,D,glibc,MaxConsensusAgeForDiffs=14400,consensus diff 4 hours
+F9FE66A9CE12D350118BCABE8DA40921CB108923,daylytwatts,D,glibc,MaxConsensusAgeForDiffs=14400,consensus diff 4 hours
+3FB2EAA390F2CF94F6521B0CCB63AF93A10584F4,ddgmoonwalking,D,glibc,MaxConsensusAgeForDiffs=14400,consensus diff 4 hours
+5E1E115FF82D88E9DF3D8F4E04495001F9968729,delasoul,D,glibc,MaxConsensusAgeForDiffs=14400,consensus diff 4 hours
+61F488FEC8949B21731F994A10AF299DA1B89523,destroylonely,D,glibc,MaxConsensusAgeForDiffs=14400,consensus diff 4 hours
+3F81543033376AB6FEEA761EC07024D4511A3428,dicesoho,D,glibc,MaxConsensusAgeForDiffs=14400,consensus diff 4 hours
+79C5FF8AAE25D82B1624645420457085BCACA05B,dizaster,D,glibc,MaxConsensusAgeForDiffs=14400,consensus diff 4 hours
+17918A32D6A5749EE76EE06E10C3755326402DC1,dnaqueens,D,glibc,MaxConsensusAgeForDiffs=14400,consensus diff 4 hours
+B043C512687C04C4A3DBA9B0D2AFE2D30934BA82,domaniharris,D,glibc,MaxConsensusAgeForDiffs=14400,consensus diff 4 hours
+E17F9E50925858F67A316044CC2676675BE67FD6,dougieb,D,glibc,MaxConsensusAgeForDiffs=14400,consensus diff 4 hours
+DE3C98908F990B304E2F478AF8FB07DDCEBC42F2,dustylocane,E,glibc,MaxConsensusAgeForDiffs=28800,consensus diff 8 hours
+192EE5837A40386D0C6A6832E0496E9E17C2AD05,estgee,E,glibc,MaxConsensusAgeForDiffs=28800,consensus diff 8 hours
+DCFCC3C9A0865BE3FEDFFF0948708103918E460F,estgizzle,E,glibc,MaxConsensusAgeForDiffs=28800,consensus diff 8 hours
+24167CC4D183585A6AA4192B770F611F9D69C043,famousdex,E,glibc,MaxConsensusAgeForDiffs=28800,consensus diff 8 hours
+5B634BE99E9C86F61AA7F32CC6535618C2EC9BCB,fearlessfour,E,glibc,MaxConsensusAgeForDiffs=28800,consensus diff 8 hours
+C481DE5781E831DE83920A41B386B375CA9B0BCE,fivioforeign,E,glibc,MaxConsensusAgeForDiffs=28800,consensus diff 8 hours
+255515606979150ED8A9590E9BD33D44BF862A3C,fmbdz,E,glibc,MaxConsensusAgeForDiffs=28800,consensus diff 8 hours
+8D69CBCD465028B306080C55E8DF8858D986023D,foolio,E,glibc,MaxConsensusAgeForDiffs=28800,consensus diff 8 hours
+1788BBBFAA968294C49FB493D0B2069746402305,fredobang,E,glibc,MaxConsensusAgeForDiffs=28800,consensus diff 8 hours
+BEC65389093B2E078F4C5B21BB16EA7D1DB04BAC,goodzdaanimal,E,glibc,MaxConsensusAgeForDiffs=28800,consensus diff 8 hours
+8DA8090BA5A9ADADC43C678C4A3FE6E77D86D795,gperico,F,glibc,restart=24h,restart every 24 hours
+1A929CF7A26956EEBA4BE933AF6DF97425C70A3C,gunna,F,glibc,restart=24h,restart every 24 hours
+7A8B12019B5854D9B66D20EB3AD9E119D7E8A1A1,htowndonkee,F,glibc,restart=24h,restart every 24 hours
+27D299103EFE60273ECB356F05B1999B0F8F2260,ianndior,F,glibc,restart=24h,restart every 24 hours
+F54A0FA05F13B883CD40C7E6B033D03FB3505E62,icespice,F,glibc,restart=24h,restart every 24 hours
+66FB26FDB57D26FCBBAC7B3ADF8DA3091D5EE1F1,icewearvezzo,F,glibc,restart=24h,restart every 24 hours
+C365D84FD40F3282BD67E0CA0F491CA2D262E7CA,illmaculate,F,glibc,restart=24h,restart every 24 hours
+07A7E3F5377E411C1662F5CB9E3A81B97E2F1253,jaycritch,F,glibc,restart=24h,restart every 24 hours
+3A85C6698F4655A2127A07F19E8D6B8A489DB79C,jayworthy,F,glibc,restart=24h,restart every 24 hours
+E6317BCD75F32427683C6259F163F5BB8E4C1EB6,joji,F,glibc,restart=24h,restart every 24 hours
+95A7A6D7D11117D327FD1F8E03B74D28D33B5BC5,kankan,G,glibc,restart=48h,restart every 48 hours
+14B5DC0E4421D01B70E8B7BA88698F0EEDE81899,kanyc,G,glibc,restart=48h,restart every 48 hours
+96EBE793089692599FC861D36DD42DD4A6B86F71,kayflock,G,glibc,restart=48h,restart every 48 hours
+E37978263DD24B30684435BF6E5CC1076E188A1F,kencarson,G,glibc,restart=48h,restart every 48 hours
+30FD1FD4A87F290879D028D0B9B346890209FF63,kingsun,G,glibc,restart=48h,restart every 48 hours
+893BB86B0437C993DB752BEF1B90C62FA994899F,kingvon,G,glibc,restart=48h,restart every 48 hours
+1050E2B495C18564FC66AA4575B86F8B92954C1D,lakeyah,G,glibc,restart=48h,restart every 48 hours
+EC4FE5F8ADE435434ADEFE016EF6262EBF1BC25F,lildurk,G,glibc,restart=48h,restart every 48 hours
+FD3731C64E9DD2A93835FC7B824AB9CFA50BE729,lilgotit,G,glibc,restart=48h,restart every 48 hours
+90D4BB68ED610A069A1F7C0836A7BE65E4F3B980,lilkeed,G,glibc,restart=48h,restart every 48 hours
+909185EF844FB61036D4823CB8A1127655797780,lilloaded,H,glibc,restart=72h,restart every 72 hours
+CEEE5E8975A0420BAA5775929BC1DCB9037A234B,lilnasx,H,glibc,restart=72h,restart every 72 hours
+4526E68517FD630CBF3C21773270DA8FC77570CD,lilofatrat,H,glibc,restart=72h,restart every 72 hours
+A21352FC745DF8C433BFB933DEEA802BECEE0E02,lilskies,H,glibc,restart=72h,restart every 72 hours
+3E644F108EAA5B951CCDB49792E02FB354E54772,liltecca,H,glibc,restart=72h,restart every 72 hours
+E68789BC34CFC5B932E827C463E104ECFB9FA060,liltjay,H,glibc,restart=72h,restart every 72 hours
+7EAAC49A7840D33B62FA276429F3B03C92AA9327,littlesimz,H,glibc,restart=72h,restart every 72 hours
+2E151AA8459B35C01C3D6C5B0AF126587B08DFF3,louieray,H,glibc,restart=72h,restart every 72 hours
+C5E3733E8968225B868DAE250ADA1B613FA5702E,machhommy,H,glibc,restart=72h,restart every 72 hours
+AA098D1FB91D495156A292FC2A203AA15EDC24B6,millyz,H,glibc,restart=72h,restart every 72 hours
+CAE2BBEDE649DE0A34059E9E79A826FF78EFF0C9,mobbdeep,Z,glibc,none,control group
+6E167365DA9B8FACFD789A33C7B55EB9F6DF78E9,moneyman,Z,glibc,none,control group
+C32A80EDD8CF47DF2886CAB92B570D4568013E74,morray,Z,glibc,none,control group
+8E09B23F0F765101F97536858BD398330E4425CD,mozzy,Z,glibc,none,control group
+5F4ED335706B86AC49D080EA1464CDD97E4ADF15,nardowick,Z,glibc,none,control group
+DDD4B9615669B4F4A99656616AA7C5BDF02BD293,nastyc,Z,glibc,none,control group
+97249883E6A8A76F4DAA4241FFDA8D5B7033E5B6,nikobrim,Z,glibc,none,control group
+E7839CD9E5A5D15D34D9A52CA4809AA9278E5E05,nocap,Z,glibc,none,control group
+CE3D5B0642D077031AF892A108A4AF89576B2E9F,ogboobieblack,Z,glibc,none,control group
+2928BB02586374FC36C723CC10152617E946E47B,ogche,Z,glibc,none,control group
+92EBD21DFF75A460E6834A7003A0775AEE2716BF,ombpeezy,I,mimalloc3,LD_PRELOAD=/usr/local/lib/libmimalloc.so.3,mimalloc3 allocator
+452E9A6256AFD9F65EE424AEB2D0BF77CA251182,otthereal,I,mimalloc3,LD_PRELOAD=/usr/local/lib/libmimalloc.so.3,mimalloc3 allocator
+D9B82D372FCA37F82058292FB44E229DE89EE0BE,peeweelongway,I,mimalloc3,LD_PRELOAD=/usr/local/lib/libmimalloc.so.3,mimalloc3 allocator
+5E23B9170177F9A0A3815649C53168DD9DEAA0D5,poohshiesty,I,mimalloc3,LD_PRELOAD=/usr/local/lib/libmimalloc.so.3,mimalloc3 allocator
+662D57B35F4B6EA34E824F01BBFBFA0D871008DF,popsmoke,I,mimalloc3,LD_PRELOAD=/usr/local/lib/libmimalloc.so.3,mimalloc3 allocator
+3B61D4A1D4FFC5BD36E99C1D5645551F9A409309,problemcompton,I,mimalloc3,LD_PRELOAD=/usr/local/lib/libmimalloc.so.3,mimalloc3 allocator
+8DB27268A136C322CC395412CB15E746D3035C2E,publicenemy,I,mimalloc3,LD_PRELOAD=/usr/local/lib/libmimalloc.so.3,mimalloc3 allocator
+AF0AACE7F1341BF1985F2A13F2257ACE08FDF125,quandorondo,I,mimalloc3,LD_PRELOAD=/usr/local/lib/libmimalloc.so.3,mimalloc3 allocator
+94E720B6687BDE884A1DF23A2FEF44223ECA010D,rappername,I,mimalloc3,LD_PRELOAD=/usr/local/lib/libmimalloc.so.3,mimalloc3 allocator
+1CEFCE9B61E278C1712EFE3549607A7DFF2AD7DB,riodayungog,I,mimalloc3,LD_PRELOAD=/usr/local/lib/libmimalloc.so.3,mimalloc3 allocator

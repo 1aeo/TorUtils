@@ -1,0 +1,23 @@
+{
+  "id": "2025-12-26-co-unified-memory-test",
+  "name": "Unified Memory Allocator and Configuration Test",
+  "server": "co",
+  "start_date": "2025-12-26",
+  "end_date": "",
+  "hypothesis": "Alternative allocators (jemalloc, mimalloc, tcmalloc) will reduce memory fragmentation; MaxConsensusAgeForDiffs may reduce churn; rolling restarts can mitigate fragmentation",
+  "description": "Testing memory optimization strategies in parallel: 3 allocators, 2 consensus diff limits, 3 restart intervals, and 1 control group",
+  "groups": {
+    "A": {"name": "jemalloc 5.3.0", "config": {"allocator": "jemalloc", "version": "5.3.0", "ld_preload": "/usr/lib/x86_64-linux-gnu/libjemalloc.so.2"}},
+    "B": {"name": "mimalloc 2.1.2", "config": {"allocator": "mimalloc", "version": "2.1.2", "ld_preload": "/usr/lib/x86_64-linux-gnu/libmimalloc.so.2"}},
+    "C": {"name": "tcmalloc 2.15", "config": {"allocator": "tcmalloc", "version": "2.15", "ld_preload": "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4"}},
+    "D": {"name": "consensus-4h", "config": {"MaxConsensusAgeForDiffs": 14400}},
+    "E": {"name": "consensus-8h", "config": {"MaxConsensusAgeForDiffs": 28800}},
+    "F": {"name": "restart-24h", "config": {"restart_interval": "24h"}},
+    "G": {"name": "restart-48h", "config": {"restart_interval": "48h"}},
+    "H": {"name": "restart-72h", "config": {"restart_interval": "72h"}},
+    "I": {"name": "mimalloc 3.0.1", "config": {"allocator": "mimalloc", "version": "3.0.1", "ld_preload": "/usr/local/lib/libmimalloc.so.3"}, "added": "2026-01-02"},
+    "Z": {"name": "control", "config": {"allocator": "glibc", "notes": "No modifications"}}
+  },
+  "tor_version": "0.4.8.21",
+  "allocator": "glibc"
+}
