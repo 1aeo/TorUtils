@@ -2,7 +2,9 @@
 
 **By 1AEO Team • January 2026**
 
-If you can't change your memory allocator, scheduled restarts offer a fallback strategy. We tested three restart intervals across 30 relays to measure effectiveness—and the tradeoffs.
+*Experiment: 40 relays over 10 days (Dec 2025–Jan 2026) testing 24h, 48h, 72h intervals vs control*
+
+If you can't change your memory allocator, scheduled restarts offer a fallback strategy. We tested three restart intervals to measure effectiveness—and the tradeoffs.
 
 ## The Results
 

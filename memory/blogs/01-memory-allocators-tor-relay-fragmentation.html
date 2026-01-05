@@ -52,8 +52,9 @@
   <div class="container">
     <h1>Solving Tor Memory Fragmentation with Custom Allocators</h1>
     <p class="meta"><em>By 1AEO Team • January 2026</em></p>
+    <p class="meta"><em>Experiment: 40 relays (10 per allocator group) over 10 days on Ubuntu 24.04 with Tor 0.4.8.21</em></p>
 
-    <p>Running high-capacity Tor relays on Linux often leads to a familiar headache: memory that looks fine after restart, then "sticks" at 5–6 GB after ~48 hours. Our 90-relay experiment on <strong>Ubuntu 24.04</strong> with <strong>Tor 0.4.8.21</strong> confirms that the default system allocator (<code>glibc 2.39</code>) is the bottleneck—not Tor itself.</p>
+    <p>Running high-capacity Tor relays on Linux often leads to a familiar headache: memory that looks fine after restart, then "sticks" at 5–6 GB after ~48 hours. Our experiment confirms that the default system allocator (<code>glibc 2.39</code>) is the bottleneck—not Tor itself.</p>
 
     <h2>The Results</h2>
     <p>The difference was stark. While glibc relays bloated to nearly 6 GB, relays using modern allocators remained stable:</p>
