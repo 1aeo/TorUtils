@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solving Tor Memory Fragmentation with Custom Allocators | 1st Amendment Encrypted Openness</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; text-align: center; background-color: #121212; color: #ffffff; }
+    .nav { background-color: #1e1e1e; padding: 10px 0; box-shadow: 0 2px 10px rgba(0, 255, 127, 0.2); position: sticky; top: 0; z-index: 1000; }
+    .nav-toggle { display: none; background: none; border: none; font-size: 24px; color: #00ff7f; position: absolute; top: 10px; right: 20px; cursor: pointer; }
+    .nav-links { display: flex; justify-content: center; flex-wrap: wrap; }
+    .nav-links a { color: #00ff7f; text-decoration: none; margin: 0 15px; font-size: 18px; }
+    .nav-links a:hover { text-decoration: underline; }
+    @media (max-width: 600px) { .nav-links { display: none; flex-direction: column; margin-top: 40px; } .nav-links.show { display: flex; } .nav-toggle { display: block; } }
+    .container { max-width: 800px; margin: 50px auto; padding: 20px; background: #1e1e1e; box-shadow: 0px 0px 15px rgba(0, 255, 127, 0.6); border-radius: 10px; text-align: left; }
+    h1, h2, h3 { color: #00ff7f; }
+    h1 { text-align: center; }
+    p { font-size: 18px; color: #cccccc; line-height: 1.6; margin-bottom: 1em; }
+    .meta { font-size: 14px; color: #888; margin-bottom: 20px; text-align: center; }
+    ul, ol { color: #cccccc; margin-bottom: 1em; }
+    li { font-size: 18px; margin-bottom: 8px; line-height: 1.6; }
+    code { background-color: #2d2d2d; padding: 2px 6px; border-radius: 3px; font-family: monospace; color: #00ff7f; }
+    pre { background-color: #2d2d2d; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    pre code { background: none; padding: 0; color: #ffffff; }
+    a { color: #00ff7f; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container img { display: block; margin: 20px auto; max-width: 100%; height: auto; border-radius: 5px; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #444; }
+    th { background-color: #2d2d2d; color: #00ff7f; }
+    td { color: #cccccc; }
+    tr:hover { background-color: #252525; }
+    .warning { background-color: #2d2d2d; border-left: 4px solid #ff6b6b; padding: 15px; margin: 20px 0; border-radius: 0 5px 5px 0; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #333; font-size: 14px; color: #777; text-align: center; }
+    .btn { display: inline-block; margin-top: 20px; padding: 12px 24px; font-size: 18px; color: #121212; background-color: #00ff7f; text-decoration: none; font-weight: bold; border-radius: 5px; transition: background 0.3s; }
+    .btn:hover { background-color: #00cc66; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="nav">
+    <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('show')">&#9776;</button>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/blog">Blog</a>
+      <a href="https://metrics.1aeo.com">Metrics</a>
+      <a href="https://aroivalidator.1aeo.com">AROI Validator</a>
+      <a href="https://routefluxmap.1aeo.com">RouteFluxMap</a>
+      <a href="/#contact">Contact</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <h1>Solving Tor Memory Fragmentation with Custom Allocators</h1>
+    <p class="meta"><em>By 1AEO Team • January 2026</em></p>
+
+    <p class="meta"><em>Experiment: 40 relays (10 per allocator group) over 10 days on Ubuntu 24.04 with Tor 0.4.8.21</em></p>
+
+    <p>Running high-capacity Tor relays on Linux often leads to a familiar headache: memory that looks fine after restart, then "sticks" at 5–6 GB after ~48 hours. Our 90-relay experiment on <strong>Ubuntu 24.04</strong> with <strong>Tor 0.4.8.21</strong> confirms that the default system allocator (<code>glibc 2.39</code>) is the bottleneck—not Tor itself.</p>
+
+    <h2>The Results</h2>
+    <p>The difference was stark. While glibc relays bloated to nearly 6 GB, relays using modern allocators remained stable:</p>
+
+    <table>
+      <thead>
+        <tr><th>Allocator</th><th>Package (Ubuntu 24.04)</th><th>Avg Memory</th><th>Reduction</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>mimalloc 2.1</strong></td><td><code>libmimalloc2.0</code></td><td>1.16 GB</td><td>79%</td></tr>
+        <tr><td><strong>jemalloc 5.3</strong></td><td><code>libjemalloc2</code></td><td>1.63 GB</td><td>71%</td></tr>
+        <tr><td>tcmalloc 4.5</td><td><code>libgoogle-perftools4</code></td><td>3.68 GB</td><td>35%</td></tr>
+        <tr><td>glibc 2.39</td><td>(default)</td><td>5.64 GB</td><td>—</td></tr>
+      </tbody>
+    </table>
+
+    <img src="images/memory-allocators-tor-relay-fragmentation-with-custom-allocators-chart.png" alt="Memory Usage by Allocator Group">
+
+    <h2>Why Modern Allocators Work</h2>
+    <p>Tor's directory cache creates millions of small allocations that glibc struggles to release back to the OS. Modern allocators like jemalloc and mimalloc handle this fragmentation pattern efficiently—returning memory promptly without the permanent RSS bloat.</p>
+
+    <h2>How to Deploy (Ubuntu 24.04)</h2>
+    <p>The best part: no recompilation needed. A simple systemd override swaps the allocator:</p>
+
+    <pre><code># Install (Ubuntu 24.04)
+sudo apt install libmimalloc2.0  # mimalloc 2.1.2
+# Or: sudo apt install libjemalloc2  # jemalloc 5.3.0
+
+# Enable per-relay
+sudo systemctl edit tor@relay_name</code></pre>
+
+    <p>Add the override:</p>
+
+    <pre><code>[Service]
+Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2"</code></pre>
+
+    <p>For jemalloc, use: <code>/usr/lib/x86_64-linux-gnu/libjemalloc.so.2</code></p>
+
+    <h2>Bottom Line</h2>
+    <p>If you're running a Guard relay on Ubuntu 24.04, the single most effective optimization isn't in your <code>torrc</code>—it's swapping your allocator. We recommend <strong>mimalloc 2.1</strong> (best results) or <strong>jemalloc 5.3</strong> (battle-tested in Firefox/Redis) to reclaim gigabytes of wasted RAM while maintaining Guard status and full bandwidth.</p>
+
+    <p>📊 <strong>Raw data:</strong> <a href="https://github.com/1aeo/TorUtils/tree/main/memory/reports/2025-12-26-co-unified-memory-test">View experiment data and relay configs on GitHub</a></p>
+
+    <p style="text-align: center;"><a href="/#get-involved" class="btn">Join the Mission</a></p>
+
+    <div class="footer">
+      <p>© 2026 1st Amendment Encrypted Openness | Privacy First | No Logs | No Borders</p>
+    </div>
+  </div>
+</body>
+</html>
