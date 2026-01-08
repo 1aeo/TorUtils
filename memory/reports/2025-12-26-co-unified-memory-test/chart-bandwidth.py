@@ -25,7 +25,7 @@ GROUP_CONFIG = {
     'G': {'name': 'restart-48h', 'color': '#16a085'},
     'H': {'name': 'restart-72h', 'color': '#27ae60'},
     'I': {'name': 'mimalloc 3.0.1', 'color': '#00bcd4'},
-    'Z': {'name': 'control', 'color': '#e74c3c'},
+    'Z': {'name': 'glibc 2.39', 'color': '#e74c3c'},
 }
 
 def main():

@@ -12,15 +12,18 @@ from datetime import datetime
 from collections import defaultdict
 from pathlib import Path
 
-CSV_FILE = Path("/workspace/memory/reports/2025-12-26-co-unified-memory-test/memory_measurements.csv")
-OUTPUT_FILE = Path("/workspace/memory/blogs/chart_allocators.png")
+# Use script directory for relative paths
+SCRIPT_DIR = Path(__file__).parent
+CSV_FILE = SCRIPT_DIR.parent / "reports/2025-12-26-co-unified-memory-test/memory_measurements.csv"
+OUTPUT_FILE = SCRIPT_DIR / "images/memory-allocators-tor-relay-fragmentation-with-custom-allocators-chart.png"
 
 # ONLY allocator groups
 GROUP_CONFIG = {
-    'A': {'name': 'jemalloc 5.3', 'color': '#2ecc71'},       # green
-    'B': {'name': 'mimalloc 2.1', 'color': '#3498db'},       # blue
-    'C': {'name': 'tcmalloc 4.5', 'color': '#9b59b6'},       # purple
-    'Z': {'name': 'glibc (control)', 'color': '#e74c3c'},    # red
+    'A': {'name': 'jemalloc 5.3.0', 'color': '#2ecc71'},       # green
+    'B': {'name': 'mimalloc 2.1.2', 'color': '#3498db'},       # blue
+    'C': {'name': 'tcmalloc 2.15', 'color': '#9b59b6'},        # purple
+    'I': {'name': 'mimalloc 3.0.1', 'color': '#00bcd4'},       # cyan
+    'Z': {'name': 'glibc 2.39', 'color': '#e74c3c'},           # red
 }
 
 def main():
@@ -74,7 +77,7 @@ def main():
     # Formatting
     ax.set_xlabel('Date', fontsize=12, fontweight='bold')
     ax.set_ylabel('Memory (GB)', fontsize=12, fontweight='bold')
-    ax.set_title('Memory Allocator Comparison: Tor Relay RSS Over Time\nUbuntu 24.04, Tor 0.4.8.x (10 relays per group)', 
+    ax.set_title('Memory Allocator Comparison: Tor Relay RSS Over Time\nUbuntu 24.04, Tor 0.4.8.x (10 relays per allocator)', 
                  fontsize=14, fontweight='bold', pad=15)
     
     # Format x-axis
