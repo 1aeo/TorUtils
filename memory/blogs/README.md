@@ -28,6 +28,11 @@ This directory contains the blog posts and supporting materials for our Tor rela
    - Testing consensus diff cache limits for memory reduction
    - Chart: `images/maxconsensusagefordiffs-limiting-for-guard-memory.png`
 
+7. **[mimalloc 3.0.1 Regression: Why Older is Better for Tor Relays](mimalloc-version-regression-3x-vs-2x-tor-relays.md)** (NEW)
+   - 5-way comparison reveals mimalloc 3.0.1 uses 6.7x more memory than 2.0.9
+   - Chart: `images/mimalloc-version-regression-3x-vs-2x-tor-relays-chart.png`
+   - Data: 200 relays on Debian 13 over 9 days
+
 ## One-Sentence Summaries (for index)
 
 - **Summary Blog:** After testing allocators, config tweaks, and restarts across 100+ relays, we found that switching to mimalloc or jemalloc is the only fix that actually stops Tor guard memory from ballooning to 5+ GB.
@@ -36,6 +41,7 @@ This directory contains the blog posts and supporting materials for our Tor rela
 - **MaxMemInQueues Blog:** Despite its promising name, MaxMemInQueues only limits circuit buffers—not the directory cache fragmentation that actually causes Tor relays to bloat to 5 GB.
 - **Restarts Blog:** Scheduled restarts can reduce memory by up to 19%, but they disrupt circuits and still leave you at 4.5 GB—use them only as a stopgap while migrating to a better allocator.
 - **Consensus Age Blog:** Limiting how long Tor keeps consensus diffs had zero impact on memory—all test groups ended at 5.6–5.8 GB, proving the fragmentation problem lies in glibc, not cache retention.
+- **mimalloc Regression Blog:** Our 200-relay Debian 13 experiment found that mimalloc 3.0.1 has a severe regression—using 6.7x more memory than 2.0.9—so stick with the 2.x series for Tor relays.
 
 ## Key Takeaways
 
@@ -49,14 +55,18 @@ This directory contains the blog posts and supporting materials for our Tor rela
 
 | Approach | Memory | Reduction | Notes |
 |----------|--------|-----------|-------|
+| **mimalloc 2.0.9** | **1.28 GB** | **80%** | **Best (Debian 13, custom build)** |
+| mimalloc 2.1.7 | 1.72 GB | 73% | Good (Debian 13, custom build) |
 | mimalloc 2.1 | 1.16 GB | 79% | Recommended (Ubuntu 24.04: libmimalloc2.0) |
-| jemalloc 5.3 | 1.63 GB | 71% | Battle-tested (Ubuntu 24.04: libjemalloc2) |
+| jemalloc 5.3 | 1.63 GB | 71% | Battle-tested (apt: libjemalloc2) |
 | tcmalloc 4.5 | 3.68 GB | 35% | Partial improvement |
 | DirCache 0 | 0.29 GB | 94% | Loses Guard status |
 | MaxMemInQueues | ~5 GB | 0% | Doesn't address fragmentation |
 | MaxConsensusAgeForDiffs | ~5.7 GB | 0% | No improvement |
 | Periodic restarts | 4.5 GB | 19% | Workaround only |
-| glibc (control) | 5.64 GB | — | Baseline (Tor 0.4.8.21, Ubuntu 24.04) |
+| glibc 2.41 (control) | 4.01 GB | — | Baseline (Debian 13) |
+| glibc 2.39 (control) | 5.64 GB | — | Baseline (Ubuntu 24.04) |
+| **mimalloc 3.0.1** | **8.62 GB** | **-115%** | **⚠️ AVOID - Regression** |
 
 ## Charts
 
@@ -68,8 +78,10 @@ All charts are located in the `images/` subdirectory:
 - `maxmeminqueues_myth_guard_memory.png` - MaxMemInQueues comparison (Blog 4)
 - `periodic-restarts-workaround-guard-memory.png` - Restart intervals time series (Blog 5)
 - `maxconsensusagefordiffs-limiting-for-guard-memory.png` - Consensus age comparison (Blog 6)
+- `mimalloc-version-regression-3x-vs-2x-tor-relays-chart.png` - mimalloc 3.x vs 2.x (Blog 7)
 
 ## Data Sources
 
-- [September 2025 Experiment](../reports/2025-09-18-co-guard-fragmentation/) - 13 relays, 9 days
-- [December 2025 Experiment](../reports/2025-12-26-co-unified-memory-test/) - 90 relays, 10 days
+- [September 2025 Experiment](../reports/2025-09-18-co-guard-fragmentation/) - 13 relays, 9 days (Ubuntu)
+- [December 2025 Experiment](../reports/2025-12-26-co-unified-memory-test/) - 90 relays, 10 days (Ubuntu 24.04)
+- [January 2026 5-Way Experiment](../experiments/2026-01-08-5way-allocator-comparison/) - 200 relays, 9 days (Debian 13)
