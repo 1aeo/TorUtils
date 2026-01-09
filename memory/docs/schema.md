@@ -44,7 +44,7 @@ timestamp,server,type,fingerprint,nickname,rss_kb,vmsize_kb,hwm_kb,frag_ratio,co
 One row per collection with summary statistics:
 
 ```csv
-2025-12-25T02:00:00,gatedopen,aggregate,,,,,,,120,567211904,4726765,404392,5264624
+2025-12-25T02:00:00,go,aggregate,,,,,,,120,567211904,4726765,404392,5264624
 ```
 
 - `fingerprint`, `nickname`, `rss_kb`, `vmsize_kb`, `hwm_kb`, `frag_ratio` are empty
@@ -55,7 +55,7 @@ One row per collection with summary statistics:
 One row per relay per collection with detailed metrics:
 
 ```csv
-2025-12-25T02:00:00,gatedopen,relay,A1B2C3D4E5F67890A1B2C3D4E5F67890A1B2C3D4,22gz,4500000,9800000,4600000,1.95,,,,,
+2025-12-25T02:00:00,go,relay,A1B2C3D4E5F67890A1B2C3D4E5F67890A1B2C3D4,22gz,4500000,9800000,4600000,1.95,,,,,
 ```
 
 - `fingerprint`, `nickname`, `rss_kb`, `vmsize_kb`, `hwm_kb` are populated
@@ -80,12 +80,12 @@ Example: `/etc/tor/instances/22gz/fingerprint`
 
 ```csv
 timestamp,server,type,fingerprint,nickname,rss_kb,vmsize_kb,hwm_kb,frag_ratio,count,total_kb,avg_kb,min_kb,max_kb
-2025-12-25T02:00:00,gatedopen,aggregate,,,,,,,120,567211904,4726765,404392,5264624
-2025-12-25T02:00:00,gatedopen,relay,A1B2C3D4E5F67890A1B2C3D4E5F67890A1B2C3D4,22gz,4500000,9800000,4600000,1.95,,,,,
-2025-12-25T02:00:00,gatedopen,relay,B2C3D4E5F67890A1B2C3D4E5F67890A1B2C3D4E5,24kgoldn,4600000,9900000,4700000,1.92,,,,,
-2025-12-25T02:00:00,gatedopen,relay,C3D4E5F67890A1B2C3D4E5F67890A1B2C3D4E5F6,42dugg,4400000,9700000,4500000,1.98,,,,,
-2025-12-26T02:00:00,gatedopen,aggregate,,,,,,,120,570000000,4750000,410000,5300000
-2025-12-26T02:00:00,gatedopen,relay,A1B2C3D4E5F67890A1B2C3D4E5F67890A1B2C3D4,22gz,4550000,9850000,4600000,1.94,,,,,
+2025-12-25T02:00:00,go,aggregate,,,,,,,120,567211904,4726765,404392,5264624
+2025-12-25T02:00:00,go,relay,A1B2C3D4E5F67890A1B2C3D4E5F67890A1B2C3D4,22gz,4500000,9800000,4600000,1.95,,,,,
+2025-12-25T02:00:00,go,relay,B2C3D4E5F67890A1B2C3D4E5F67890A1B2C3D4E5,24kgoldn,4600000,9900000,4700000,1.92,,,,,
+2025-12-25T02:00:00,go,relay,C3D4E5F67890A1B2C3D4E5F67890A1B2C3D4E5F6,42dugg,4400000,9700000,4500000,1.98,,,,,
+2025-12-26T02:00:00,go,aggregate,,,,,,,120,570000000,4750000,410000,5300000
+2025-12-26T02:00:00,go,relay,A1B2C3D4E5F67890A1B2C3D4E5F67890A1B2C3D4,22gz,4550000,9850000,4600000,1.94,,,,,
 ```
 
 ## Querying Data

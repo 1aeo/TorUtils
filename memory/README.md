@@ -142,7 +142,7 @@ cd tools
 ./migrate-monitoring.sh /path/to/old/memory_stats.csv /path/to/new/memory.csv
 
 # With explicit server name
-./migrate-monitoring.sh --server gatedopen old_stats.csv new_stats.csv
+./migrate-monitoring.sh --server go old_stats.csv new_stats.csv
 ```
 
 Note: Migrated data will only contain aggregate rows. Per-relay detail was not collected by the legacy format.
@@ -241,7 +241,7 @@ Each server collects data independently using the same tools:
 ```bash
 # On server1:
 ./collect.sh --output /var/log/tor/memory.csv
-# Collects: gatedopen data with server=gatedopen
+# Collects: go data with server=go
 
 # On server2:
 ./collect.sh --output /var/log/tor/memory.csv
