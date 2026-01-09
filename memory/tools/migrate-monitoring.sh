@@ -11,7 +11,7 @@
 # Usage:
 #   ./migrate-monitoring.sh <input_csv> <output_csv>
 #   ./migrate-monitoring.sh <input_csv>              # Output to stdout
-#   ./migrate-monitoring.sh --server gatedopen <input_csv> <output_csv>
+#   ./migrate-monitoring.sh --server go <input_csv> <output_csv>
 #
 # Legacy format (input):
 #   date,time,num_relays,total_mb,avg_mb,min_mb,max_mb,total_kb,avg_kb,min_kb,max_kb
@@ -59,7 +59,7 @@ was not collected by the legacy format.
 
 Examples:
   $0 /var/log/tor/memory_stats.csv /var/log/tor/memory.csv
-  $0 --server gatedopen old_stats.csv new_stats.csv
+  $0 --server go old_stats.csv new_stats.csv
   $0 old_stats.csv > new_stats.csv
 EOF
             exit 0
@@ -96,7 +96,7 @@ fi
 
 # Try to extract server name from path if not provided
 if [[ -z "$SERVER_NAME" ]]; then
-    # Try to extract from path like /path/to/monitoring/gatedopen/memory_stats.csv
+    # Try to extract from path like /path/to/monitoring/go/memory_stats.csv
     parent_dir=$(dirname "$INPUT_FILE")
     parent_name=$(basename "$parent_dir")
     if [[ "$parent_name" != "." && "$parent_name" != "/" ]]; then
