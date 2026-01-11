@@ -222,3 +222,32 @@ For long-term maintainability:
 *Report generated: 2026-01-08*  
 *Author: 1AEO Team*
 
+
+---
+
+## Experiment Conclusion (January 10, 2026)
+
+### Final Results (Day 11)
+
+| Group | Allocator | Final Memory | vs 3.0.1 | Status |
+|-------|-----------|--------------|----------|--------|
+| **B** | **mimalloc 2.0.9** | **1.41 GB** | **7.4x less** | ✅ WINNER |
+| C | mimalloc 2.1.7 | 1.83 GB | 5.7x less | ✅ Stable |
+| D | jemalloc 5.3.0 | 2.74 GB | 3.8x less | ✅ Stable |
+| E | glibc 2.41 | 4.15 GB | 2.5x less | 📈 Growing |
+| A | mimalloc 3.0.1 | **10.44 GB** | — | ❌ BLOATING |
+
+### Actions Taken
+
+1. **Experiment concluded** - January 10, 2026
+2. **Monitoring crontab disabled** - `/etc/cron.d/tor-memory-monitor.disabled`
+3. **All 200 relays migrated to mimalloc 2.0.9** - Production deployment complete
+4. **Final data archived** - 5,021 data points collected over 11 days
+
+### Key Findings Confirmed
+
+- **mimalloc 3.0.1 regression confirmed** - Grew from 1.9 GB to 10.44 GB (5.5x increase)
+- **mimalloc 2.0.9 is optimal** - Stable at 1.28-1.41 GB throughout experiment
+- **Memory savings realized** - Server now using ~280 GB total (was 600+ GB with mixed allocators)
+
+*Experiment concluded: January 10, 2026*
