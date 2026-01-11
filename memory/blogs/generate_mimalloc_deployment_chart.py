@@ -16,7 +16,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 CSV_FILE = SCRIPT_DIR.parent / "experiments/2026-01-08-5way-allocator-comparison/memory.csv"
 GROUPS_DIR = SCRIPT_DIR.parent / "experiments/2026-01-08-5way-allocator-comparison/groups"
-OUTPUT_FILE = SCRIPT_DIR / "images/mimalloc-209-production-deployment-200-relays-chart.png"
+OUTPUT_FILE = SCRIPT_DIR / "images/mimalloc-209-tor-relay-deployment-chart.png"
 
 # Group config with start times (only show data after allocator was applied)
 GROUP_CONFIG = {

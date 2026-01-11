@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Production Deployment: 200 Relays Migrated to mimalloc 2.0.9 | 1st Amendment Encrypted Openness</title>
+  <title>mimalloc 2.0.9: 5-Way Allocator Test and 200-Relay Deployment | 1st Amendment Encrypted Openness</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; text-align: center; background-color: #121212; color: #ffffff; }
     .nav { background-color: #1e1e1e; padding: 10px 0; box-shadow: 0 2px 10px rgba(0, 255, 127, 0.2); position: sticky; top: 0; z-index: 1000; }
@@ -14,7 +14,7 @@
     @media (max-width: 600px) { .nav-links { display: none; flex-direction: column; margin-top: 40px; } .nav-links.show { display: flex; } .nav-toggle { display: block; } }
     .container { max-width: 800px; margin: 50px auto; padding: 20px; background: #1e1e1e; box-shadow: 0px 0px 15px rgba(0, 255, 127, 0.6); border-radius: 10px; text-align: left; }
     h1, h2, h3 { color: #00ff7f; }
-    h1 { text-align: center; font-size: 28px; }
+    h1 { text-align: center; font-size: 26px; }
     p { font-size: 18px; color: #cccccc; line-height: 1.6; margin-bottom: 1em; }
     .meta { font-size: 14px; color: #888; margin-bottom: 20px; text-align: center; }
     ul, ol { color: #cccccc; margin-bottom: 1em; }
@@ -52,14 +52,13 @@
   </div>
 
   <div class="container">
-    <h1>Production Deployment: 200 Relays Migrated to mimalloc 2.0.9</h1>
+    <h1>mimalloc 2.0.9: 5-Way Allocator Test and 200-Relay Deployment</h1>
     <p class="meta"><em>By 1AEO Team • January 2026</em></p>
+    <p class="meta"><em>Experiment: 100 relays (5 groups × 20) on Debian 13 with Tor 0.4.8.x</em></p>
 
-    <p class="meta"><em>Experiment: 100 relays (5 groups × 20 relays) tested over 6-10 days on Debian 13 with Tor 0.4.8.x</em></p>
+    <p>We tested 5 memory allocators on 100 Tor relays to find the best option for long-running Guard relays. The result: <strong class="success">mimalloc 2.0.9</strong> used 7.4× less memory than mimalloc 3.0.1. We then migrated all 200 relays on the server to the winner.</p>
 
-    <p>We ran a 5-way memory allocator comparison on 100 Tor relays, then migrated all 200 relays on the server to the winner: <strong class="success">mimalloc 2.0.9</strong>.</p>
-
-    <h2>Experiment Setup</h2>
+    <h2>Experiment Design</h2>
     <table>
       <thead>
         <tr><th>Group</th><th>Allocator</th><th>Relays</th><th>Test Period</th><th>Duration</th></tr>
@@ -72,42 +71,52 @@
         <tr><td>E</td><td>glibc 2.41</td><td>20</td><td>Jan 2 – Jan 10</td><td>8 days</td></tr>
       </tbody>
     </table>
-    <p>All 5 groups ran simultaneously from Jan 4–10 (6 days).</p>
+    <p>All 5 groups ran simultaneously from Jan 4–10 (6 days). Each group had 20 relays with identical hardware and Tor configuration.</p>
 
-    <h2>Final Results (Jan 10, 2026)</h2>
+    <h2>Results (Jan 10, 2026)</h2>
     <table>
       <thead>
-        <tr><th>Allocator</th><th>Avg Memory</th><th>Ratio to 3.0.1</th></tr>
+        <tr><th>Allocator</th><th>Avg Memory</th><th>vs mimalloc 3.0.1</th></tr>
       </thead>
       <tbody>
         <tr><td><strong class="success">mimalloc 2.0.9</strong></td><td><strong>1.41 GB</strong></td><td><strong>7.4× less</strong></td></tr>
         <tr><td>mimalloc 2.1.7</td><td>1.83 GB</td><td>5.7× less</td></tr>
         <tr><td>jemalloc 5.3.0</td><td>2.74 GB</td><td>3.8× less</td></tr>
         <tr><td>glibc 2.41</td><td>4.15 GB</td><td>2.5× less</td></tr>
-        <tr><td><span class="highlight">mimalloc 3.0.1</span></td><td><span class="highlight">10.44 GB</span></td><td>baseline</td></tr>
+        <tr><td><span class="highlight">mimalloc 3.0.1</span></td><td><span class="highlight">10.44 GB</span></td><td>—</td></tr>
       </tbody>
     </table>
 
-    <img src="images/mimalloc-209-production-deployment-200-relays-chart.png" alt="5-Way Allocator Comparison Chart">
+    <img src="images/mimalloc-209-tor-relay-deployment-chart.png" alt="5-Way Allocator Comparison Chart">
 
-    <h2>Key Observations</h2>
-    <ul>
-      <li><strong>mimalloc 3.0.1 regression:</strong> Memory grew continuously over 10 days, reaching 10.44 GB with no sign of stabilizing.</li>
-      <li><strong>mimalloc 2.0.9 stable:</strong> Memory stabilized around 1.4 GB by day 3 and remained flat.</li>
-      <li><strong>Version difference:</strong> mimalloc 2.0.9 used 7.4× less memory than 3.0.1 on identical hardware and workload.</li>
-    </ul>
+    <h2>mimalloc 3.0.1 Regression</h2>
+    <p>mimalloc 3.0.1 showed unbounded memory growth over 10 days:</p>
+    <table>
+      <thead>
+        <tr><th>Day</th><th>Memory</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>~1.9 GB</td></tr>
+        <tr><td>5</td><td>~5.3 GB</td></tr>
+        <tr><td>10</td><td>10.44 GB</td></tr>
+      </tbody>
+    </table>
+    <p>Memory continued growing at ~1 GB/day with no sign of stabilizing. In contrast, mimalloc 2.0.9 stabilized at ~1.4 GB by day 3 and remained flat.</p>
+
+    <h2>Why 2.x Works Better</h2>
+    <p>The mimalloc 2.x series returns memory to the OS more aggressively. Changes in 3.x architecture—likely related to segment management—cause memory retention that doesn't suit Tor's allocation pattern (long-running process, many small allocations, directory cache churn).</p>
 
     <h2>Production Migration</h2>
-    <p>Based on these results, we migrated all 200 relays on the server to mimalloc 2.0.9:</p>
+    <p>Based on these results, we migrated all 200 relays to mimalloc 2.0.9:</p>
 
-    <pre><code># Build mimalloc 2.0.9 from source
+    <pre><code># Build mimalloc 2.0.9 from source (Debian 13 ships 3.0.1)
 wget https://github.com/microsoft/mimalloc/archive/refs/tags/v2.0.9.tar.gz
 tar xzf v2.0.9.tar.gz && cd mimalloc-2.0.9
 mkdir build && cd build && cmake .. && make
 sudo mkdir -p /usr/local/lib/mimalloc
 sudo cp libmimalloc.so.2.0 /usr/local/lib/mimalloc/libmimalloc-2.0.9.so
 
-# Configure all relays
+# Configure systemd override for each relay
 for relay in $(ls /var/lib/tor-instances/); do
     sudo mkdir -p /etc/systemd/system/tor@${relay}.service.d/
     cat &lt;&lt;EOF | sudo tee /etc/systemd/system/tor@${relay}.service.d/allocator.conf
@@ -118,10 +127,23 @@ done
 sudo systemctl daemon-reload</code></pre>
 
     <div class="warning">
-      <strong>Debian 13 Warning:</strong> The <code>libmimalloc2.0</code> package ships <strong>mimalloc 3.0.1</strong>, which showed the regression. Build 2.0.9 from source.
+      <strong>Debian 13 Warning:</strong> The <code>libmimalloc2.0</code> package ships <strong>mimalloc 3.0.1</strong>—the version with the regression. Build 2.0.9 from source instead.
     </div>
 
-    <p>📊 <strong>Raw data:</strong> <a href="https://github.com/1aeo/TorUtils/tree/main/memory/experiments/2026-01-08-5way-allocator-comparison">experiments/2026-01-08-5way-allocator-comparison</a></p>
+    <h2>Summary</h2>
+    <table>
+      <thead>
+        <tr><th>Recommendation</th><th>Allocator</th><th>Memory</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong class="success">Best</strong></td><td>mimalloc 2.0.9</td><td>1.41 GB</td></tr>
+        <tr><td>Good</td><td>mimalloc 2.1.7</td><td>1.83 GB</td></tr>
+        <tr><td>Acceptable</td><td>jemalloc 5.3.0</td><td>2.74 GB</td></tr>
+        <tr><td><span class="highlight">Avoid</span></td><td>mimalloc 3.0.1</td><td>10.44 GB</td></tr>
+      </tbody>
+    </table>
+
+    <p>📊 <strong>Data:</strong> <a href="https://github.com/1aeo/TorUtils/tree/main/memory/experiments/2026-01-08-5way-allocator-comparison">experiments/2026-01-08-5way-allocator-comparison</a></p>
 
     <p style="text-align: center;"><a href="/#get-involved" class="btn">Join the Mission</a></p>
 
@@ -131,3 +153,4 @@ sudo systemctl daemon-reload</code></pre>
   </div>
 </body>
 </html>
+
