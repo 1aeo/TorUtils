@@ -103,8 +103,8 @@
     </table>
     <p>Memory continued growing at ~1 GB/day with no sign of stabilizing. In contrast, mimalloc 2.0.9 stabilized at ~1.4 GB by day 3 and remained flat.</p>
 
-    <h2>Why 2.x Works Better</h2>
-    <p>The mimalloc 2.x series returns memory to the OS more aggressively. Changes in 3.x architecture—likely related to segment management—cause memory retention that doesn't suit Tor's allocation pattern (long-running process, many small allocations, directory cache churn).</p>
+    <h2>Observation</h2>
+    <p>We don't know why mimalloc 3.0.1 behaves this way. The data shows memory growth; we haven't investigated the root cause in mimalloc's code.</p>
 
     <h2>Production Migration</h2>
     <p>Based on these results, we migrated all 200 relays to mimalloc 2.0.9:</p>
