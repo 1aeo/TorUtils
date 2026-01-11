@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Production Deployment: 200 Relays Migrated to mimalloc 2.0.9 | 1st Amendment Encrypted Openness</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; text-align: center; background-color: #121212; color: #ffffff; }
+    .nav { background-color: #1e1e1e; padding: 10px 0; box-shadow: 0 2px 10px rgba(0, 255, 127, 0.2); position: sticky; top: 0; z-index: 1000; }
+    .nav-toggle { display: none; background: none; border: none; font-size: 24px; color: #00ff7f; position: absolute; top: 10px; right: 20px; cursor: pointer; }
+    .nav-links { display: flex; justify-content: center; flex-wrap: wrap; }
+    .nav-links a { color: #00ff7f; text-decoration: none; margin: 0 15px; font-size: 18px; }
+    .nav-links a:hover { text-decoration: underline; }
+    @media (max-width: 600px) { .nav-links { display: none; flex-direction: column; margin-top: 40px; } .nav-links.show { display: flex; } .nav-toggle { display: block; } }
+    .container { max-width: 800px; margin: 50px auto; padding: 20px; background: #1e1e1e; box-shadow: 0px 0px 15px rgba(0, 255, 127, 0.6); border-radius: 10px; text-align: left; }
+    h1, h2, h3 { color: #00ff7f; }
+    h1 { text-align: center; font-size: 28px; }
+    p { font-size: 18px; color: #cccccc; line-height: 1.6; margin-bottom: 1em; }
+    .meta { font-size: 14px; color: #888; margin-bottom: 20px; text-align: center; }
+    ul, ol { color: #cccccc; margin-bottom: 1em; }
+    li { font-size: 18px; margin-bottom: 8px; line-height: 1.6; }
+    code { background-color: #2d2d2d; padding: 2px 6px; border-radius: 3px; font-family: monospace; color: #00ff7f; }
+    pre { background-color: #2d2d2d; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 14px; }
+    pre code { background: none; padding: 0; color: #ffffff; }
+    a { color: #00ff7f; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container img { display: block; margin: 20px auto; max-width: 100%; height: auto; border-radius: 5px; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #444; }
+    th { background-color: #2d2d2d; color: #00ff7f; }
+    td { color: #cccccc; }
+    tr:hover { background-color: #252525; }
+    .warning { background-color: #2d2d2d; border-left: 4px solid #ff6b6b; padding: 15px; margin: 20px 0; border-radius: 0 5px 5px 0; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #333; font-size: 14px; color: #777; text-align: center; }
+    .btn { display: inline-block; margin-top: 20px; padding: 12px 24px; font-size: 18px; color: #121212; background-color: #00ff7f; text-decoration: none; font-weight: bold; border-radius: 5px; transition: background 0.3s; }
+    .btn:hover { background-color: #00cc66; text-decoration: none; }
+    .highlight { color: #ff6b6b; font-weight: bold; }
+    .success { color: #00ff7f; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="nav">
+    <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('show')">&#9776;</button>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/blog">Blog</a>
+      <a href="https://metrics.1aeo.com">Metrics</a>
+      <a href="https://aroivalidator.1aeo.com">AROI Validator</a>
+      <a href="https://routefluxmap.1aeo.com">RouteFluxMap</a>
+      <a href="/#contact">Contact</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <h1>Production Deployment: 200 Relays Migrated to mimalloc 2.0.9</h1>
+    <p class="meta"><em>By 1AEO Team • January 2026</em></p>
+
+    <p class="meta"><em>Experiment: 100 relays (5 groups × 20 relays) tested over 6-10 days on Debian 13 with Tor 0.4.8.x</em></p>
+
+    <p>We ran a 5-way memory allocator comparison on 100 Tor relays, then migrated all 200 relays on the server to the winner: <strong class="success">mimalloc 2.0.9</strong>.</p>
+
+    <h2>Experiment Setup</h2>
+    <table>
+      <thead>
+        <tr><th>Group</th><th>Allocator</th><th>Relays</th><th>Test Period</th><th>Duration</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>A</td><td>mimalloc 3.0.1</td><td>20</td><td>Dec 31 – Jan 10</td><td>10 days</td></tr>
+        <tr><td>B</td><td>mimalloc 2.0.9</td><td>20</td><td>Jan 2 – Jan 10</td><td>8 days</td></tr>
+        <tr><td>C</td><td>mimalloc 2.1.7</td><td>20</td><td>Jan 2 – Jan 10</td><td>8 days</td></tr>
+        <tr><td>D</td><td>jemalloc 5.3.0</td><td>20</td><td>Jan 4 – Jan 10</td><td>6 days</td></tr>
+        <tr><td>E</td><td>glibc 2.41</td><td>20</td><td>Jan 2 – Jan 10</td><td>8 days</td></tr>
+      </tbody>
+    </table>
+    <p>All 5 groups ran simultaneously from Jan 4–10 (6 days).</p>
+
+    <h2>Final Results (Jan 10, 2026)</h2>
+    <table>
+      <thead>
+        <tr><th>Allocator</th><th>Avg Memory</th><th>Ratio to 3.0.1</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong class="success">mimalloc 2.0.9</strong></td><td><strong>1.41 GB</strong></td><td><strong>7.4× less</strong></td></tr>
+        <tr><td>mimalloc 2.1.7</td><td>1.83 GB</td><td>5.7× less</td></tr>
+        <tr><td>jemalloc 5.3.0</td><td>2.74 GB</td><td>3.8× less</td></tr>
+        <tr><td>glibc 2.41</td><td>4.15 GB</td><td>2.5× less</td></tr>
+        <tr><td><span class="highlight">mimalloc 3.0.1</span></td><td><span class="highlight">10.44 GB</span></td><td>baseline</td></tr>
+      </tbody>
+    </table>
+
+    <img src="images/mimalloc-209-production-deployment-200-relays-chart.png" alt="5-Way Allocator Comparison Chart">
+
+    <h2>Key Observations</h2>
+    <ul>
+      <li><strong>mimalloc 3.0.1 regression:</strong> Memory grew continuously over 10 days, reaching 10.44 GB with no sign of stabilizing.</li>
+      <li><strong>mimalloc 2.0.9 stable:</strong> Memory stabilized around 1.4 GB by day 3 and remained flat.</li>
+      <li><strong>Version difference:</strong> mimalloc 2.0.9 used 7.4× less memory than 3.0.1 on identical hardware and workload.</li>
+    </ul>
+
+    <h2>Production Migration</h2>
+    <p>Based on these results, we migrated all 200 relays on the server to mimalloc 2.0.9:</p>
+
+    <pre><code># Build mimalloc 2.0.9 from source
+wget https://github.com/microsoft/mimalloc/archive/refs/tags/v2.0.9.tar.gz
+tar xzf v2.0.9.tar.gz && cd mimalloc-2.0.9
+mkdir build && cd build && cmake .. && make
+sudo mkdir -p /usr/local/lib/mimalloc
+sudo cp libmimalloc.so.2.0 /usr/local/lib/mimalloc/libmimalloc-2.0.9.so
+
+# Configure all relays
+for relay in $(ls /var/lib/tor-instances/); do
+    sudo mkdir -p /etc/systemd/system/tor@${relay}.service.d/
+    cat &lt;&lt;EOF | sudo tee /etc/systemd/system/tor@${relay}.service.d/allocator.conf
+[Service]
+Environment="LD_PRELOAD=/usr/local/lib/mimalloc/libmimalloc-2.0.9.so"
+EOF
+done
+sudo systemctl daemon-reload</code></pre>
+
+    <div class="warning">
+      <strong>Debian 13 Warning:</strong> The <code>libmimalloc2.0</code> package ships <strong>mimalloc 3.0.1</strong>, which showed the regression. Build 2.0.9 from source.
+    </div>
+
+    <p>📊 <strong>Raw data:</strong> <a href="https://github.com/1aeo/TorUtils/tree/main/memory/experiments/2026-01-08-5way-allocator-comparison">experiments/2026-01-08-5way-allocator-comparison</a></p>
+
+    <p style="text-align: center;"><a href="/#get-involved" class="btn">Join the Mission</a></p>
+
+    <div class="footer">
+      <p>© 2026 1st Amendment Encrypted Openness | Privacy First | No Logs | No Borders</p>
+    </div>
+  </div>
+</body>
+</html>
