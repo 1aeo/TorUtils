@@ -42,9 +42,9 @@ mimalloc 3.0.1 showed unbounded memory growth over 10 days:
 
 The memory continued growing at ~1 GB/day with no sign of stabilizing. In contrast, mimalloc 2.0.9 stabilized at ~1.4 GB by day 3 and remained flat.
 
-## Why 2.x Works Better
+## Observation
 
-The mimalloc 2.x series returns memory to the OS more aggressively. Changes in 3.x architecture—likely related to segment management—cause memory retention that doesn't suit Tor's allocation pattern (long-running process, many small allocations, directory cache churn).
+We don't know why mimalloc 3.0.1 behaves this way. The data shows memory growth; we haven't investigated the root cause in mimalloc's code.
 
 ## Production Migration
 
