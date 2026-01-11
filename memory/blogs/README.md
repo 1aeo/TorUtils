@@ -28,10 +28,15 @@ This directory contains the blog posts and supporting materials for our Tor rela
    - Testing consensus diff cache limits for memory reduction
    - Chart: `images/maxconsensusagefordiffs-limiting-for-guard-memory.png`
 
-7. **[mimalloc 3.0.1 Regression: Why Older is Better for Tor Relays](mimalloc-version-regression-3x-vs-2x-tor-relays.md)** (NEW)
+7. **[mimalloc 3.0.1 Regression: Why Older is Better for Tor Relays](mimalloc-version-regression-3x-vs-2x-tor-relays.md)**
    - 5-way comparison reveals mimalloc 3.0.1 uses 6.7x more memory than 2.0.9
    - Chart: `images/mimalloc-version-regression-3x-vs-2x-tor-relays-chart.png`
    - Data: 200 relays on Debian 13 over 9 days
+
+8. **[Production Deployment: 200 Relays Migrated to mimalloc 2.0.9](mimalloc-209-production-deployment-200-relays.md)** (NEW)
+   - 5-way comparison on 100 relays (5 groups × 20), then 200-relay production migration
+   - Chart: `images/mimalloc-209-production-deployment-200-relays-chart.png`
+   - Data: 6-10 day test periods, mimalloc 2.0.9 used 7.4× less memory than 3.0.1
 
 ## One-Sentence Summaries (for index)
 
@@ -42,6 +47,7 @@ This directory contains the blog posts and supporting materials for our Tor rela
 - **Restarts Blog:** Scheduled restarts can reduce memory by up to 19%, but they disrupt circuits and still leave you at 4.5 GB—use them only as a stopgap while migrating to a better allocator.
 - **Consensus Age Blog:** Limiting how long Tor keeps consensus diffs had zero impact on memory—all test groups ended at 5.6–5.8 GB, proving the fragmentation problem lies in glibc, not cache retention.
 - **mimalloc Regression Blog:** Our 200-relay Debian 13 experiment found that mimalloc 3.0.1 has a severe regression—using 6.7x more memory than 2.0.9—so stick with the 2.x series for Tor relays.
+- **Production Deployment Blog:** After testing 5 allocators on 100 relays (20 per group) for 6-10 days, mimalloc 2.0.9 used 7.4× less memory than 3.0.1, leading us to migrate all 200 production relays to 2.0.9.
 
 ## Key Takeaways
 
@@ -79,9 +85,10 @@ All charts are located in the `images/` subdirectory:
 - `periodic-restarts-workaround-guard-memory.png` - Restart intervals time series (Blog 5)
 - `maxconsensusagefordiffs-limiting-for-guard-memory.png` - Consensus age comparison (Blog 6)
 - `mimalloc-version-regression-3x-vs-2x-tor-relays-chart.png` - mimalloc 3.x vs 2.x (Blog 7)
+- `mimalloc-209-production-deployment-200-relays-chart.png` - 5-way final results (Blog 8)
 
 ## Data Sources
 
 - [September 2025 Experiment](../reports/2025-09-18-co-guard-fragmentation/) - 13 relays, 9 days (Ubuntu)
 - [December 2025 Experiment](../reports/2025-12-26-co-unified-memory-test/) - 90 relays, 10 days (Ubuntu 24.04)
-- [January 2026 5-Way Experiment](../experiments/2026-01-08-5way-allocator-comparison/) - 200 relays, 9 days (Debian 13)
+- [January 2026 5-Way Experiment](../experiments/2026-01-08-5way-allocator-comparison/) - 200 relays, 11 days (Debian 13)
