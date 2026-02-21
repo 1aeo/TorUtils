@@ -464,6 +464,28 @@ read_servers_file() {
     printf '%s\n' "${servers[@]}"
 }
 
+# ── Portable Grep Helpers ────────────────────────────────────────────────────
+# macOS ships BSD grep which lacks -P (Perl regex). These helpers work on
+# both GNU grep (Linux) and BSD grep (macOS).
+
+# Extract a numeric value from KEY:VALUE output (e.g., "TOTAL:18" → "18").
+# Usage: parse_kv "$result" "TOTAL"
+parse_kv() {
+    echo "$1" | sed -n "s/.*${2}:\\([0-9]*\\).*/\\1/p" | head -1
+}
+
+# Extract FamilyId value from a line like "FamilyId wweKJrJx..."
+# Usage: extract_family_id < file   OR   echo "$text" | extract_family_id
+extract_family_id() {
+    sed -n 's/^FamilyId //p' | head -1
+}
+
+# Extract the path from a %include directive.
+# Usage: extract_include_path < file   OR   echo "$text" | extract_include_path
+extract_include_path() {
+    awk '/^%include/{print $2; exit}'
+}
+
 # ── Local Instance Helpers ───────────────────────────────────────────────────
 
 # List local relay instance names from the instances directory.
@@ -495,9 +517,11 @@ detect_shared_torrc() {
         local torrc="$INSTANCES_DIR/$name/torrc"
         local include_path
         if [[ -n "$SUDO" ]]; then
-            include_path=$($SUDO grep -oP '^%include\s+\K\S+' "$torrc" 2>/dev/null | head -1 || true)
+            # shellcheck disable=SC2016  # $2 is an awk field reference, not a shell variable
+            include_path=$($SUDO awk '/^%include/{print $2; exit}' "$torrc" 2>/dev/null || true)
         else
-            include_path=$(grep -oP '^%include\s+\K\S+' "$torrc" 2>/dev/null | head -1 || true)
+            # shellcheck disable=SC2016
+            include_path=$(awk '/^%include/{print $2; exit}' "$torrc" 2>/dev/null || true)
         fi
 
         if [[ -z "$include_path" ]]; then
@@ -604,9 +628,9 @@ resolve_family_id() {
     if [[ -n "$shared_torrc" ]]; then
         local fid
         if [[ -n "$SUDO" ]]; then
-            fid=$($SUDO grep -oP '^FamilyId \K.*' "$shared_torrc" 2>/dev/null || true)
+            fid=$($SUDO sed -n 's/^FamilyId //p' "$shared_torrc" 2>/dev/null | head -1 || true)
         else
-            fid=$(grep -oP '^FamilyId \K.*' "$shared_torrc" 2>/dev/null || true)
+            fid=$(sed -n 's/^FamilyId //p' "$shared_torrc" 2>/dev/null | head -1 || true)
         fi
         if [[ -n "$fid" ]]; then
             FAMILY_ID="$fid"
@@ -621,9 +645,9 @@ resolve_family_id() {
         local torrc="$INSTANCES_DIR/$name/torrc"
         local fid
         if [[ -n "$SUDO" ]]; then
-            fid=$($SUDO grep -oP '^FamilyId \K.*' "$torrc" 2>/dev/null || true)
+            fid=$($SUDO sed -n 's/^FamilyId //p' "$torrc" 2>/dev/null | head -1 || true)
         else
-            fid=$(grep -oP '^FamilyId \K.*' "$torrc" 2>/dev/null || true)
+            fid=$(sed -n 's/^FamilyId //p' "$torrc" 2>/dev/null | head -1 || true)
         fi
         if [[ -n "$fid" ]]; then
             FAMILY_ID="$fid"
@@ -642,7 +666,7 @@ resolve_family_id() {
         local output
         if output=$(cd "$tmpdir" && tor --keygen-family "$base" 2>&1); then
             local fid
-            fid=$(echo "$output" | grep -oP '^FamilyId \K.*' || true)
+            fid=$(echo "$output" | sed -n 's/^FamilyId //p' || true)
             if [[ -n "$fid" ]]; then
                 FAMILY_ID="$fid"
                 log_info "FamilyId derived from key file via tor --keygen-family"
@@ -666,7 +690,7 @@ detect_shared_torrc() {
     for _name in $(ls "$INSTANCES_DIR" 2>/dev/null | sort); do
         local _torrc="$INSTANCES_DIR/$_name/torrc"
         local _inc
-        _inc=$($SUDO grep -oP '"'"'^%include\s+\K\S+'"'"' "$_torrc" 2>/dev/null | head -1 || true)
+        _inc=$($SUDO awk '"'"'/^%include/{print $2; exit}'"'"' "$_torrc" 2>/dev/null || true)
         if [ -z "$_inc" ]; then echo ""; return; fi
         if [ -z "$shared" ]; then
             shared="$_inc"
@@ -695,7 +719,7 @@ cmd_generate() {
     log_info "Tor version: $tor_version_line"
 
     local ver
-    ver=$(echo "$tor_version_line" | grep -oP '\d+\.\d+\.\d+\.\d+' | head -1 || true)
+    ver=$(echo "$tor_version_line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
     if [[ -n "$ver" ]]; then
         local major minor patch sub
         IFS='.' read -r major minor patch sub <<< "$ver"
@@ -731,7 +755,7 @@ cmd_generate() {
     echo ""
 
     local fid
-    fid=$(echo "$output" | grep -oP '^FamilyId \K.*' || true)
+    fid=$(echo "$output" | sed -n 's/^FamilyId //p' || true)
 
     if [[ -f "${KEY_NAME}.secret_family_key" ]]; then
         chmod 600 "${KEY_NAME}.secret_family_key"
@@ -810,11 +834,11 @@ cmd_import_key() {
     local shared_torrc
     shared_torrc=$(detect_shared_torrc)
     if [[ -n "$shared_torrc" ]]; then
-        fid=$($SUDO grep -oP '^FamilyId \K.*' "$shared_torrc" 2>/dev/null || true)
+        fid=$($SUDO sed -n 's/^FamilyId //p' "$shared_torrc" 2>/dev/null || true)
     fi
     if [[ -z "$fid" ]]; then
         local torrc="$INSTANCES_DIR/$source_instance/torrc"
-        fid=$($SUDO grep -oP '^FamilyId \K.*' "$torrc" 2>/dev/null || true)
+        fid=$($SUDO sed -n 's/^FamilyId //p' "$torrc" 2>/dev/null || true)
     fi
     if [[ -z "$fid" ]] && command -v tor &>/dev/null; then
         # Derive via tor --keygen-family
@@ -825,7 +849,7 @@ cmd_import_key() {
         cp "$output_name" "$tmpdir/${base}.secret_family_key"
         local output
         if output=$(cd "$tmpdir" && tor --keygen-family "$base" 2>&1); then
-            fid=$(echo "$output" | grep -oP '^FamilyId \K.*' || true)
+            fid=$(echo "$output" | sed -n 's/^FamilyId //p' || true)
         fi
         rm -rf "$tmpdir"
     fi
@@ -894,16 +918,16 @@ fid=""
 # Check shared torrc
 shared=""
 for name in \$(ls "\$INSTANCES_DIR" 2>/dev/null | sort); do
-    inc=\$(\$SUDO grep -oP '^%include\s+\K\S+' "\$INSTANCES_DIR/\$name/torrc" 2>/dev/null | head -1 || true)
+    inc=\$(\$SUDO awk '/^%include/{print \$2; exit}' "\$INSTANCES_DIR/\$name/torrc" 2>/dev/null || true)
     if [ -z "\$inc" ]; then shared=""; break; fi
     if [ -z "\$shared" ]; then shared="\$inc"
     elif [ "\$shared" != "\$inc" ]; then shared=""; break; fi
 done
 if [ -n "\$shared" ] && \$SUDO test -f "\$shared" 2>/dev/null; then
-    fid=\$(\$SUDO grep -oP '^FamilyId \K.*' "\$shared" 2>/dev/null || true)
+    fid=\$(\$SUDO sed -n 's/^FamilyId //p' "\$shared" 2>/dev/null || true)
 fi
 if [ -z "\$fid" ]; then
-    fid=\$(\$SUDO grep -oP '^FamilyId \K.*' "\$INSTANCES_DIR/\$source_instance/torrc" 2>/dev/null || true)
+    fid=\$(\$SUDO sed -n 's/^FamilyId //p' "\$INSTANCES_DIR/\$source_instance/torrc" 2>/dev/null || true)
 fi
 
 echo "KEY_B64:\$key_b64"
@@ -1113,7 +1137,7 @@ cmd_deploy_remote() {
             cp "$KEY_FILE" "$tmpdir/${base}.secret_family_key"
             local output
             if output=$(cd "$tmpdir" && tor --keygen-family "$base" 2>&1); then
-                FAMILY_ID=$(echo "$output" | grep -oP '^FamilyId \K.*' || true)
+                FAMILY_ID=$(echo "$output" | sed -n 's/^FamilyId //p' || true)
                 [[ -n "$FAMILY_ID" ]] && log_info "FamilyId derived from key file"
             fi
             rm -rf "$tmpdir"
@@ -1275,9 +1299,9 @@ REMOTE_SCRIPT
         }
 
         local deployed reloaded
-        deployed=$(echo "$result" | grep -oP 'DEPLOYED:\K\d+' || echo "0")
-        reloaded=$(echo "$result" | grep -oP 'RELOADED:\K\d+' || echo "?")
-        echo -e "${GREEN}OK${NC} ($deployed instances, $reloaded reloaded)"
+        deployed=$(parse_kv "$result" "DEPLOYED")
+        reloaded=$(parse_kv "$result" "RELOADED")
+        echo -e "${GREEN}OK${NC} (${deployed:-0} instances, ${reloaded:-?} reloaded)"
 
     elif [[ -n "$SERVERS_FILE" ]]; then
         # Batch multi-server mode
@@ -1316,9 +1340,9 @@ REMOTE_SCRIPT
             }
 
             local deployed reloaded
-            deployed=$(echo "$result" | grep -oP 'DEPLOYED:\K\d+' || echo "0")
-            reloaded=$(echo "$result" | grep -oP 'RELOADED:\K\d+' || echo "?")
-            echo -e "${GREEN}OK${NC} ($deployed instances, $reloaded reloaded)"
+            deployed=$(parse_kv "$result" "DEPLOYED")
+            reloaded=$(parse_kv "$result" "RELOADED")
+            echo -e "${GREEN}OK${NC} (${deployed:-0} instances, ${reloaded:-?} reloaded)"
             success=$((success + 1))
         done
 
@@ -1351,10 +1375,10 @@ cmd_status() {
     if [[ -n "$shared_torrc" ]]; then
         log_info "Shared torrc: $shared_torrc"
         if [[ -n "$SUDO" ]]; then
-            shared_fid=$($SUDO grep -oP '^FamilyId \K.*' "$shared_torrc" 2>/dev/null || true)
+            shared_fid=$($SUDO sed -n 's/^FamilyId //p' "$shared_torrc" 2>/dev/null || true)
             $SUDO grep -q "^MyFamily " "$shared_torrc" 2>/dev/null && shared_myfamily=true
         else
-            shared_fid=$(grep -oP '^FamilyId \K.*' "$shared_torrc" 2>/dev/null || true)
+            shared_fid=$(sed -n 's/^FamilyId //p' "$shared_torrc" 2>/dev/null || true)
             grep -q "^MyFamily " "$shared_torrc" 2>/dev/null && shared_myfamily=true
         fi
         [[ -n "$shared_fid" ]] && log_info "FamilyId in shared torrc: ${shared_fid:0:20}..."
@@ -1440,7 +1464,7 @@ instances=\$(ls "\$INSTANCES_DIR" 2>/dev/null | sort)
 shared_torrc=\$(detect_shared_torrc)
 shared_fid=""
 if [ -n "\$shared_torrc" ]; then
-    shared_fid=\$(\$SUDO grep -oP '^FamilyId \K.*' "\$shared_torrc" 2>/dev/null || true)
+    shared_fid=\$(\$SUDO sed -n 's/^FamilyId //p' "\$shared_torrc" 2>/dev/null || true)
 fi
 
 total=0 configured=0 keys=0 running=0
@@ -1506,10 +1530,11 @@ REMOTE_SCRIPT
         fi
 
         local total conf keys running
-        total=$(echo "$result" | grep -oP 'TOTAL:\K\d+' || echo "0")
-        conf=$(echo "$result" | grep -oP 'CONFIGURED:\K\d+' || echo "0")
-        keys=$(echo "$result" | grep -oP 'KEYS:\K\d+' || echo "0")
-        running=$(echo "$result" | grep -oP 'RUNNING:\K\d+' || echo "0")
+        total=$(parse_kv "$result" "TOTAL")
+        conf=$(parse_kv "$result" "CONFIGURED")
+        keys=$(parse_kv "$result" "KEYS")
+        running=$(parse_kv "$result" "RUNNING")
+        total=${total:-0} conf=${conf:-0} keys=${keys:-0} running=${running:-0}
 
         total_relays=$((total_relays + total))
         total_configured=$((total_configured + conf))
@@ -1800,9 +1825,9 @@ REMOTE_SCRIPT
         }
 
         local updated reloaded
-        updated=$(echo "$result" | grep -oP 'UPDATED:\K\d+' || echo "0")
-        reloaded=$(echo "$result" | grep -oP 'RELOADED:\K\d+' || echo "?")
-        echo -e "${GREEN}OK${NC} ($updated instances, $reloaded reloaded)"
+        updated=$(parse_kv "$result" "UPDATED")
+        reloaded=$(parse_kv "$result" "RELOADED")
+        echo -e "${GREEN}OK${NC} (${updated:-0} instances, ${reloaded:-?} reloaded)"
         success=$((success + 1))
     done
 
@@ -2007,9 +2032,9 @@ REMOTE_SCRIPT
         fi
 
         local removed reloaded
-        removed=$(echo "$result" | grep -oP 'REMOVED:\K\d+' || echo "0")
-        reloaded=$(echo "$result" | grep -oP 'RELOADED:\K\d+' || echo "?")
-        echo -e "${GREEN}OK${NC} ($removed instances cleaned, $reloaded reloaded)"
+        removed=$(parse_kv "$result" "REMOVED")
+        reloaded=$(parse_kv "$result" "RELOADED")
+        echo -e "${GREEN}OK${NC} (${removed:-0} instances cleaned, ${reloaded:-?} reloaded)"
         success=$((success + 1))
     done
 
