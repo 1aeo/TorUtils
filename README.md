@@ -14,6 +14,12 @@ cp relay-config.csv.example relay-config.csv
 nano relay-config.csv
 sudo ./create-relays.sh -p "16:HASH" -t /path/to/torrc.all
 ./manage-relays.sh status
+
+# Configure Tor 0.4.9.x Happy Family (local or via SSH to remote servers)
+./setup-family.sh generate --name myfamily
+./setup-family.sh deploy --key myfamily.secret_family_key --family-id "..."
+./setup-family.sh deploy-remote --key myfamily.secret_family_key \
+    --family-id "..." --servers servers.txt
 ```
 
 See [relay-setup/README.md](relay-setup/README.md)
