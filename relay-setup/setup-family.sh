@@ -965,14 +965,21 @@ REMOTE_SCRIPT
     }
 
     # Parse output
-    local key_b64 instance_name fid
+    local key_b64 key_filename instance_name fid
     key_b64=$(echo "$result" | grep "^KEY_B64:" | head -1 | cut -d: -f2-)
+    key_filename=$(echo "$result" | grep "^KEY_FILENAME:" | head -1 | cut -d: -f2-)
     instance_name=$(echo "$result" | grep "^INSTANCE:" | head -1 | cut -d: -f2-)
     fid=$(echo "$result" | grep "^FAMILY_ID:" | head -1 | cut -d: -f2-)
 
     [[ -z "$key_b64" ]] && die "No key data received from $_SSH_HOST"
 
-    local output_name="${KEY_NAME}.secret_family_key"
+    # Use original filename from remote server, or fall back to --name default
+    local output_name
+    if [[ -n "$key_filename" ]]; then
+        output_name="$key_filename"
+    else
+        output_name="${KEY_NAME}.secret_family_key"
+    fi
     echo "$key_b64" | base64 -d > "$output_name"
     chmod 600 "$output_name"
 
@@ -1589,9 +1596,11 @@ cmd_collect_fingerprints() {
         fi
     fi
 
-    # Collect remote fingerprints if --servers specified
-    if [[ -n "$SERVERS_FILE" ]]; then
-        [[ ! -f "$SERVERS_FILE" ]] && die "Servers file not found: $SERVERS_FILE"
+    # Collect remote fingerprints if --servers or --remote specified
+    if [[ -n "$SERVERS_FILE" || -n "$REMOTE_HOST" ]]; then
+        if [[ -n "$SERVERS_FILE" ]]; then
+            [[ ! -f "$SERVERS_FILE" ]] && die "Servers file not found: $SERVERS_FILE"
+        fi
 
         prompt_sudo_pass
 
@@ -1613,18 +1622,29 @@ REMOTE_SCRIPT
 )"
         fp_script=$(inject_sudo_pass "$fp_script")
 
+        # Build server list from --remote or --servers
         local servers=()
-        while IFS= read -r line; do
-            servers+=("$line")
-        done < <(read_servers_file "$SERVERS_FILE")
+        if [[ -n "$REMOTE_HOST" ]]; then
+            servers+=("$REMOTE_HOST")
+        else
+            while IFS= read -r line; do
+                servers+=("$line")
+            done < <(read_servers_file "$SERVERS_FILE")
+        fi
 
         log_info "Remote servers: ${#servers[@]}"
         for entry in "${servers[@]}"; do
             parse_server_line "$entry" || continue
             log_verbose "Collecting from $_SSH_HOST..."
 
-            local result
-            result=$(run_remote_batch "$fp_script" 2>&1) || {
+            local result run_func
+            if [[ -n "$REMOTE_HOST" && ${#servers[@]} -eq 1 ]]; then
+                run_func="run_remote_interactive"
+            else
+                run_func="run_remote_batch"
+            fi
+
+            result=$($run_func "$fp_script" 2>&1) || {
                 log_warn "Failed to collect from $_SSH_HOST"
                 continue
             }
