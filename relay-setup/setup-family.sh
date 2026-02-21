@@ -631,9 +631,7 @@ reload_instances() {
         if $SUDO systemctl reload "${services[@]}" 2>/dev/null; then
             log_success "Reloaded ${#services[@]} running instance(s)"
         else
-            log_warn "Some instances failed to reload, trying restart..."
-            $SUDO systemctl restart "${services[@]}" 2>/dev/null || \
-                log_warn "Some instances failed to restart"
+            log_warn "Some instances failed to reload (check: journalctl -u tor@<name>.service)"
         fi
     else
         log_verbose "No running instances to reload"
@@ -1333,7 +1331,7 @@ if [ "\$NO_RELOAD" != "true" ]; then
         fi
     done
     if [ -n "\$services" ]; then
-        \$SUDO systemctl reload \$services 2>/dev/null || \$SUDO systemctl restart \$services 2>/dev/null || true
+        \$SUDO systemctl reload \$services 2>/dev/null || true
         reloaded=\$(echo \$services | wc -w)
     else
         reloaded=0
@@ -1881,7 +1879,7 @@ if [ "\$NO_RELOAD" != "true" ]; then
         fi
     done
     if [ -n "\$services" ]; then
-        \$SUDO systemctl reload \$services 2>/dev/null || \$SUDO systemctl restart \$services 2>/dev/null || true
+        \$SUDO systemctl reload \$services 2>/dev/null || true
         reloaded=\$(echo \$services | wc -w)
     else
         reloaded=0
@@ -2083,7 +2081,7 @@ if [ "\$NO_RELOAD" != "true" ]; then
         fi
     done
     if [ -n "\$services" ]; then
-        \$SUDO systemctl reload \$services 2>/dev/null || \$SUDO systemctl restart \$services 2>/dev/null || true
+        \$SUDO systemctl reload \$services 2>/dev/null || true
         reloaded=\$(echo \$services | wc -w)
     else
         reloaded=0
