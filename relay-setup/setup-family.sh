@@ -966,10 +966,10 @@ REMOTE_SCRIPT
 
     # Parse output
     local key_b64 key_filename instance_name fid
-    key_b64=$(echo "$result" | grep "^KEY_B64:" | head -1 | cut -d: -f2-)
-    key_filename=$(echo "$result" | grep "^KEY_FILENAME:" | head -1 | cut -d: -f2-)
-    instance_name=$(echo "$result" | grep "^INSTANCE:" | head -1 | cut -d: -f2-)
-    fid=$(echo "$result" | grep "^FAMILY_ID:" | head -1 | cut -d: -f2-)
+    key_b64=$(echo "$result" | grep "^KEY_B64:" | head -1 | cut -d: -f2- || true)
+    key_filename=$(echo "$result" | grep "^KEY_FILENAME:" | head -1 | cut -d: -f2- || true)
+    instance_name=$(echo "$result" | grep "^INSTANCE:" | head -1 | cut -d: -f2- || true)
+    fid=$(echo "$result" | grep "^FAMILY_ID:" | head -1 | cut -d: -f2- || true)
 
     [[ -z "$key_b64" ]] && die "No key data received from $_SSH_HOST"
 
@@ -1190,7 +1190,7 @@ REMOTE_SCRIPT
                     local resolve_result
                     resolve_result=$(run_remote_interactive "$resolve_script" 2>&1) || true
                     local remote_fid
-                    remote_fid=$(echo "$resolve_result" | grep "^FID:" | head -1 | cut -d: -f2-)
+                    remote_fid=$(echo "$resolve_result" | grep "^FID:" | head -1 | cut -d: -f2- || true)
                     if [[ -n "$remote_fid" ]]; then
                         FAMILY_ID="$remote_fid"
                         log_info "FamilyId resolved from remote server: $_SSH_HOST"
