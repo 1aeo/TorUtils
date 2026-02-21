@@ -230,13 +230,35 @@ SERVERS FILE FORMAT:
     admin@tor-relay-04.example.com:2200
     tor-relay-05           # SSH config Host alias
 
+SINGLE SERVER VIA SSH CONFIG (--remote):
+    If ~/.ssh/config defines a Host alias for your server, use --remote
+    with just the alias. SSH resolves User, Port, IdentityFile, etc.
+
+      # Check family status on one server:
+      ./setup-family.sh status-remote --remote myserver
+
+      # Deploy to one server:
+      ./setup-family.sh deploy-remote --key family.secret_family_key \
+          --family-id "..." --remote myserver
+
+      # Import key from one server:
+      ./setup-family.sh import-key-remote --remote myserver
+
+    This works with any Host alias, hostname, or IP address.
+
 WORKFLOWS:
     New family:
       1. ./setup-family.sh generate --name myfamily
       2. ./setup-family.sh deploy --key myfamily.secret_family_key
       3. ./setup-family.sh status
 
-    New family (remote):
+    New family (remote, single server via SSH config):
+      1. ./setup-family.sh generate --name myfamily
+      2. ./setup-family.sh deploy-remote --key myfamily.secret_family_key \
+             --remote myserver
+      3. ./setup-family.sh status-remote --remote myserver
+
+    New family (remote, multiple servers):
       1. ./setup-family.sh generate --name myfamily
       2. ./setup-family.sh deploy-remote --key myfamily.secret_family_key \
              --servers servers.txt
@@ -246,7 +268,7 @@ WORKFLOWS:
       1. ./setup-family.sh import-key-remote --remote existing-server
       2. ./setup-family.sh deploy-remote --key family.secret_family_key \
              --remote new-server
-      3. ./setup-family.sh status-remote --servers servers.txt
+      3. ./setup-family.sh status-remote --remote new-server
 
     Recover FamilyId from key file:
       1. ./setup-family.sh generate --name myfamily
