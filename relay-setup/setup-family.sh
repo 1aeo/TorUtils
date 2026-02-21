@@ -119,16 +119,24 @@ ensure_read_privilege() {
 # Block embedded at the top of every remote heredoc script.
 # Handles: root, passwordless sudo, password sudo (via --ask-sudo-pass), or clear error.
 # __REMOTE_SUDO_PASS__ is substituted before sending to the remote server.
+#
+# When a password is provided, sets SUDO to a wrapper function (_sudo_cmd)
+# that pipes the password to every sudo invocation via sudo -S. This avoids
+# relying on sudo credential caching, which fails in non-TTY SSH sessions
+# because the timestamp is tied to the TTY device.
 # shellcheck disable=SC2016  # Intentionally single-quoted: expands on remote server, not locally
 REMOTE_SUDO_BLOCK='
 SUDO=""
 _SUDO_PASS="__REMOTE_SUDO_PASS__"
+_sudo_cmd() {
+    printf "%s\n" "$_SUDO_PASS" | sudo -S "$@" 2>/dev/null
+}
 if [ "$(id -u)" -ne 0 ]; then
     if sudo -n true 2>/dev/null; then
         SUDO="sudo"
     elif [ -n "$_SUDO_PASS" ]; then
-        if printf "%s\n" "$_SUDO_PASS" | sudo -S -v 2>/dev/null; then
-            SUDO="sudo"
+        if printf "%s\n" "$_SUDO_PASS" | sudo -S true 2>/dev/null; then
+            SUDO="_sudo_cmd"
         else
             echo "ERROR:WRONG_SUDO_PASS"
             echo "Sudo password rejected on $(hostname)."
