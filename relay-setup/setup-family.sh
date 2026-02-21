@@ -1143,7 +1143,7 @@ cmd_deploy_remote() {
 
     # Auto-resolve FamilyId if not provided
     if [[ -z "$FAMILY_ID" ]]; then
-        # Try deriving from key file (don't need local instances for this)
+        # Try 1: derive from key file using local tor binary
         if [[ -f "$KEY_FILE" ]] && command -v tor &>/dev/null; then
             local tmpdir
             tmpdir=$(mktemp -d)
@@ -1157,7 +1157,51 @@ cmd_deploy_remote() {
             fi
             rm -rf "$tmpdir"
         fi
-        [[ -z "$FAMILY_ID" ]] && die "Missing --family-id: could not auto-resolve FamilyId"
+
+        # Try 2: read from the first target server's config via SSH
+        if [[ -z "$FAMILY_ID" ]]; then
+            local resolve_target=""
+            if [[ -n "$REMOTE_HOST" ]]; then
+                resolve_target="$REMOTE_HOST"
+            elif [[ -n "$SERVERS_FILE" && -f "$SERVERS_FILE" ]]; then
+                resolve_target=$(read_servers_file "$SERVERS_FILE" | head -1)
+            fi
+            if [[ -n "$resolve_target" ]]; then
+                log_verbose "Trying to resolve FamilyId from remote server..."
+                local resolve_script
+                resolve_script="$(cat << REMOTE_SCRIPT
+INSTANCES_DIR="$INSTANCES_DIR"
+$REMOTE_SUDO_BLOCK
+# Check shared torrc first
+for name in \$(ls "\$INSTANCES_DIR" 2>/dev/null | head -1); do
+    inc=\$(\$SUDO awk '/^%include/{print \$2; exit}' "\$INSTANCES_DIR/\$name/torrc" 2>/dev/null || true)
+    if [ -n "\$inc" ] && \$SUDO test -f "\$inc" 2>/dev/null; then
+        fid=\$(\$SUDO sed -n 's/^FamilyId //p' "\$inc" 2>/dev/null | head -1)
+        [ -n "\$fid" ] && { echo "FID:\$fid"; exit 0; }
+    fi
+    fid=\$(\$SUDO sed -n 's/^FamilyId //p' "\$INSTANCES_DIR/\$name/torrc" 2>/dev/null | head -1)
+    [ -n "\$fid" ] && { echo "FID:\$fid"; exit 0; }
+done
+REMOTE_SCRIPT
+)"
+                resolve_script=$(inject_sudo_pass "$resolve_script")
+                parse_server_line "$resolve_target" || true
+                if [[ -n "$_SSH_HOST" ]]; then
+                    local resolve_result
+                    resolve_result=$(run_remote_interactive "$resolve_script" 2>&1) || true
+                    local remote_fid
+                    remote_fid=$(echo "$resolve_result" | grep "^FID:" | head -1 | cut -d: -f2-)
+                    if [[ -n "$remote_fid" ]]; then
+                        FAMILY_ID="$remote_fid"
+                        log_info "FamilyId resolved from remote server: $_SSH_HOST"
+                    fi
+                fi
+            fi
+        fi
+
+        if [[ -z "$FAMILY_ID" ]]; then
+            die "Missing --family-id: could not auto-resolve FamilyId from key file or remote config"
+        fi
     fi
 
     # Base64-encode the key for embedding in the remote script
