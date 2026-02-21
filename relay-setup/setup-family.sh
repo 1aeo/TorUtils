@@ -1343,10 +1343,10 @@ REMOTE_SCRIPT
             return
         fi
 
-        echo -n "  $_SSH_HOST: "
+        echo -e "  $_SSH_HOST: deploying key to all instances (may take a minute)..."
         local result
         result=$(run_remote_interactive "$deploy_script") || {
-            echo -e "${RED}FAILED${NC}"
+            echo -e "  $_SSH_HOST: ${RED}FAILED${NC}"
             if echo "$result" | grep -q "ERROR:WRONG_SUDO_PASS"; then
                 die "Sudo password rejected on $_SSH_HOST"
             fi
@@ -1360,7 +1360,7 @@ REMOTE_SCRIPT
         local deployed reloaded
         deployed=$(parse_kv "$result" "DEPLOYED")
         reloaded=$(parse_kv "$result" "RELOADED")
-        echo -e "${GREEN}OK${NC} (${deployed:-0} instances, ${reloaded:-?} reloaded)"
+        echo -e "  $_SSH_HOST: ${GREEN}OK${NC} — ${deployed:-0} instances deployed, ${reloaded:-?} reloaded"
 
     elif [[ -n "$SERVERS_FILE" ]]; then
         # Batch multi-server mode
@@ -1377,17 +1377,16 @@ REMOTE_SCRIPT
         for entry in "${servers[@]}"; do
             parse_server_line "$entry" || continue
 
-            echo -n "  $_SSH_HOST: "
-
             if $DRY_RUN; then
-                echo "[dry-run] would deploy key and configure instances"
+                echo "  $_SSH_HOST: [dry-run] would deploy key and configure instances"
                 success=$((success + 1))
                 continue
             fi
 
+            echo -e "  $_SSH_HOST: deploying..."
             local result
             result=$(run_remote_batch "$deploy_script") || {
-                echo -e "${RED}FAILED${NC}"
+                echo -e "  $_SSH_HOST: ${RED}FAILED${NC}"
                 if echo "$result" | grep -q "ERROR:WRONG_SUDO_PASS"; then
                     echo "    Sudo password rejected on $_SSH_HOST"
                 elif echo "$result" | grep -q "ERROR:NEED_SUDO"; then
@@ -1401,7 +1400,7 @@ REMOTE_SCRIPT
             local deployed reloaded
             deployed=$(parse_kv "$result" "DEPLOYED")
             reloaded=$(parse_kv "$result" "RELOADED")
-            echo -e "${GREEN}OK${NC} (${deployed:-0} instances, ${reloaded:-?} reloaded)"
+            echo -e "  $_SSH_HOST: ${GREEN}OK${NC} — ${deployed:-0} instances deployed, ${reloaded:-?} reloaded"
             success=$((success + 1))
         done
 
@@ -1875,14 +1874,14 @@ REMOTE_SCRIPT
     local success=0 fail=0
     for entry in "${servers[@]}"; do
         parse_server_line "$entry" || continue
-        echo -n "  $_SSH_HOST: "
 
         if $DRY_RUN; then
-            echo "[dry-run] would update MyFamily"
+            echo "  $_SSH_HOST: [dry-run] would update MyFamily"
             success=$((success + 1))
             continue
         fi
 
+        echo -e "  $_SSH_HOST: updating MyFamily..."
         local result run_func
         if [[ -n "$REMOTE_HOST" && ${#servers[@]} -eq 1 ]]; then
             run_func="run_remote_interactive"
@@ -1891,7 +1890,7 @@ REMOTE_SCRIPT
         fi
 
         result=$($run_func "$myfamily_script" 2>&1) || {
-            echo -e "${RED}FAILED${NC}"
+            echo -e "  $_SSH_HOST: ${RED}FAILED${NC}"
             fail=$((fail + 1))
             continue
         }
@@ -1899,7 +1898,7 @@ REMOTE_SCRIPT
         local updated reloaded
         updated=$(parse_kv "$result" "UPDATED")
         reloaded=$(parse_kv "$result" "RELOADED")
-        echo -e "${GREEN}OK${NC} (${updated:-0} instances, ${reloaded:-?} reloaded)"
+        echo -e "  $_SSH_HOST: ${GREEN}OK${NC} — ${updated:-0} instances updated, ${reloaded:-?} reloaded"
         success=$((success + 1))
     done
 
@@ -2077,14 +2076,14 @@ REMOTE_SCRIPT
     local success=0 fail=0
     for entry in "${servers[@]}"; do
         parse_server_line "$entry" || continue
-        echo -n "  $_SSH_HOST: "
 
         if $DRY_RUN; then
-            echo "[dry-run] would remove family config"
+            echo "  $_SSH_HOST: [dry-run] would remove family config"
             success=$((success + 1))
             continue
         fi
 
+        echo -e "  $_SSH_HOST: removing family config..."
         local result run_func
         if [[ -n "$REMOTE_HOST" && ${#servers[@]} -eq 1 ]]; then
             run_func="run_remote_interactive"
@@ -2093,20 +2092,20 @@ REMOTE_SCRIPT
         fi
 
         result=$($run_func "$remove_script" 2>&1) || {
-            echo -e "${RED}FAILED${NC}"
+            echo -e "  $_SSH_HOST: ${RED}FAILED${NC}"
             fail=$((fail + 1))
             continue
         }
 
         if echo "$result" | grep -q "NO_INSTANCES"; then
-            echo "no instances"
+            echo "  $_SSH_HOST: no instances"
             continue
         fi
 
         local removed reloaded
         removed=$(parse_kv "$result" "REMOVED")
         reloaded=$(parse_kv "$result" "RELOADED")
-        echo -e "${GREEN}OK${NC} (${removed:-0} instances cleaned, ${reloaded:-?} reloaded)"
+        echo -e "  $_SSH_HOST: ${GREEN}OK${NC} — ${removed:-0} instances cleaned, ${reloaded:-?} reloaded"
         success=$((success + 1))
     done
 
