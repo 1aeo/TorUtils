@@ -151,7 +151,9 @@ prompt_sudo_pass() {
         if [[ -t 0 ]]; then
             read -r -s -p "Sudo password for remote server(s): " REMOTE_SUDO_PASS
             echo "" >&2
-            [[ -z "$REMOTE_SUDO_PASS" ]] && die "No password entered"
+            if [[ -z "$REMOTE_SUDO_PASS" ]]; then
+                die "No password entered"
+            fi
         else
             die "--ask-sudo-pass requires an interactive terminal"
         fi
