@@ -20,6 +20,7 @@ set -euo pipefail
 
 VERSION="1.0.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export VERSION SCRIPT_DIR  # used in help text and may be used by extensions
 
 # ── Colors ───────────────────────────────────────────────────────────────────
 
@@ -60,7 +61,7 @@ log_info()    { echo -e "${BLUE}ℹ${NC} $1"; }
 log_success() { echo -e "${GREEN}✓${NC} $1"; }
 log_warn()    { echo -e "${YELLOW}⚠${NC} $1"; }
 log_error()   { echo -e "${RED}✗${NC} $1" >&2; }
-log_verbose() { $VERBOSE && echo -e "  ${CYAN}…${NC} $1" || true; }
+log_verbose() { if $VERBOSE; then echo -e "  ${CYAN}…${NC} $1"; fi; }
 log_header()  { echo -e "\n${CYAN}=== $1 ===${NC}"; }
 
 die() { log_error "$1"; exit 1; }
@@ -115,6 +116,7 @@ ensure_read_privilege() {
 
 # Block embedded at the top of every remote heredoc script.
 # Handles: root, passwordless sudo, interactive sudo (ssh -tt), or clear error.
+# shellcheck disable=SC2016  # Intentionally single-quoted: expands on remote server, not locally
 REMOTE_SUDO_BLOCK='
 SUDO=""
 if [ "$(id -u)" -ne 0 ]; then
@@ -140,8 +142,8 @@ fi
 # ── Usage ────────────────────────────────────────────────────────────────────
 
 show_usage() {
-    cat << 'EOF'
-Tor Happy Family Setup v__VERSION__
+    cat << EOF
+Tor Happy Family Setup v${VERSION}
 
 Configure Tor 0.4.9.x cryptographic family keys across relay instances.
 
@@ -175,7 +177,7 @@ OPTIONS:
         --instances-dir DIR   Tor instances config dir (default: /etc/tor/instances)
         --data-dir DIR        Tor instances data dir (default: /var/lib/tor-instances)
         --legacy-family       Also configure MyFamily with fingerprints (transitional)
-        --myfamily LINE       MyFamily value for deploy-myfamily (e.g., "$FP1,$FP2")
+        --myfamily LINE       MyFamily value for deploy-myfamily (e.g., "\$FP1,\$FP2")
     -o, --output FILE         Output file (for collect-fingerprints)
         --no-reload           Don't reload Tor after configuration changes
         --dry-run             Show what would be done without executing
@@ -251,7 +253,7 @@ WORKFLOWS:
     Legacy MyFamily across all servers:
       1. ./setup-family.sh collect-fingerprints --servers servers.txt
       2. ./setup-family.sh deploy-myfamily-remote --servers servers.txt \
-             --myfamily "$FP1,$FP2,$FP3,..."
+             --myfamily "\$FP1,\$FP2,\$FP3,..."
 
 NOTES:
     - Requires Tor >= 0.4.9.1-alpha for Happy Family support
@@ -372,7 +374,7 @@ run_remote_interactive() {
     local tmp_path="/tmp/.tor_family_setup_$$"
 
     # Step 1: Write script to temp file on remote host
-    # shellcheck disable=SC2086
+    # shellcheck disable=SC2086,SC2029  # $tmp_path is intentionally expanded locally
     ssh $ssh_opts $target_args "cat > $tmp_path && chmod 700 $tmp_path" <<< "$script" 2>&1
 
     # Step 2: Execute with pty allocation for interactive sudo
@@ -412,6 +414,7 @@ read_servers_file() {
 # List local relay instance names from the instances directory.
 list_local_instances() {
     if [[ -d "$INSTANCES_DIR" ]]; then
+        # shellcheck disable=SC2012  # ls is fine here; instance names are controlled alphanumeric strings
         ls "$INSTANCES_DIR" 2>/dev/null | sort
     fi
 }
@@ -601,6 +604,7 @@ resolve_family_id() {
 # ── Shared Remote Script Fragments ──────────────────────────────────────────
 
 # Shared torrc detection logic for remote scripts (POSIX-compatible).
+# shellcheck disable=SC2016  # Intentionally single-quoted: expands on remote server
 REMOTE_DETECT_SHARED_TORRC='
 detect_shared_torrc() {
     local shared=""
@@ -703,7 +707,7 @@ cmd_import_key() {
     [[ ! -d "$INSTANCES_DIR" ]] && die "Instances directory not found: $INSTANCES_DIR"
     [[ ! -d "$DATA_DIR" ]] && die "Data directory not found: $DATA_DIR"
 
-    local source_instance="" source_key_path="" source_key_name=""
+    local source_instance="" source_key_path=""
 
     if [[ -n "$INSTANCE_NAME" ]]; then
         # Use specified instance
@@ -727,7 +731,6 @@ cmd_import_key() {
         [[ -z "$source_key_path" ]] && die "No .secret_family_key found in any instance KeyDir"
     fi
 
-    source_key_name=$(basename "$source_key_path")
     local output_name="${KEY_NAME}.secret_family_key"
 
     log_info "Source instance: $source_instance"
@@ -868,9 +871,8 @@ REMOTE_SCRIPT
     }
 
     # Parse output
-    local key_b64 key_filename instance_name fid
+    local key_b64 instance_name fid
     key_b64=$(echo "$result" | grep "^KEY_B64:" | head -1 | cut -d: -f2-)
-    key_filename=$(echo "$result" | grep "^KEY_FILENAME:" | head -1 | cut -d: -f2-)
     instance_name=$(echo "$result" | grep "^INSTANCE:" | head -1 | cut -d: -f2-)
     fid=$(echo "$result" | grep "^FAMILY_ID:" | head -1 | cut -d: -f2-)
 
@@ -918,7 +920,7 @@ cmd_deploy() {
     fi
 
     local instances
-    instances=($(list_local_instances))
+    mapfile -t instances < <(list_local_instances)
     [[ ${#instances[@]} -eq 0 ]] && die "No relay instances found in $INSTANCES_DIR"
 
     log_info "Key file: $KEY_FILE"
@@ -1268,7 +1270,7 @@ cmd_status() {
     [[ ! -d "$INSTANCES_DIR" ]] && die "Instances directory not found: $INSTANCES_DIR"
 
     local instances
-    instances=($(list_local_instances))
+    mapfile -t instances < <(list_local_instances)
     [[ ${#instances[@]} -eq 0 ]] && die "No relay instances found in $INSTANCES_DIR"
 
     # Check shared torrc
@@ -1465,7 +1467,7 @@ cmd_collect_fingerprints() {
     if [[ -d "$INSTANCES_DIR" ]]; then
         ensure_read_privilege
         local instances
-        instances=($(list_local_instances))
+        mapfile -t instances < <(list_local_instances)
         if [[ ${#instances[@]} -gt 0 ]]; then
             log_info "Local instances: ${#instances[@]}"
             for name in "${instances[@]}"; do
@@ -1566,7 +1568,7 @@ cmd_deploy_myfamily() {
     [[ ! -d "$INSTANCES_DIR" ]] && die "Instances directory not found: $INSTANCES_DIR"
 
     local instances
-    instances=($(list_local_instances))
+    mapfile -t instances < <(list_local_instances)
     [[ ${#instances[@]} -eq 0 ]] && die "No relay instances found in $INSTANCES_DIR"
 
     local full_line="MyFamily $MYFAMILY_LINE"
@@ -1740,7 +1742,7 @@ cmd_remove() {
     [[ ! -d "$INSTANCES_DIR" ]] && die "Instances directory not found: $INSTANCES_DIR"
 
     local instances
-    instances=($(list_local_instances))
+    mapfile -t instances < <(list_local_instances)
     [[ ${#instances[@]} -eq 0 ]] && die "No relay instances found in $INSTANCES_DIR"
 
     log_info "Instances: ${#instances[@]}"
