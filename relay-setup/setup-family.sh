@@ -918,7 +918,7 @@ else
 fi
 
 # Read key and base64-encode
-key_b64=\$(\$SUDO cat "\$source_key_path" | base64 -w0)
+key_b64=\$(\$SUDO cat "\$source_key_path" | base64 | tr -d '\n')
 key_filename=\$(basename "\$source_key_path")
 
 # Try to read FamilyId from config
@@ -980,7 +980,7 @@ REMOTE_SCRIPT
     else
         output_name="${KEY_NAME}.secret_family_key"
     fi
-    echo "$key_b64" | base64 -d > "$output_name"
+    echo "$key_b64" | { base64 -d 2>/dev/null || base64 -D 2>/dev/null; } > "$output_name"
     chmod 600 "$output_name"
 
     log_success "Key saved to: $output_name"
@@ -1206,7 +1206,7 @@ REMOTE_SCRIPT
 
     # Base64-encode the key for embedding in the remote script
     local key_b64
-    key_b64=$(base64 -w0 "$KEY_FILE")
+    key_b64=$(base64 < "$KEY_FILE" | tr -d '\n')
 
     log_info "Key file: $KEY_FILE"
     log_info "Family ID: $FAMILY_ID"
@@ -1228,7 +1228,7 @@ $REMOTE_SUDO_BLOCK
 # Decode key to temp file
 TMP_KEY="/tmp/.tor_family_key_\$\$"
 trap 'rm -f "\$TMP_KEY"' EXIT
-echo "\$KEY_B64" | base64 -d > "\$TMP_KEY"
+echo "\$KEY_B64" | { base64 -d 2>/dev/null || base64 -D 2>/dev/null; } > "\$TMP_KEY"
 chmod 600 "\$TMP_KEY"
 
 instances=\$(ls "\$INSTANCES_DIR" 2>/dev/null | sort)
