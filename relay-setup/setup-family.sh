@@ -1331,11 +1331,15 @@ REMOTE_SCRIPT
 )"
     deploy_script=$(inject_sudo_pass "$deploy_script")
 
+    # Quick remote instance count query (used for progress messages)
+    local count_script
+    count_script="ls '$INSTANCES_DIR' 2>/dev/null | wc -l | tr -d ' '"
+
     # Determine mode: --remote (interactive) or --servers (batch)
     if [[ -n "$REMOTE_HOST" ]]; then
         # Interactive single-server mode
         parse_server_line "$REMOTE_HOST" || die "Invalid remote host: $REMOTE_HOST"
-        log_info "Server: $_SSH_HOST (interactive mode)"
+        log_info "Server: $_SSH_HOST"
         echo ""
 
         if $DRY_RUN; then
@@ -1343,7 +1347,16 @@ REMOTE_SCRIPT
             return
         fi
 
-        echo -e "  $_SSH_HOST: deploying key to all instances (may take a minute)..."
+        # Pre-flight: count instances for progress message
+        local instance_count
+        instance_count=$(run_remote_interactive "$count_script" 2>/dev/null || true)
+        instance_count=$(echo "$instance_count" | tr -cd '0-9')
+        if [[ -n "$instance_count" && "$instance_count" -gt 0 ]] 2>/dev/null; then
+            local sudo_ops=$((instance_count * 4))
+            echo -e "  $_SSH_HOST: deploying key to ${instance_count} instances (~${sudo_ops} sudo ops, may take a minute)..."
+        else
+            echo -e "  $_SSH_HOST: deploying key to instances (may take a minute)..."
+        fi
         local result
         result=$(run_remote_interactive "$deploy_script") || {
             echo -e "  $_SSH_HOST: ${RED}FAILED${NC}"
@@ -1383,7 +1396,15 @@ REMOTE_SCRIPT
                 continue
             fi
 
-            echo -e "  $_SSH_HOST: deploying..."
+            # Pre-flight: count instances for progress message
+            local instance_count
+            instance_count=$(run_remote_batch "$count_script" 2>/dev/null || true)
+            instance_count=$(echo "$instance_count" | tr -cd '0-9')
+            if [[ -n "$instance_count" && "$instance_count" -gt 0 ]] 2>/dev/null; then
+                echo -e "  $_SSH_HOST: deploying key to ${instance_count} instances..."
+            else
+                echo -e "  $_SSH_HOST: deploying..."
+            fi
             local result
             result=$(run_remote_batch "$deploy_script") || {
                 echo -e "  $_SSH_HOST: ${RED}FAILED${NC}"
