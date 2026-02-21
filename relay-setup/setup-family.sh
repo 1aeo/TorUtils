@@ -50,6 +50,8 @@ SSH_PORT_SET=false
 INSTANCES_DIR="/etc/tor/instances"
 DATA_DIR="/var/lib/tor-instances"
 SUDO=""
+ASK_SUDO_PASS=false
+REMOTE_SUDO_PASS=""
 VERBOSE=false
 DRY_RUN=false
 NO_RELOAD=false
@@ -115,29 +117,53 @@ ensure_read_privilege() {
 }
 
 # Block embedded at the top of every remote heredoc script.
-# Handles: root, passwordless sudo, interactive sudo (ssh -tt), or clear error.
+# Handles: root, passwordless sudo, password sudo (via --ask-sudo-pass), or clear error.
+# __REMOTE_SUDO_PASS__ is substituted before sending to the remote server.
 # shellcheck disable=SC2016  # Intentionally single-quoted: expands on remote server, not locally
 REMOTE_SUDO_BLOCK='
 SUDO=""
+_SUDO_PASS="__REMOTE_SUDO_PASS__"
 if [ "$(id -u)" -ne 0 ]; then
     if sudo -n true 2>/dev/null; then
         SUDO="sudo"
-    elif [ -t 0 ]; then
-        if sudo -v 2>/dev/null; then
+    elif [ -n "$_SUDO_PASS" ]; then
+        if printf "%s\n" "$_SUDO_PASS" | sudo -S -v 2>/dev/null; then
             SUDO="sudo"
         else
-            echo "ERROR:NEED_SUDO"
-            echo "Root or passwordless sudo required on $(hostname)."
+            echo "ERROR:WRONG_SUDO_PASS"
+            echo "Sudo password rejected on $(hostname)."
             exit 1
         fi
     else
         echo "ERROR:NEED_SUDO"
         echo "Root or passwordless sudo required on $(hostname)."
-        echo "Fix: echo '"'"'$(whoami) ALL=(ALL) NOPASSWD: ALL'"'"' | sudo tee /etc/sudoers.d/tor-admin"
+        echo "Use --ask-sudo-pass to provide the sudo password, or configure passwordless sudo:"
+        echo "  echo '"'"'$(whoami) ALL=(ALL) NOPASSWD: ALL'"'"' | sudo tee /etc/sudoers.d/tor-admin"
         exit 1
     fi
 fi
 '
+
+# Prompt for sudo password if --ask-sudo-pass was given and we haven't prompted yet.
+# Called once at the start of any remote command that may need sudo.
+prompt_sudo_pass() {
+    if $ASK_SUDO_PASS && [[ -z "$REMOTE_SUDO_PASS" ]]; then
+        if [[ -t 0 ]]; then
+            read -r -s -p "Sudo password for remote server(s): " REMOTE_SUDO_PASS
+            echo "" >&2
+            [[ -z "$REMOTE_SUDO_PASS" ]] && die "No password entered"
+        else
+            die "--ask-sudo-pass requires an interactive terminal"
+        fi
+    fi
+}
+
+# Substitute the sudo password placeholder in a remote script string.
+# If no password was provided, replaces with empty string (triggers NEED_SUDO path).
+inject_sudo_pass() {
+    local script="$1"
+    echo "${script//__REMOTE_SUDO_PASS__/$REMOTE_SUDO_PASS}"
+}
 
 # ── Usage ────────────────────────────────────────────────────────────────────
 
@@ -177,6 +203,7 @@ OPTIONS:
         --instances-dir DIR   Tor instances config dir (default: /etc/tor/instances)
         --data-dir DIR        Tor instances data dir (default: /var/lib/tor-instances)
         --legacy-family       Also configure MyFamily with fingerprints (transitional)
+        --ask-sudo-pass      Prompt for sudo password and relay it to remote servers
         --myfamily LINE       MyFamily value for deploy-myfamily (e.g., "\$FP1,\$FP2")
     -o, --output FILE         Output file (for collect-fingerprints)
         --no-reload           Don't reload Tor after configuration changes
@@ -219,9 +246,13 @@ REMOTE MODES — --remote vs --servers:
 PRIVILEGE HANDLING:
     Local:          Prompts for sudo password if needed (interactive terminal).
                     Use --dry-run to preview without root.
-    Remote:         The SSH user on each server must be root or have
-                    passwordless sudo. Failures report the exact sudoers
-                    fix command.
+    Remote:         The SSH user on each server must be root, have passwordless
+                    sudo, or use --ask-sudo-pass to relay the sudo password.
+                    Failures report the exact sudoers fix command.
+
+    --ask-sudo-pass prompts once locally (password is not echoed), then
+    securely relays it to each remote server via the encrypted SSH tunnel.
+    The password is never written to disk.
 
 SERVERS FILE FORMAT:
     # One server per line, blank lines and comments (#) ignored
@@ -315,6 +346,7 @@ parse_args() {
             --instances-dir)    INSTANCES_DIR="$2"; shift 2 ;;
             --data-dir)         DATA_DIR="$2"; shift 2 ;;
             --legacy-family)    LEGACY_FAMILY=true; shift ;;
+            --ask-sudo-pass)    ASK_SUDO_PASS=true; shift ;;
             --no-reload)        NO_RELOAD=true; shift ;;
             --dry-run)          DRY_RUN=true; shift ;;
             --verbose)          VERBOSE=true; shift ;;
@@ -816,6 +848,8 @@ cmd_import_key_remote() {
 
     [[ -z "$REMOTE_HOST" ]] && die "Missing --remote: remote server to import key from"
 
+    prompt_sudo_pass
+
     parse_server_line "$REMOTE_HOST" || die "Invalid remote host: $REMOTE_HOST"
     log_info "Remote server: $_SSH_HOST"
 
@@ -882,11 +916,16 @@ REMOTE_SCRIPT
         return
     fi
 
+    import_script=$(inject_sudo_pass "$import_script")
+
     log_info "Connecting to $_SSH_HOST..."
     local result
     result=$(run_remote_interactive "$import_script") || {
+        if echo "$result" | grep -q "ERROR:WRONG_SUDO_PASS"; then
+            die "Sudo password rejected on $_SSH_HOST"
+        fi
         if echo "$result" | grep -q "ERROR:NEED_SUDO"; then
-            die "Need root or passwordless sudo on $_SSH_HOST"
+            die "Need root or passwordless sudo on $_SSH_HOST (or use --ask-sudo-pass)"
         fi
         die "Failed to import key from $_SSH_HOST:\n$result"
     }
@@ -1051,6 +1090,8 @@ cmd_deploy() {
 cmd_deploy_remote() {
     log_header "Deploy Family Key (Remote)"
 
+    prompt_sudo_pass
+
     [[ -z "$KEY_FILE" ]] && die "Missing --key: path to .secret_family_key file"
     [[ ! -f "$KEY_FILE" ]] && die "Key file not found: $KEY_FILE"
 
@@ -1203,6 +1244,7 @@ if [ "\$NO_RELOAD" != "true" ]; then
 fi
 REMOTE_SCRIPT
 )"
+    deploy_script=$(inject_sudo_pass "$deploy_script")
 
     # Determine mode: --remote (interactive) or --servers (batch)
     if [[ -n "$REMOTE_HOST" ]]; then
@@ -1220,8 +1262,11 @@ REMOTE_SCRIPT
         local result
         result=$(run_remote_interactive "$deploy_script") || {
             echo -e "${RED}FAILED${NC}"
+            if echo "$result" | grep -q "ERROR:WRONG_SUDO_PASS"; then
+                die "Sudo password rejected on $_SSH_HOST"
+            fi
             if echo "$result" | grep -q "ERROR:NEED_SUDO"; then
-                die "Need root or passwordless sudo on $_SSH_HOST"
+                die "Need root or passwordless sudo on $_SSH_HOST (or use --ask-sudo-pass)"
             fi
             $VERBOSE && echo "    $result"
             die "Deploy failed on $_SSH_HOST"
@@ -1258,8 +1303,10 @@ REMOTE_SCRIPT
             local result
             result=$(run_remote_batch "$deploy_script") || {
                 echo -e "${RED}FAILED${NC}"
-                if echo "$result" | grep -q "ERROR:NEED_SUDO"; then
-                    echo "    Need root or passwordless sudo on $_SSH_HOST"
+                if echo "$result" | grep -q "ERROR:WRONG_SUDO_PASS"; then
+                    echo "    Sudo password rejected on $_SSH_HOST"
+                elif echo "$result" | grep -q "ERROR:NEED_SUDO"; then
+                    echo "    Need root/sudo on $_SSH_HOST (try --ask-sudo-pass)"
                 fi
                 $VERBOSE && echo "    $result"
                 fail=$((fail + 1))
@@ -1374,6 +1421,8 @@ cmd_status_remote() {
     [[ -z "$SERVERS_FILE" && -z "$REMOTE_HOST" ]] && \
         die "Missing --servers or --remote: specify target server(s)"
 
+    prompt_sudo_pass
+
     local status_script
     status_script="$(cat << REMOTE_SCRIPT
 #!/bin/bash
@@ -1415,6 +1464,7 @@ done
 echo "TOTAL:\$total CONFIGURED:\$configured KEYS:\$keys RUNNING:\$running"
 REMOTE_SCRIPT
 )"
+    status_script=$(inject_sudo_pass "$status_script")
 
     # Collect servers
     local servers=()
@@ -1508,6 +1558,8 @@ cmd_collect_fingerprints() {
     if [[ -n "$SERVERS_FILE" ]]; then
         [[ ! -f "$SERVERS_FILE" ]] && die "Servers file not found: $SERVERS_FILE"
 
+        prompt_sudo_pass
+
         local fp_script
         fp_script="$(cat << REMOTE_SCRIPT
 #!/bin/bash
@@ -1524,6 +1576,7 @@ for name in \$(ls "\$INSTANCES_DIR" 2>/dev/null | sort); do
 done
 REMOTE_SCRIPT
 )"
+        fp_script=$(inject_sudo_pass "$fp_script")
 
         local servers=()
         while IFS= read -r line; do
@@ -1644,6 +1697,8 @@ cmd_deploy_myfamily_remote() {
     [[ -z "$SERVERS_FILE" && -z "$REMOTE_HOST" ]] && \
         die "Missing --servers or --remote: specify target server(s)"
 
+    prompt_sudo_pass
+
     local full_line="MyFamily $MYFAMILY_LINE"
 
     local myfamily_script
@@ -1703,6 +1758,7 @@ if [ "\$NO_RELOAD" != "true" ]; then
 fi
 REMOTE_SCRIPT
 )"
+    myfamily_script=$(inject_sudo_pass "$myfamily_script")
 
     # Collect servers
     local servers=()
@@ -1852,6 +1908,8 @@ cmd_remove_remote() {
     [[ -z "$SERVERS_FILE" && -z "$REMOTE_HOST" ]] && \
         die "Missing --servers or --remote: specify target server(s)"
 
+    prompt_sudo_pass
+
     local remove_script
     remove_script="$(cat << REMOTE_SCRIPT
 #!/bin/bash
@@ -1902,6 +1960,7 @@ if [ "\$NO_RELOAD" != "true" ]; then
 fi
 REMOTE_SCRIPT
 )"
+    remove_script=$(inject_sudo_pass "$remove_script")
 
     # Collect servers
     local servers=()
