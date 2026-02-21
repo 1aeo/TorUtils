@@ -205,22 +205,23 @@ SSH CONFIGURATION:
         tor-relay-03
 
 REMOTE MODES — --remote vs --servers:
-    --remote HOST   Single-server connection. When run from an interactive
-                    terminal, uses ssh -tt for pseudo-terminal allocation so
-                    SSH password auth and remote sudo prompts both work.
-                    When no terminal is detected (scripts, CI, agents), falls
-                    back to batch mode automatically to avoid hanging.
+    --remote HOST   Single-server connection. SSH password/key authentication
+                    prompts work normally. The remote user must be root or
+                    have passwordless sudo configured.
 
     --servers FILE  Batch multi-server connection. Uses BatchMode=yes to
                     prevent hanging on prompts. SSH must use key auth, and
                     the remote user must be root or have passwordless sudo.
 
+    Both modes respect ~/.ssh/config. The difference is that --remote
+    allows SSH password authentication while --servers requires key auth.
+
 PRIVILEGE HANDLING:
     Local:          Prompts for sudo password if needed (interactive terminal).
                     Use --dry-run to preview without root.
-    --remote:       Remote sudo prompts work via ssh -tt pty allocation.
-    --servers:      Requires root or passwordless sudo on each remote server.
-                    Failures report the exact sudoers fix command.
+    Remote:         The SSH user on each server must be root or have
+                    passwordless sudo. Failures report the exact sudoers
+                    fix command.
 
 SERVERS FILE FORMAT:
     # One server per line, blank lines and comments (#) ignored
@@ -386,34 +387,20 @@ build_scp_target_args() {
     echo "$port_args $dest"
 }
 
-# Execute a script on a remote server in interactive mode (--remote).
-# When a terminal is available: uses two-step SSH (write script to temp file,
-# then execute with ssh -tt) so that sudo password prompts work through the pty.
-# When no terminal is available (scripts, CI, agents): falls back to batch mode
-# automatically so the command doesn't hang.
+# Execute a script on a remote server for --remote (single server).
+# Like batch mode but WITHOUT BatchMode=yes, so SSH can still prompt for
+# password/key auth via /dev/tty if needed. The remote server must be root
+# or have passwordless sudo (same as batch for sudo, but more flexible for
+# SSH authentication).
 run_remote_interactive() {
     local script="$1"
-
-    # If no terminal is available, fall back to batch mode to avoid hanging
-    if [[ ! -t 0 && ! -t 1 ]]; then
-        log_verbose "No terminal detected, falling back to batch mode"
-        run_remote_batch "$script"
-        return $?
-    fi
-
     local ssh_opts
     ssh_opts=$(build_ssh_opts)
     local target_args
     target_args=$(build_ssh_target)
-    local tmp_path="/tmp/.tor_family_setup_$$"
 
-    # Step 1: Write script to temp file on remote host
-    # shellcheck disable=SC2086,SC2029  # $tmp_path is intentionally expanded locally
-    ssh $ssh_opts $target_args "cat > $tmp_path && chmod 700 $tmp_path" <<< "$script" 2>&1
-
-    # Step 2: Execute with pty allocation for interactive sudo
     # shellcheck disable=SC2086
-    ssh -tt $ssh_opts $target_args "bash $tmp_path; _rc=\$?; rm -f $tmp_path; exit \$_rc" 2>&1
+    ssh $ssh_opts $target_args "bash -s" <<< "$script" 2>&1
 }
 
 # Execute a script on a remote server in batch mode (--servers).
