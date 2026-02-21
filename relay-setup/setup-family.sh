@@ -205,9 +205,11 @@ SSH CONFIGURATION:
         tor-relay-03
 
 REMOTE MODES — --remote vs --servers:
-    --remote HOST   Interactive single-server connection. Uses ssh -tt for
-                    pseudo-terminal allocation. SSH password auth and remote
-                    sudo password prompts both work through the terminal.
+    --remote HOST   Single-server connection. When run from an interactive
+                    terminal, uses ssh -tt for pseudo-terminal allocation so
+                    SSH password auth and remote sudo prompts both work.
+                    When no terminal is detected (scripts, CI, agents), falls
+                    back to batch mode automatically to avoid hanging.
 
     --servers FILE  Batch multi-server connection. Uses BatchMode=yes to
                     prevent hanging on prompts. SSH must use key auth, and
@@ -363,10 +365,20 @@ build_scp_target_args() {
 }
 
 # Execute a script on a remote server in interactive mode (--remote).
-# Uses two-step SSH: write script to temp file, then execute with ssh -tt
-# so that sudo password prompts work through the pty.
+# When a terminal is available: uses two-step SSH (write script to temp file,
+# then execute with ssh -tt) so that sudo password prompts work through the pty.
+# When no terminal is available (scripts, CI, agents): falls back to batch mode
+# automatically so the command doesn't hang.
 run_remote_interactive() {
     local script="$1"
+
+    # If no terminal is available, fall back to batch mode to avoid hanging
+    if [[ ! -t 0 && ! -t 1 ]]; then
+        log_verbose "No terminal detected, falling back to batch mode"
+        run_remote_batch "$script"
+        return $?
+    fi
+
     local ssh_opts
     ssh_opts=$(build_ssh_opts)
     local target_args
