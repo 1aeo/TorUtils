@@ -131,6 +131,19 @@ _SUDO_PASS="__REMOTE_SUDO_PASS__"
 _sudo_cmd() {
     printf "%s\n" "$_SUDO_PASS" | sudo -S "$@" 2>/dev/null
 }
+_sudo_write_line() {
+    # Append a line to a file with sudo. Avoids the stdin conflict where
+    # piping content to "sudo tee" collides with piping the password to "sudo -S".
+    # Usage: _sudo_write_line "line content" "/path/to/file"
+    local _line="$1" _file="$2"
+    if [ "$(id -u)" -eq 0 ]; then
+        printf "%s\n" "$_line" >> "$_file"
+    elif [ -n "$_SUDO_PASS" ]; then
+        printf "%s\n" "$_SUDO_PASS" | sudo -S sh -c "printf \"%s\n\" \"\$1\" >> \"\$2\"" _ "$_line" "$_file" 2>/dev/null
+    else
+        printf "%s\n" "$_line" | sudo tee -a "$_file" > /dev/null
+    fi
+}
 if [ "$(id -u)" -ne 0 ]; then
     if sudo -n true 2>/dev/null; then
         SUDO="sudo"
@@ -1257,13 +1270,13 @@ if [ -n "\$shared_torrc" ]; then
     if \$SUDO grep -q "^FamilyId " "\$shared_torrc" 2>/dev/null; then
         \$SUDO sed -i "s|^FamilyId .*|FamilyId \$FAMILY_ID|" "\$shared_torrc"
     else
-        echo "FamilyId \$FAMILY_ID" | \$SUDO tee -a "\$shared_torrc" > /dev/null
+        _sudo_write_line "FamilyId \$FAMILY_ID" "\$shared_torrc"
     fi
     if [ "\$LEGACY_FAMILY" = "true" ] && [ -n "\$my_family_line" ]; then
         if \$SUDO grep -q "^MyFamily " "\$shared_torrc" 2>/dev/null; then
             \$SUDO sed -i "s|^MyFamily .*|\$my_family_line|" "\$shared_torrc"
         else
-            echo "\$my_family_line" | \$SUDO tee -a "\$shared_torrc" > /dev/null
+            _sudo_write_line "\$my_family_line" "\$shared_torrc"
         fi
     fi
 fi
@@ -1290,7 +1303,7 @@ for name in \$instances; do
             if \$SUDO grep -q "^%include" "\$torrc" 2>/dev/null; then
                 \$SUDO sed -i "/^%include/i FamilyId \$FAMILY_ID" "\$torrc"
             else
-                echo "FamilyId \$FAMILY_ID" | \$SUDO tee -a "\$torrc" > /dev/null
+                _sudo_write_line "FamilyId \$FAMILY_ID" "\$torrc"
             fi
         fi
         if [ "\$LEGACY_FAMILY" = "true" ] && [ -n "\$my_family_line" ]; then
@@ -1300,7 +1313,7 @@ for name in \$instances; do
                 if \$SUDO grep -q "^%include" "\$torrc" 2>/dev/null; then
                     \$SUDO sed -i "/^%include/i \$my_family_line" "\$torrc"
                 else
-                    echo "\$my_family_line" | \$SUDO tee -a "\$torrc" > /dev/null
+                    _sudo_write_line "\$my_family_line" "\$torrc"
                 fi
             fi
         fi
@@ -1840,7 +1853,7 @@ if [ -n "\$shared_torrc" ]; then
     if \$SUDO grep -q "^MyFamily " "\$shared_torrc" 2>/dev/null; then
         \$SUDO sed -i "s|^MyFamily .*|\$MYFAMILY_LINE|" "\$shared_torrc"
     else
-        echo "\$MYFAMILY_LINE" | \$SUDO tee -a "\$shared_torrc" > /dev/null
+        _sudo_write_line "\$MYFAMILY_LINE" "\$shared_torrc"
     fi
 else
     for name in \$instances; do
@@ -1851,7 +1864,7 @@ else
             if \$SUDO grep -q "^%include" "\$torrc" 2>/dev/null; then
                 \$SUDO sed -i "/^%include/i \$MYFAMILY_LINE" "\$torrc"
             else
-                echo "\$MYFAMILY_LINE" | \$SUDO tee -a "\$torrc" > /dev/null
+                _sudo_write_line "\$MYFAMILY_LINE" "\$torrc"
             fi
         fi
     done
