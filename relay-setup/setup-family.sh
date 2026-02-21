@@ -1236,6 +1236,24 @@ LEGACY_FAMILY="$LEGACY_FAMILY"
 KEY_B64="$key_b64"
 $REMOTE_SUDO_BLOCK
 
+# Check Tor version >= 0.4.9.1 BEFORE modifying any files
+tor_ver=\$(tor --version 2>/dev/null | head -1 || true)
+tor_num=\$(echo "\$tor_ver" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+if [ -n "\$tor_num" ]; then
+    IFS='.' read -r _maj _min _pat _sub << EOF
+\$tor_num
+EOF
+    if [ "\$_maj" -lt 0 ] 2>/dev/null || \
+       [ "\$_maj" -eq 0 ] && [ "\$_min" -lt 4 ] 2>/dev/null || \
+       [ "\$_maj" -eq 0 ] && [ "\$_min" -eq 4 ] && [ "\$_pat" -lt 9 ] 2>/dev/null || \
+       [ "\$_maj" -eq 0 ] && [ "\$_min" -eq 4 ] && [ "\$_pat" -eq 9 ] && [ "\$_sub" -lt 1 ] 2>/dev/null; then
+        echo "ERROR:TOR_VERSION"
+        echo "Tor \$tor_num on \$(hostname) does not support Happy Families."
+        echo "Requires >= 0.4.9.1-alpha. Keys can still be deployed, but FamilyId cannot."
+        exit 1
+    fi
+fi
+
 # Decode key to temp file
 TMP_KEY="/tmp/.tor_family_key_\$\$"
 trap 'rm -f "\$TMP_KEY"' EXIT
@@ -1371,6 +1389,11 @@ REMOTE_SCRIPT
         local result
         result=$(run_remote_interactive "$deploy_script") || {
             echo -e "  $_SSH_HOST: ${RED}FAILED${NC}"
+            if echo "$result" | grep -q "ERROR:TOR_VERSION"; then
+                local remote_ver
+                remote_ver=$(echo "$result" | grep -oE 'Tor [0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+                die "${remote_ver:-Tor} on $_SSH_HOST is too old. Happy Families requires Tor >= 0.4.9.1-alpha."
+            fi
             if echo "$result" | grep -q "ERROR:WRONG_SUDO_PASS"; then
                 die "Sudo password rejected on $_SSH_HOST"
             fi
@@ -1419,7 +1442,9 @@ REMOTE_SCRIPT
             local result
             result=$(run_remote_batch "$deploy_script") || {
                 echo -e "  $_SSH_HOST: ${RED}FAILED${NC}"
-                if echo "$result" | grep -q "ERROR:WRONG_SUDO_PASS"; then
+                if echo "$result" | grep -q "ERROR:TOR_VERSION"; then
+                    echo "    Tor too old — requires >= 0.4.9.1-alpha for Happy Families"
+                elif echo "$result" | grep -q "ERROR:WRONG_SUDO_PASS"; then
                     echo "    Sudo password rejected on $_SSH_HOST"
                 elif echo "$result" | grep -q "ERROR:NEED_SUDO"; then
                     echo "    Need root/sudo on $_SSH_HOST (try --ask-sudo-pass)"
