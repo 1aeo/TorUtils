@@ -72,76 +72,52 @@ Shared: `/etc/tor/torrc.all` (from `$HOME/torrc.all`)
 
 ## Happy Family Setup (Tor 0.4.9.x)
 
-Configure cryptographic family keys so your relays are recognized as a family
-without the O(n²) `MyFamily` overhead. Requires Tor >= 0.4.9.1-alpha.
+Cryptographic family keys replace the O(n²) `MyFamily` lists.
+Requires **Tor >= 0.4.9.1-alpha** on all relay servers.
 
-### New family
+### 1. Create a new family key
 
 ```bash
-# 1. Generate a family key (once, on any machine with tor installed)
 ./setup-family.sh generate --name myfamily
-
-# 2a. Deploy locally (run on each Tor server — prompts for sudo if needed)
-./setup-family.sh deploy \
-    --key myfamily.secret_family_key \
-    --family-id "wweKJrJxUDs1EdtFFHCDtvVgTKftOC/crUl1mYJv830"
-
-# 2b. Or deploy to remote servers from a control machine
-cp servers.txt.example servers.txt
-nano servers.txt  # Add your server IPs or SSH config Host aliases
-./setup-family.sh deploy-remote \
-    --key myfamily.secret_family_key \
-    --family-id "wweKJrJxUDs1EdtFFHCDtvVgTKftOC/crUl1mYJv830" \
-    --servers servers.txt
-
-# 3. Check status
-./setup-family.sh status                              # local
-./setup-family.sh status-remote --servers servers.txt  # remote
 ```
 
-### Add a new server to an existing family
+Save the output — you'll need the `FamilyId` and the `.secret_family_key` file.
+
+### 2. Deploy key to remote servers
+
+**If you have the key file locally** (from step 1 or a backup):
 
 ```bash
-# 1. Import the key from a server that already has it
-./setup-family.sh import-key-remote --remote existing-server
-
-# 2. Deploy to the new server(s)
 ./setup-family.sh deploy-remote \
-    --key family.secret_family_key \
+    --key myfamily.secret_family_key \
     --family-id "wweKJrJx..." \
-    --remote new-server
-
-# 3. Verify
-./setup-family.sh status-remote --servers servers.txt
+    --remote myserver --ask-sudo-pass
 ```
 
-### Legacy MyFamily (transitional period)
-
-Until all Tor clients support Happy Families, add `--legacy-family` to also
-set `MyFamily` with fingerprints, or collect fingerprints across all servers:
+**If the key is already on another server** (pull it first):
 
 ```bash
-./setup-family.sh collect-fingerprints --servers servers.txt
-./setup-family.sh deploy-myfamily-remote \
-    --myfamily '$FP1,$FP2,$FP3,...' --servers servers.txt
+./setup-family.sh import-key-remote --remote existing-server --ask-sudo-pass
+./setup-family.sh deploy-remote \
+    --key myfamily.secret_family_key \
+    --remote new-server --ask-sudo-pass
 ```
 
-### SSH config support
+Use `--servers servers.txt` instead of `--remote` for multiple servers at once.
 
-The script respects `~/.ssh/config` by default. Your servers file can use
-Host aliases:
+### 3. Verify
 
-```
-# servers.txt
-tor-relay-01
-tor-relay-02
-tor-relay-03
+```bash
+./setup-family.sh status-remote --remote myserver --ask-sudo-pass
 ```
 
-With `--remote` (single server), sudo password prompts work through the SSH
-session. With `--servers` (batch), passwordless sudo or root is required.
+### Notes
 
-See `./setup-family.sh --help` for all commands and options.
+- `--ask-sudo-pass` prompts once and relays the password to the remote server.
+  Not needed if the SSH user is root or has passwordless sudo.
+- `--remote` targets one server. `--servers servers.txt` targets many (one per line).
+- The script respects `~/.ssh/config` — use Host aliases in place of IPs.
+- Run `./setup-family.sh --help` for all commands and options.
 
 ## Troubleshooting
 
