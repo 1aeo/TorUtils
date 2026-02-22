@@ -1243,13 +1243,17 @@ if [ -n "\$tor_num" ]; then
     IFS='.' read -r _maj _min _pat _sub << EOF
 \$tor_num
 EOF
-    if [ "\$_maj" -lt 0 ] 2>/dev/null || \
-       [ "\$_maj" -eq 0 ] && [ "\$_min" -lt 4 ] 2>/dev/null || \
-       [ "\$_maj" -eq 0 ] && [ "\$_min" -eq 4 ] && [ "\$_pat" -lt 9 ] 2>/dev/null || \
-       [ "\$_maj" -eq 0 ] && [ "\$_min" -eq 4 ] && [ "\$_pat" -eq 9 ] && [ "\$_sub" -lt 1 ] 2>/dev/null; then
+    _too_old=false
+    # Compare as: major.minor.patch.sub < 0.4.9.1
+    if [ "\$_maj" -lt 0 ] 2>/dev/null; then _too_old=true
+    elif [ "\$_maj" -eq 0 ] && [ "\$_min" -lt 4 ] 2>/dev/null; then _too_old=true
+    elif [ "\$_maj" -eq 0 ] && [ "\$_min" -eq 4 ] && [ "\$_pat" -lt 9 ] 2>/dev/null; then _too_old=true
+    elif [ "\$_maj" -eq 0 ] && [ "\$_min" -eq 4 ] && [ "\$_pat" -eq 9 ] && [ "\$_sub" -lt 1 ] 2>/dev/null; then _too_old=true
+    fi
+    if [ "\$_too_old" = "true" ]; then
         echo "ERROR:TOR_VERSION"
         echo "Tor \$tor_num on \$(hostname) does not support Happy Families."
-        echo "Requires >= 0.4.9.1-alpha. Keys can still be deployed, but FamilyId cannot."
+        echo "Requires >= 0.4.9.1-alpha."
         exit 1
     fi
 fi
