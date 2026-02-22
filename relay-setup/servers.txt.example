@@ -1,0 +1,42 @@
+# Tor relay servers for family key deployment
+# One server per line. Blank lines and comments (#) are ignored.
+#
+# FORMATS:
+#   hostname_or_ip              Uses ~/.ssh/config, then system defaults
+#   hostname_or_ip:ssh_port     Explicit port override
+#   user@hostname_or_ip         Explicit user override
+#   user@hostname_or_ip:port    Full override
+#   ssh_config_alias            ~/.ssh/config Host alias (recommended)
+#
+# SSH CONFIG:
+#   The script respects ~/.ssh/config by default. List your Host aliases
+#   here and the script will use the configured User, Port, IdentityFile,
+#   ProxyJump, etc. automatically.
+#
+#   Example ~/.ssh/config:
+#       Host tor-*
+#           User admin
+#           IdentityFile ~/.ssh/tor_ed25519
+#           Port 2222
+#
+# OVERRIDE PRIORITY (highest to lowest):
+#   1. Per-line user@host:port
+#   2. --ssh-user / --ssh-port CLI flags
+#   3. ~/.ssh/config Host entries
+#   4. System defaults (current user, port 22)
+#
+# PERMISSIONS:
+#   --servers (batch mode):  SSH user must be root or have passwordless sudo.
+#   --remote  (interactive): sudo password prompts work through the SSH session.
+#
+#   To set up passwordless sudo on a server:
+#       echo 'admin ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/tor-admin
+#
+# Examples:
+tor-relay-01
+tor-relay-02
+tor-relay-03
+192.168.1.10
+192.168.1.11:2222
+root@203.0.113.50
+admin@tor-relay-04.example.com:2200
