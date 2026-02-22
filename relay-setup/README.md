@@ -43,6 +43,7 @@ relay03,,203.0.113.102,,,
 - `create-relays.sh` - Create relays (auto-detects Ubuntu/Debian)
 - `verify-relays.sh` - Verify system
 - `manage-relays.sh` - Daily management
+- `setup-family.sh` - Configure Tor 0.4.9.x Happy Family (local or remote via SSH)
 
 **Platform compatibility**: Scripts auto-detect and work on both Ubuntu 24.04 and Debian 13.
 
@@ -68,6 +69,58 @@ Per relay:
 - Service: `tor@<nickname>.service`
 
 Shared: `/etc/tor/torrc.all` (from `$HOME/torrc.all`)
+
+## Happy Family Setup (Tor 0.4.9.x)
+
+Cryptographic family keys replace the O(n²) `MyFamily` lists.
+Requires **Tor >= 0.4.9.1-alpha** on all relay servers.
+
+### 1. Create a new family key
+
+```bash
+./setup-family.sh generate --name myfamily
+```
+
+Save the output — you'll need the `FamilyId` and the `.secret_family_key` file.
+
+### 2. Deploy key to remote servers
+
+**If you have the key file locally** (from step 1 or a backup):
+
+```bash
+./setup-family.sh deploy-remote \
+    --key <filename>.secret_family_key \
+    --family-id "<FamilyId from step 1>" \
+    --remote <server> --ask-sudo-pass
+```
+
+Lost your FamilyId? Re-run `generate` with the key file in the same directory — it reads the existing key and prints the FamilyId without overwriting.
+
+**If the key is already on another server** (pull it first, then deploy):
+
+```bash
+./setup-family.sh import-key-remote --remote existing-server --ask-sudo-pass
+./setup-family.sh deploy-remote \
+    --key <filename>.secret_family_key \
+    --family-id "<FamilyId from import output>" \
+    --remote new-server --ask-sudo-pass
+```
+
+Use `--servers servers.txt` instead of `--remote` for multiple servers at once.
+
+### 3. Verify
+
+```bash
+./setup-family.sh status-remote --remote myserver --ask-sudo-pass
+```
+
+### Notes
+
+- `--ask-sudo-pass` prompts once and relays the password to the remote server.
+  Not needed if the SSH user is root or has passwordless sudo.
+- `--remote` targets one server. `--servers servers.txt` targets many (one per line).
+- The script respects `~/.ssh/config` — use Host aliases in place of IPs.
+- Run `./setup-family.sh --help` for all commands and options.
 
 ## Troubleshooting
 
