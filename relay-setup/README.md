@@ -89,17 +89,20 @@ Save the output — you'll need the `FamilyId` and the `.secret_family_key` file
 
 ```bash
 ./setup-family.sh deploy-remote \
-    --key myfamily.secret_family_key \
-    --family-id "wweKJrJx..." \
-    --remote myserver --ask-sudo-pass
+    --key <filename>.secret_family_key \
+    --family-id "<FamilyId from step 1>" \
+    --remote <server> --ask-sudo-pass
 ```
 
-**If the key is already on another server** (pull it first):
+Lost your FamilyId? Re-run `generate` with the key file in the same directory — it reads the existing key and prints the FamilyId without overwriting.
+
+**If the key is already on another server** (pull it first, then deploy):
 
 ```bash
 ./setup-family.sh import-key-remote --remote existing-server --ask-sudo-pass
 ./setup-family.sh deploy-remote \
-    --key myfamily.secret_family_key \
+    --key <filename>.secret_family_key \
+    --family-id "<FamilyId from import output>" \
     --remote new-server --ask-sudo-pass
 ```
 
