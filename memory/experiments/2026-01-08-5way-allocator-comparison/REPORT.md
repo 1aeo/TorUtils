@@ -138,26 +138,42 @@ The 2.0.x series uses simpler memory management that:
 
 ## Recommendations
 
-### 1. Migrate All Relays to mimalloc 2.0.9
+### 1. Migrate All Relays to mimalloc 2.0.9 (Secure Mode)
 
-**Action:** Update all 200 relays to use mimalloc 2.0.9
+**Action:** Update all 200 relays to use mimalloc 2.0.9 built with `-DMI_SECURE=ON`
+
+Building in secure mode adds guard pages, encrypted free-list pointers,
+double-free detection, and allocation randomization — recovering the
+heap-security mitigations lost by leaving glibc (Safe-Linking, etc.) and adding
+protections glibc doesn't have. Performance overhead is ~10% on allocation
+microbenchmarks, which is negligible for Tor's I/O-bound workload. See
+[heap-security-review.md](../../docs/heap-security-review.md) for the full
+comparison.
 
 ```bash
+# Build mimalloc 2.0.9 in secure mode
+wget https://github.com/microsoft/mimalloc/archive/refs/tags/v2.0.9.tar.gz
+tar xzf v2.0.9.tar.gz && cd mimalloc-2.0.9
+mkdir build && cd build && cmake -DMI_SECURE=ON .. && make
+sudo mkdir -p /usr/local/lib/mimalloc
+sudo cp libmimalloc-secure.so.2.0 /usr/local/lib/mimalloc/libmimalloc-2.0.9-secure.so
+
 # Update systemd override for all relays
 for relay in $(ls /var/lib/tor-instances/); do
     sudo tee /etc/systemd/system/tor@${relay}.service.d/allocator.conf > /dev/null <<EOF
 [Service]
-Environment="LD_PRELOAD=/usr/local/lib/mimalloc/libmimalloc-2.0.9.so"
+Environment="LD_PRELOAD=/usr/local/lib/mimalloc/libmimalloc-2.0.9-secure.so"
 EOF
 done
 sudo systemctl daemon-reload
 # Rolling restart to avoid network disruption
 ```
 
-**Expected outcome:** 
+**Expected outcome:**
 - Memory reduction from ~550 GB total to ~260 GB total
 - Stable memory usage without growth
 - ~50% memory savings
+- Heap-security mitigations matching or exceeding glibc ptmalloc2
 
 ### 2. Report mimalloc 3.0.1 Regression
 
