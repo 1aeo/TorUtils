@@ -98,11 +98,16 @@ The following allocators can be used with Tor on Ubuntu 24.04 to potentially red
 
 | Allocator | Installation | CPU Overhead | Fragmentation | Security |
 |-----------|-------------|--------------|---------------|----------|
-| glibc (default) | Built-in | Low | High | Standard |
-| jemalloc | apt + LD_PRELOAD | Low-Medium | Low | Standard |
-| tcmalloc | apt + LD_PRELOAD | Low | Low | Standard |
-| mimalloc | apt + LD_PRELOAD | Very Low | Very Low | Standard |
+| glibc (default) | Built-in | Low | High | Moderate (Safe-Linking, inline metadata) |
+| jemalloc | apt + LD_PRELOAD | Low-Medium | Low | Low (out-of-band metadata only) |
+| tcmalloc | apt + LD_PRELOAD | Low | Low | Low |
+| mimalloc | apt + LD_PRELOAD | Very Low | Very Low | Low (default) / High (secure mode) |
 | OpenBSD malloc | Recompile Tor | High | Very Low | High |
+
+> **Note:** mimalloc can be built in secure mode (`-DMI_SECURE=ON`) which adds
+> guard pages, encrypted free-list pointers, double-free detection, and allocation
+> randomization — matching or exceeding glibc's heap-security mitigations. See
+> [heap-security-review.md](../../docs/heap-security-review.md) for details.
 
 ### Option 1: jemalloc (Recommended)
 
