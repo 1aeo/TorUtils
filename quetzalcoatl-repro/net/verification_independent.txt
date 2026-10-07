@@ -1,0 +1,17 @@
+V1 consensus files by name: 3804 2026-05-01-00 .. 2026-10-07-02 missing: 15 ['2026-05-08 21:00', '2026-05-08 22:00', '2026-05-08 23:00', '2026-05-09 00:00', '2026-05-09 01:00', '2026-05-09 02:00', '2026-05-09 03:00', '2026-05-09 04:00', '2026-06-02 14:00', '2026-06-02 15:00', '2026-06-02 16:00', '2026-06-02 17:00', '2026-06-02 18:00', '2026-07-16 19:00', '2026-10-01 19:00']
+V2 descriptor files scanned: 3006543 unique names: 2769050 duplicates across archives: 237493
+V3 relays with an attacker rule sequence (all May-Oct archives): 377 Counter({'near-open': 331, 'OUR_POLICY': 46})
+   earliest OUR_POLICY ('2026-10-01 14:49:51', '4F72DEF09B015E9B6F210597083D95D8A3BC38AD', 'TorDola1', '185.231.33.82')
+   earliest near-open ('2026-10-02 09:27:42', 'F532DA2085F87777CE05EA947BF7B4F49B625754', 'Quetzalcoatl', '104.168.0.177')
+   by IPFire AS: [('AS53667 FranTech Solutions', 129), ('AS36352 HostPapa', 125), ('AS197540 netcup GmbH', 40), ('AS141995 Contabo Asia Private Limi', 24), ('AS51167 Contabo GmbH', 16), ('AS211619 MAXKO d.o.o.', 16), ('AS40021 Contabo Inc.', 8), ('AS211720 Datashield, Inc.', 5), ('AS200019 ALEXHOST SRL', 5), ('AS9044 BSE Software GmbH', 2), ('AS399646 Snaju Development', 2), ('AS400304 Redoubt Networks', 2), ('AS133255 Elxer Communications Priv', 1), ('AS27176 DataWagon LLC', 1), ('AS20473 The Constant Company, LLC', 1)]
+V4 Switzerland2 descriptors 10-01..10-02 (published, fp, policy lines): [('2026-10-01 15:43:20', '29FEFE36', 68), ('2026-10-01 15:43:21', '8427937D', 68), ('2026-10-02 09:34:04', '29FEFE36', 22), ('2026-10-02 09:34:04', '8427937D', 22)]
+V5 October consensuses: 146 ; BadExit min/max: 35 243 peak at 2026-10-05 11:00:00 ; MiddleOnly max: 238
+    ('2026-10-04 20:00:00', 9222, 36, 31, 2825)
+    ('2026-10-04 21:00:00', 9195, 98, 79, 2744)
+    ('2026-10-05 10:00:00', 9293, 159, 154, 2733)
+    ('2026-10-05 11:00:00', 9443, 243, 238, 2730)
+    ('2026-10-05 12:00:00', 9427, 35, 30, 2726)
+V6 family relays (nickname Quetzalcoatl) present in a consensus >= 10-01: 277 hosts: 73
+V6 10-05 sweep from out/descriptors.csv: hosts 70 relays 253 first 2026-10-05 08:56:30 last 2026-10-05 10:39:50 text-sort inversions 14 of 2415
+V6 10-01 15:30-16:00 restarts: hosts 72 relays 275 2026-10-01 15:36:30 2026-10-01 15:47:53
+V7 reference consensus 2026-10-01 14:00 relays: 9428 ; IPFire AS53667 non-family: 101 hit 71 ; outside non-family: 9054 hit 13
