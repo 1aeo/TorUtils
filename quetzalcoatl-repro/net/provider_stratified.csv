@@ -1,0 +1,21 @@
+exit_status,version,os,family_cert,ipv6,inside_hit,inside_not,outside_hit,outside_not,inside_rate,outside_rate
+nonexit,0.4.9.1,Linux,False,False,11,2,4,1790,0.846,0.0022
+nonexit,0.4.9.1,Linux,False,True,2,4,3,1535,0.333,0.002
+exit,0.4.9.1,Linux,True,True,9,8,0,1303,0.529,0.0
+nonexit,0.4.9.1,Linux,True,False,1,0,0,1316,1.0,0.0
+nonexit,0.4.9.1,Linux,True,True,0,5,0,600,0.0,0.0
+exit,0.4.9.1,Linux,False,True,26,3,1,443,0.897,0.0023
+exit,0.4.9.1,Linux,False,False,14,0,3,237,1.0,0.0125
+exit,0.4.9.1,Linux,True,False,3,0,0,197,1.0,0.0
+nonexit,0.4.9.8,Linux,False,False,1,0,0,86,1.0,0.0
+nonexit,0.4.9.1,FreeBSD,True,True,0,2,0,37,0.0,0.0
+nonexit,0.5.0.0,Linux,True,True,0,2,0,10,0.0,0.0
+exit,0.4.9.6,Linux,False,False,3,0,0,4,1.0,0.0
+exit,0.4.9.8,Linux,False,True,1,0,0,5,1.0,0.0
+exit,0.4.9.1,FreeBSD,True,True,0,1,0,2,0.0,0.0
+exit,0.5.0.0,Linux,True,True,0,2,0,1,0.0,0.0
+nonexit,0.5.0.0,FreeBSD,True,True,0,1,0,0,0.0,
+
+MH odds ratio (5-way strata),3595.8461849993123,CMH chi2,1358.43,p,2.27e-297
+MH odds ratio (exit status only),1543.294846149832,CMH chi2,3054.75,p,0
+operator level: inside hit/not,44,15,outside-only hit/not,10,3594,Fisher p,4.9e-79
