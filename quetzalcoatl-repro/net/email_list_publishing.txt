@@ -1,0 +1,69 @@
+Reachable (>= 1 authority votes it Running): 30 relays, 23 contacts
+devvulLU | E207721091F48D6A02A2F8F0BFF438A714279B81 | < asara AT devvul DOT com >
+devvulLV | 95AA4899FA8F312323C2628B2AFD45EF7D6005C7 | < asara AT devvul DOT com >
+devvulMI | 3A78F9C8C874866F430D31188F7C98322AF2E9AC | < asara AT devvul DOT com >
+devvulNY | 2325905203E9CFB5206D6811315EB5ED57AF97BD | < asara AT devvul DOT com >
+
+andr788k | 4954B51AF0CBADA08E4BC389DF1E3E419535165A | andr788k(at)airmail(dot)cc [tor-relay.co]
+
+luxvptorex | 0A11C7546A1332412D1EBD13BD4C3D6A6644D7E0 | dhnet.torcontact@gmail.com
+
+sk4d9f2m8x1q7w3j | FDBEAC98530F2A4CF7FDF164695A93F6AC15BA18 | diskstats@mailboxly.example
+
+azadisrvs2 | 91D9FFB5030F645818505EF983AF8AA4EE2D00A7 | diyarciftciatprotonmaildotcom
+
+2mpe4b | 0D8826A5646B352A7EB843FFBE80326F4D018F1B | DoNotDisturb AT NoContact NoWarnings
+2mpe4c | BC7A5E911554477F7346FA9B680250D1D84B14AF | DoNotDisturb AT NoContact NoWarnings
+
+Alberta | 3B85067588C3F017D5CCF7D8F65B5881B7D4C97C | email:denny.obreham[]a-n-o-n-y-m-e.net url:https://a-n-o-n-y-m-e.net
+
+4714 | FA9F92CB28E2285A589643DDA31448361076D0C7 | email:tor [] middelstaedt dot com url:https://middelstaedt.com
+4715 | FEDA854291A94B8CA5BB6920AE100346EBC4E522 | email:tor [] middelstaedt dot com url:https://middelstaedt.com
+
+dn3a | 144C5DBEBD925D54A246A10832CBB293EE84C834 | gleepdorf AT proton DOT me
+
+TorDotTeitelNet | 76959901386E8C908F50235D9894007886B67C2E | Jeff Teitel email:jeff[]teitel.net url:teitel.net
+
+TorExitForYou | 1322EE47D35541471D3A00F30FFF2EE7585E5B52 | mailforhkvps@atomicmail.io
+
+mbserver | 982FF2DAC80C1454E826B43F8FF003CF2CDC1CD7 | mb-server <tor AT mb-server dot com>
+
+txn1copeland | 3D01CE600B2DC5C719684800E8C6990FE4CB8F9A | Ralph Copeland <copelandhosting AT pissmail dot com>
+
+JustExiting | 2B4D5AA9997D4DDFF02BC52E173CF0C8FFFD1B9C | Random Person <thud_erasure020@simplelogin.com>
+
+sh97US104R | 7E2FF265BE20E154CED120D46E39058F6CCC34D7 | stealthprivacy.eu
+
+DingBerry | 0AE156113CAF79C28EDF599F55FABDE03D5416DC | t(at)randomperson(dot)com
+Dumbledore | 7ED6B42716B1D393E7BAC2FFDDE3853CD9896A95 | t(at)randomperson(dot)com
+
+thb8b35d95b69765 | AE6507A440E9353C19C39B5448A13EB60A77B525 | thermalmon@outlook.example
+
+stubbornoxen | 7B67A3AD2395536FD15CB97588A0BC1A015AC267 | tor(at)thewellinspired(dot)com [tor-relay.co]
+
+Triangulum1 | 7417085A0CC99550CF82ADD3F7B1CD01E64AAADE | tor-relay-admin@carlos1001.com
+
+privatebrowsingorg | 2858C4BF05D57D7FEBEE28DEA82BAC374222F858 | tor@privatebrowing.org
+
+sullyhelpstor | 3B49A31F1DD5D929133AF10B0B33BB7AE42B53E7 | tor@sully.plus
+sullyhelpstor | E0999C5F42D12204AA8038653DBACDCE1F40E7FF | tor@sully.plus
+
+CarabineroDeChile | 58698C5E518D428DCA4D9780AD8379BB63B57B42 | torrelayoperator@tutanota.com
+
+RunningOnFumes1 | 93D3B5088A6813F679A426323AE0125FB4FE7728 | (no contact line)
+
+Not reachable (no authority votes it Running): 11 relays, 3 contacts
+2mpe4 | 5957F8B3503BB566D36F8B9A20280FD990E4C298 | DoNotDisturb AT NoContact NoWarnings
+
+NgePTimE | DB451037C23AF3D028AE1B7E2F82BE5CA77B98A5 | email:a78i2efsewr0neeknk[]proton.me url:allium.observer
+
+Quetzalcoatl | 07DCECDF04BE5D470C615C8E1CCF086F74FC8CA6 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | 09768BD9ACA211008713BA481E0B8EE3239A9F0B | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | 552C2E2AFDD1B740A38CA9768C51EC011B2AF701 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | 728AEDB2DA037D9032F9697FFA7D9E070783A1F6 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | 75ADD82FA44C8E7D76414148CFE5E1131CD2AD0D | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | 9A11E4B46DC53E13043B9FC1EBAFE0128D699B58 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | B04176E992478C82F1AD7A5DC1D1D206B623D624 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | EDCC2668AF97EBA53CD8C228B9127F6CC73D9552 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | F922C23FF68AAADBD2C9A384471B63694A879BA5 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+

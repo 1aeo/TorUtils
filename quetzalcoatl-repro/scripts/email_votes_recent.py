@@ -27,7 +27,8 @@ def b64_to_hex(b):
 
 
 def fetch(url):
-    r = subprocess.run(["curl", "-sf", "--retry", "3", url], capture_output=True)
+    r = subprocess.run(["curl", "-sf", "--retry", "5", "--retry-all-errors", "--retry-delay", "2", url],
+                       capture_output=True)
     if r.returncode != 0:
         raise RuntimeError(f"curl {r.returncode} {url}")
     return r.stdout

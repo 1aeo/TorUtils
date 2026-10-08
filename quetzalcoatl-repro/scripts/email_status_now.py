@@ -10,7 +10,7 @@ Sources:
     found the relay reachable ("Running");
   * descriptors: net/netdb.sqlite descriptor + every data_recent/server-descriptors/* file (CollecTor's
     descriptor files lag the votes by a few hours);
-  * Onionoo: onionoo_20261008T14/details.json (cross-check only: Onionoo's running/last_seen come from the
+  * Onionoo: newest onionoo_YYYYMMDDTHH/details.json (cross-check only: Onionoo's running/last_seen come from the
     consensus, so a relay left out of the consensus shows as not running whatever it does).
 
 Definitions:
@@ -126,7 +126,8 @@ def main():
         return max((r["desc_published"] for r in rr), default="")
 
     # ------------------------------------------------------------ Onionoo
-    oo = json.load(open(os.path.join(ROOT, "onionoo_20261008T14/details.json")))
+    oopath = sorted(glob.glob(os.path.join(ROOT, "onionoo_2026*T*/details.json")))[-1]  # newest snapshot
+    oo = json.load(open(oopath))
     oor = {r["fingerprint"]: r for r in oo["relays"]}
     print("Onionoo relays_published:", oo["relays_published"])
 
