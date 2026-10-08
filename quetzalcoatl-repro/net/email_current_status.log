@@ -1,0 +1,167 @@
+victims: 377  family seeds: 362
+recent consensuses: 28 2026-10-07 00:00:00 .. 2026-10-08 03:00:00  relays in latest: 9100
+
+== relays in latest consensus (2026-10-08 03:00:00) with a near-open / OUR_POLICY p line: 0
+
+== per recent consensus: relays, attacker p lines, victims listed
+   2026-10-07 00:00:00 9146 0 1
+   2026-10-07 01:00:00 9170 0 1
+   2026-10-07 02:00:00 9155 0 1
+   2026-10-07 03:00:00 9183 0 1
+   2026-10-07 04:00:00 9158 0 1
+   2026-10-07 05:00:00 9146 0 1
+   2026-10-07 06:00:00 9191 0 1
+   2026-10-07 07:00:00 9169 0 1
+   2026-10-07 08:00:00 9160 0 1
+   2026-10-07 09:00:00 9154 0 1
+   2026-10-07 10:00:00 9159 0 1
+   2026-10-07 11:00:00 9158 0 1
+   2026-10-07 12:00:00 9149 0 1
+   2026-10-07 13:00:00 9094 0 1
+   2026-10-07 14:00:00 9105 0 1
+   2026-10-07 15:00:00 9052 0 1
+   2026-10-07 16:00:00 9018 0 1
+   2026-10-07 17:00:00 9050 0 1
+   2026-10-07 18:00:00 9089 0 1
+   2026-10-07 19:00:00 9078 0 1
+   2026-10-07 20:00:00 9088 0 1
+   2026-10-07 21:00:00 9096 0 1
+   2026-10-07 22:00:00 9102 0 1
+   2026-10-07 23:00:00 9133 0 1
+   2026-10-08 00:00:00 9081 0 1
+   2026-10-08 01:00:00 9099 0 1
+   2026-10-08 02:00:00 9069 0 1
+   2026-10-08 03:00:00 9100 0 1
+
+server-descriptor files: 46  descriptors (raw): 68330  unique digests: 51669
+descriptor published range: 2026-10-01 14:46:41 .. 2026-10-08 03:38:18  24 h cutoff (>=): 2026-10-07 03:38:18  relays with descriptors: 10129
+
+Onionoo relays_published: 2026-10-08 03:00:00  relays: 10328
+validation: latest-consensus entries whose descriptor (r-line digest) is in the recent files: 9096  p line == summarize_policy(): 9096  mismatches: 0
+wrote /home/user/TorUtils/quetzalcoatl-repro/net/email_current_status.csv 377 rows
+
+== victims in latest consensus 2026-10-08 03:00:00: 1
+   ('9CDB4020E69D9E7201C3D1A8BF9DE1DEBF997A76', 'TimberDolphin63', 'BadExit Fast MiddleOnly Running Stable Valid', 'reject 23,25,110,143,445,465,587,1433,3306,3389,5432,6379,27017')
+
+== victims with any descriptor in recent files (any published time): 377
+== victims publishing in last 24 h (published >= 2026-10-07 03:38:18): 53
+   class of newest descriptor: {'OUR_POLICY': 9, 'near-open': 24, 'non-exit': 8, 'accept-list': 8, 'other-reject-list': 4}
+   of which attacker-class: 33
+
+== online but excluded (attacker-class newest descriptor in last 24 h, not in latest consensus): 33
+   {'fp': 'F2F423F89D58D8638C63A76C093BB11151C8B5D4', 'nickname': 'HeyBroM', 'ip': '209.141.46.203', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 15:56:50', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 5}
+   {'fp': '2858C4BF05D57D7FEBEE28DEA82BAC374222F858', 'nickname': 'privatebrowsingorg', 'ip': '107.189.12.7', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 22:37:16', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': '93D3B5088A6813F679A426323AE0125FB4FE7728', 'nickname': 'RunningOnFumes1', 'ip': '104.244.75.74', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 22:45:59', 'policy_class': 'OUR_POLICY', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': '76959901386E8C908F50235D9894007886B67C2E', 'nickname': 'TorDotTeitelNet', 'ip': '198.98.51.189', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 22:47:36', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 5}
+   {'fp': 'FDBEAC98530F2A4CF7FDF164695A93F6AC15BA18', 'nickname': 'sk4d9f2m8x1q7w3j', 'ip': '82.220.38.26', 'asn': 'AS9044', 'as_name': 'SOLNET', 'family': False, 'last_published': '2026-10-07 22:47:42', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': 'E0999C5F42D12204AA8038653DBACDCE1F40E7FF', 'nickname': 'sullyhelpstor', 'ip': '107.189.13.254', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 22:51:18', 'policy_class': 'OUR_POLICY', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': '0A11C7546A1332412D1EBD13BD4C3D6A6644D7E0', 'nickname': 'luxvptorex', 'ip': '107.189.30.69', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:00:12', 'policy_class': 'OUR_POLICY', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': '1322EE47D35541471D3A00F30FFF2EE7585E5B52', 'nickname': 'TorExitForYou', 'ip': '107.189.29.8', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:03:30', 'policy_class': 'OUR_POLICY', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': '58698C5E518D428DCA4D9780AD8379BB63B57B42', 'nickname': 'CarabineroDeChile', 'ip': '107.189.8.65', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:05:41', 'policy_class': 'OUR_POLICY', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': '7E2FF265BE20E154CED120D46E39058F6CCC34D7', 'nickname': 'sh97US104R', 'ip': '104.36.87.137', 'asn': 'AS400304', 'as_name': 'SYNTEQ', 'family': False, 'last_published': '2026-10-07 23:08:21', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': '7B67A3AD2395536FD15CB97588A0BC1A015AC267', 'nickname': 'stubbornoxen', 'ip': '205.185.124.164', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:09:03', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': '91D9FFB5030F645818505EF983AF8AA4EE2D00A7', 'nickname': 'azadisrvs2', 'ip': '199.195.250.20', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:09:43', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': '3D01CE600B2DC5C719684800E8C6990FE4CB8F9A', 'nickname': 'txn1copeland', 'ip': '209.141.32.198', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:13:32', 'policy_class': 'OUR_POLICY', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': 'E207721091F48D6A02A2F8F0BFF438A714279B81', 'nickname': 'devvulLU', 'ip': '107.189.12.101', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:28:42', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': '2325905203E9CFB5206D6811315EB5ED57AF97BD', 'nickname': 'devvulNY', 'ip': '198.98.57.25', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:33:02', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 6}
+   {'fp': 'FEDA854291A94B8CA5BB6920AE100346EBC4E522', 'nickname': '4715', 'ip': '104.244.73.136', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:33:33', 'policy_class': 'OUR_POLICY', 'last_recent_cons': '', 'n_desc_24h': 6}
+   {'fp': '3B85067588C3F017D5CCF7D8F65B5881B7D4C97C', 'nickname': 'Alberta', 'ip': '209.141.51.180', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:35:24', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 6}
+   {'fp': '3A78F9C8C874866F430D31188F7C98322AF2E9AC', 'nickname': 'devvulMI', 'ip': '45.61.185.194', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:35:41', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 6}
+   {'fp': '95AA4899FA8F312323C2628B2AFD45EF7D6005C7', 'nickname': 'devvulLV', 'ip': '209.141.52.110', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:39:39', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 6}
+   {'fp': 'FA9F92CB28E2285A589643DDA31448361076D0C7', 'nickname': '4714', 'ip': '107.189.31.33', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:51:49', 'policy_class': 'OUR_POLICY', 'last_recent_cons': '', 'n_desc_24h': 6}
+   {'fp': 'BC7A5E911554477F7346FA9B680250D1D84B14AF', 'nickname': '2mpe4c', 'ip': '107.189.5.249', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:53:24', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 6}
+   {'fp': '0D8826A5646B352A7EB843FFBE80326F4D018F1B', 'nickname': '2mpe4b', 'ip': '107.189.5.249', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-08 00:05:54', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 6}
+   {'fp': '982FF2DAC80C1454E826B43F8FF003CF2CDC1CD7', 'nickname': 'mbserver', 'ip': '93.185.167.247', 'asn': 'AS200019', 'as_name': 'AlexHost', 'family': False, 'last_published': '2026-10-08 00:16:43', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 6}
+   {'fp': '7ED6B42716B1D393E7BAC2FFDDE3853CD9896A95', 'nickname': 'Dumbledore', 'ip': '45.61.188.15', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-08 00:20:15', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 4}
+   {'fp': '2B4D5AA9997D4DDFF02BC52E173CF0C8FFFD1B9C', 'nickname': 'JustExiting', 'ip': '199.195.253.124', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-08 00:24:54', 'policy_class': 'OUR_POLICY', 'last_recent_cons': '', 'n_desc_24h': 6}
+   {'fp': '3B49A31F1DD5D929133AF10B0B33BB7AE42B53E7', 'nickname': 'sullyhelpstor', 'ip': '198.98.60.231', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-08 00:33:07', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 4}
+   {'fp': '4954B51AF0CBADA08E4BC389DF1E3E419535165A', 'nickname': 'andr788k', 'ip': '209.141.55.26', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-08 00:45:11', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 4}
+   {'fp': '7417085A0CC99550CF82ADD3F7B1CD01E64AAADE', 'nickname': 'Triangulum1', 'ip': '205.185.116.34', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-08 00:51:13', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 4}
+   {'fp': '0AE156113CAF79C28EDF599F55FABDE03D5416DC', 'nickname': 'DingBerry', 'ip': '198.98.61.60', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-08 00:53:48', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 7}
+   {'fp': '5957F8B3503BB566D36F8B9A20280FD990E4C298', 'nickname': '2mpe4', 'ip': '107.189.5.249', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-08 00:55:53', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 4}
+   {'fp': 'DB451037C23AF3D028AE1B7E2F82BE5CA77B98A5', 'nickname': 'NgePTimE', 'ip': '107.189.8.181', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-08 00:56:24', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 4}
+   {'fp': '144C5DBEBD925D54A246A10832CBB293EE84C834', 'nickname': 'dn3a', 'ip': '38.134.43.12', 'asn': 'AS399646', 'as_name': 'DARTNODE', 'family': False, 'last_published': '2026-10-08 01:01:08', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 6}
+   {'fp': 'AE6507A440E9353C19C39B5448A13EB60A77B525', 'nickname': 'thb8b35d95b69765', 'ip': '82.220.39.121', 'asn': 'AS9044', 'as_name': 'SOLNET', 'family': False, 'last_published': '2026-10-08 01:11:54', 'policy_class': 'near-open', 'last_recent_cons': '', 'n_desc_24h': 4}
+   by class: {'OUR_POLICY': 9, 'near-open': 24}  by asn: {'AS53667': 28, 'AS399646': 1, 'AS400304': 1, 'AS200019': 1, 'AS9044': 2}  family: 0  in any recent consensus: 0
+   distinct operators (exact contact string): 25
+      4  < asara AT devvul DOT com >
+      3  DoNotDisturb AT NoContact NoWarnings
+      2  t(at)randomperson(dot)com
+      2  tor@sully.plus
+      2  email:tor [] middelstaedt dot com url:https://middelstaedt.com proof:uri-rsa abuse:abuse [] middelstaedt dot com pgp:A0D
+      1  dhnet.torcontact@gmail.com
+      1  mailforhkvps@atomicmail.io
+      1  gleepdorf AT proton DOT me
+      1  tor@privatebrowing.org
+      1  Random Person <thud_erasure020@simplelogin.com>
+      1  email:denny.obreham[]a-n-o-n-y-m-e.net url:https://a-n-o-n-y-m-e.net proof:uri-rsa donationurl:https://a-n-o-n-y-m-e.net
+      1  Ralph Copeland <copelandhosting AT pissmail dot com>
+      1  andr788k(at)airmail(dot)cc [tor-relay.co]
+      1  torrelayoperator@tutanota.com
+      1  tor-relay-admin@carlos1001.com
+      1  Jeff Teitel email:jeff[]teitel.net url:teitel.net proof:dns-rsa ciissversion:2
+      1  tor(at)thewellinspired(dot)com [tor-relay.co]
+      1  stealthprivacy.eu
+      1  diyarciftciatprotonmaildotcom
+      1  (no contact line)
+      1  mb-server <tor AT mb-server dot com>
+      1  thermalmon@outlook.example
+      1  email:a78i2efsewr0neeknk[]proton.me url:allium.observer proof:dns-familyid-ed25519 abuse:a78i2efsewr0neeknk[]proton.me c
+      1  t(at)q(dot)com
+      1  diskstats@mailboxly.example
+   AS names: {'AS53667 PONYNET': 28, 'AS399646 DARTNODE': 1, 'AS400304 SYNTEQ': 1, 'AS200019 AlexHost': 1, 'AS9044 SOLNET': 2}
+
+== publishing a NON-attacker policy in last 24 h but not in latest consensus: 19
+   {'fp': '292FCACE773DC259B799914A23BE65A6A6178E8F', 'nickname': 'chp175', 'ip': '107.189.1.175', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 22:20:24', 'policy_class': 'other-reject-list', 'last_recent_cons': '', 'n_desc_24h': 7, 'summary': 'reject 22,25,465,587'}
+   {'fp': '4134DA299E17ED8F6F5AC6642EF1054BC3C133D3', 'nickname': 'Unnamed', 'ip': '107.189.5.112', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 22:26:39', 'policy_class': 'non-exit', 'last_recent_cons': '', 'n_desc_24h': 7, 'summary': 'reject 1-65535'}
+   {'fp': '808DED5C02DB3C23A222E15F4C098BDD099EF2BD', 'nickname': 'relayon9186', 'ip': '103.39.237.147', 'asn': 'AS133255', 'as_name': 'ELXER-AS-IN', 'family': False, 'last_published': '2026-10-07 22:35:28', 'policy_class': 'accept-list', 'last_recent_cons': '', 'n_desc_24h': 4, 'summary': 'accept 20-23,43,53,79-81,88,110,143,194,220,389,443,464,531,543-544,554,563,636,706,749,873,902-904,981,989-992,994,1194,1220,1293,1500,1533,1677,1723,1755,1863,2082-2083,2086-2087,2095-2096,2102-2104,3128,3389,3690,4321,4643,5050,5190,5222-5223,5228,5900,6660-6669,6679,6697,8000,8008,8074,8080,8082,8087-8088,8232-8233,8332-8333,8443,8888,9418,9999-10000,11371,18080-18081,18089,19294,19638,50002,64738'}
+   {'fp': '3B953203AF332D8FE1452E1CE7CB50A3B5297DB2', 'nickname': 'paranoidtorrelay', 'ip': '104.244.79.25', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 22:58:06', 'policy_class': 'non-exit', 'last_recent_cons': '', 'n_desc_24h': 7, 'summary': 'reject 1-65535'}
+   {'fp': '5603B5C58114835F2F35FBA5939EE2F25781779C', 'nickname': 'TerrorismNetwork', 'ip': '104.244.78.210', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:00:15', 'policy_class': 'non-exit', 'last_recent_cons': '', 'n_desc_24h': 7, 'summary': 'reject 1-65535'}
+   {'fp': 'D14A2CAC084BF7CF95122E5A401E9F64D46A5706', 'nickname': 'RestoreEU', 'ip': '107.189.6.232', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:05:03', 'policy_class': 'other-reject-list', 'last_recent_cons': '', 'n_desc_24h': 7, 'summary': 'reject 25,119,135-139,445,465,563,587,1214,4661-4666,6346-6429,6660-6667,6697,6699,6881-6999'}
+   {'fp': '9BB108761BB27E8A87CD6677DC69DE6EB2B3BCFA', 'nickname': 'InnerRelayRP', 'ip': '45.63.56.145', 'asn': 'AS20473', 'as_name': 'AS-VULTR', 'family': False, 'last_published': '2026-10-07 23:07:20', 'policy_class': 'non-exit', 'last_recent_cons': '', 'n_desc_24h': 7, 'summary': 'reject 1-65535'}
+   {'fp': 'BC7206F673869BC4DC5687E8BAA2BE96C289B4E4', 'nickname': 'thankssnowden0', 'ip': '205.185.113.112', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:11:58', 'policy_class': 'other-reject-list', 'last_recent_cons': '', 'n_desc_24h': 7, 'summary': 'reject 25,465,587'}
+   {'fp': '92A7F611B06A647CF6ADF1ACEAD7F12D83A2C1ED', 'nickname': 'Relay', 'ip': '132.243.175.244', 'asn': 'AS200019', 'as_name': 'AlexHost', 'family': False, 'last_published': '2026-10-07 23:30:32', 'policy_class': 'non-exit', 'last_recent_cons': '', 'n_desc_24h': 6, 'summary': 'reject 1-65535'}
+   {'fp': '0CADF9650BE6F3CB6A09F29D8B91250D93DD91E6', 'nickname': 'TheSecondRelay', 'ip': '107.189.10.86', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:33:14', 'policy_class': 'non-exit', 'last_recent_cons': '', 'n_desc_24h': 6, 'summary': 'reject 1-65535'}
+   {'fp': '54955A17DDCEBD1BC64A3C4092774EA7FC682CC4', 'nickname': 'MyTorGuardRelay1', 'ip': '143.246.197.123', 'asn': 'AS200019', 'as_name': 'AlexHost', 'family': False, 'last_published': '2026-10-07 23:33:31', 'policy_class': 'non-exit', 'last_recent_cons': '', 'n_desc_24h': 6, 'summary': 'reject 1-65535'}
+   {'fp': '7BC58F5CDC4791F10E94D75E6A5AD1B9D084C963', 'nickname': 'MDrelay', 'ip': '85.121.176.36', 'asn': 'AS200019', 'as_name': 'AlexHost', 'family': False, 'last_published': '2026-10-07 23:44:22', 'policy_class': 'non-exit', 'last_recent_cons': '', 'n_desc_24h': 6, 'summary': 'reject 1-65535'}
+   {'fp': 'FC088734EA8D7E6347D527815202B47830997614', 'nickname': 'drear', 'ip': '209.141.61.225', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-07 23:53:01', 'policy_class': 'accept-list', 'last_recent_cons': '', 'n_desc_24h': 7, 'summary': 'accept 20-23,43,53,79-81,88,110,143,194,220,389,443,464,531,543-544,554,563,636,706,749,853,873,902-904,981,989-995,1194,1220,1293,1500,1533,1677,1723,1755,1863,2082-2083,2086-2087,2095-2096,2102-2104,3128,3389,3690,4321,4643,5050,5190,5222-5223,5228,5900,8000,8008,8074,8080,8082,8087-8088,8232-8233,8332-8333,8443,8888,9418,9999-10000,11371,19294,19638,50002,64738'}
+   {'fp': 'E8953FFF6D47182B07C6D3F0E092F83D8E45D62F', 'nickname': 'dead', 'ip': '107.189.12.157', 'asn': 'AS53667', 'as_name': 'PONYNET', 'family': False, 'last_published': '2026-10-08 00:28:39', 'policy_class': 'accept-list', 'last_recent_cons': '', 'n_desc_24h': 4, 'summary': 'accept 20-23,43,53,79-81,88,110,143,194,220,389,443,464,531,543-544,554,563,636,706,749,853,873,902-904,981,989-995,1194,1220,1293,1500,1533,1677,1723,1755,1863,2082-2083,2086-2087,2095-2096,2102-2104,3128,3389,3690,4321,4643,5050,5190,5222-5223,5228,5900,8000,8008,8074,8080,8082,8087-8088,8232-8233,8332-8333,8443,8888,9418,9999-10000,11371,19294,19638,50002,64738'}
+   {'fp': '15CA183DC161A0AF6FACDD7A0B6DA84C593E8D09', 'nickname': 'TorDola', 'ip': '185.56.83.3', 'asn': 'AS211720', 'as_name': 'DATASHIELD_CH', 'family': False, 'last_published': '2026-10-08 00:38:05', 'policy_class': 'accept-list', 'last_recent_cons': '', 'n_desc_24h': 6, 'summary': 'accept 20-23,43,53,79-81,88,110,143,194,220,389,443,464-465,531,543-544,554,563,587,636,706,749,873,902-904,981,989-995,1194,1220,1293,1500,1533,1677,1723,1755,1863,2082-2083,2086-2087,2095-2096,2102-2104,3128,3389,3690,4321,4643,5050,5190,5222-5223,5228,5900,6660-6669,6679,6697,8000,8008,8074,8080,8082,8087-8088,8232-8233,8332-8333,8443,8888,9418,9999-10000,11371,18080-18081,18089,19294,19638,50002,64738'}
+   {'fp': '8B2CCF2A27D52CEE3DC055C1AD11E3755104F601', 'nickname': 'TorDola2', 'ip': '185.56.83.4', 'asn': 'AS211720', 'as_name': 'DATASHIELD_CH', 'family': False, 'last_published': '2026-10-08 00:38:05', 'policy_class': 'accept-list', 'last_recent_cons': '', 'n_desc_24h': 6, 'summary': 'accept 20-23,43,53,79-81,88,110,143,194,220,389,443,464-465,531,543-544,554,563,587,636,706,749,873,902-904,981,989-995,1194,1220,1293,1500,1533,1677,1723,1755,1863,2082-2083,2086-2087,2095-2096,2102-2104,3128,3389,3690,4321,4643,5050,5190,5222-5223,5228,5900,6660-6669,6679,6697,8000,8008,8074,8080,8082,8087-8088,8232-8233,8332-8333,8443,8888,9418,9999-10000,11371,18080-18081,18089,19294,19638,50002,64738'}
+   {'fp': 'EEF7AB01E5EA74DDA0AA4B691611E49299723B7E', 'nickname': 'TorDola4', 'ip': '185.56.83.6', 'asn': 'AS211720', 'as_name': 'DATASHIELD_CH', 'family': False, 'last_published': '2026-10-08 00:38:05', 'policy_class': 'accept-list', 'last_recent_cons': '', 'n_desc_24h': 6, 'summary': 'accept 20-23,43,53,79-81,88,110,143,194,220,389,443,464-465,531,543-544,554,563,587,636,706,749,873,902-904,981,989-995,1194,1220,1293,1500,1533,1677,1723,1755,1863,2082-2083,2086-2087,2095-2096,2102-2104,3128,3389,3690,4321,4643,5050,5190,5222-5223,5228,5900,6660-6669,6679,6697,8000,8008,8074,8080,8082,8087-8088,8232-8233,8332-8333,8443,8888,9418,9999-10000,11371,18080-18081,18089,19294,19638,50002,64738'}
+   {'fp': 'C6AA7656909FA64A03EFBA40DD294D4BD79AA3E0', 'nickname': 'TorDola3', 'ip': '185.56.83.5', 'asn': 'AS211720', 'as_name': 'DATASHIELD_CH', 'family': False, 'last_published': '2026-10-08 00:39:05', 'policy_class': 'accept-list', 'last_recent_cons': '', 'n_desc_24h': 6, 'summary': 'accept 20-23,43,53,79-81,88,110,143,194,220,389,443,464-465,531,543-544,554,563,587,636,706,749,873,902-904,981,989-995,1194,1220,1293,1500,1533,1677,1723,1755,1863,2082-2083,2086-2087,2095-2096,2102-2104,3128,3389,3690,4321,4643,5050,5190,5222-5223,5228,5900,6660-6669,6679,6697,8000,8008,8074,8080,8082,8087-8088,8232-8233,8332-8333,8443,8888,9418,9999-10000,11371,18080-18081,18089,19294,19638,50002,64738'}
+   {'fp': '4F72DEF09B015E9B6F210597083D95D8A3BC38AD', 'nickname': 'TorDola1', 'ip': '185.231.33.82', 'asn': 'AS211720', 'as_name': 'DATASHIELD_CH', 'family': False, 'last_published': '2026-10-08 01:00:43', 'policy_class': 'accept-list', 'last_recent_cons': '', 'n_desc_24h': 6, 'summary': 'accept 20-23,43,53,79-81,88,110,143,194,220,389,443,464-465,531,543-544,554,563,587,636,706,749,873,902-904,981,989-995,1194,1220,1293,1500,1533,1677,1723,1755,1863,2082-2083,2086-2087,2095-2096,2102-2104,3128,3389,3690,4321,4643,5050,5190,5222-5223,5228,5900,6660-6669,6679,6697,8000,8008,8074,8080,8082,8087-8088,8232-8233,8332-8333,8443,8888,9418,9999-10000,11371,18080-18081,18089,19294,19638,50002,64738'}
+   by class: {'non-exit': 8, 'accept-list': 8, 'other-reject-list': 3}  in any recent consensus: 0
+
+== victims silent: no descriptor published in the last 24 h: 324  family: 277
+   newest descriptor class of those: {'near-open': 302, 'OUR_POLICY': 15, 'non-exit': 1, 'accept-list': 6}
+   newest descriptor date of those: {'2026-10-03': 6, '2026-10-04': 50, '2026-10-05': 266, '2026-10-06': 2}
+== victims with no descriptor published after the DB end (2026-10-07 02:18:04) in the recent files: 324 (family 277)
+== previous 24 h set (net/victims.csv: attacker last_desc >= 2026-10-06 02:18:04):
+   previous: 35  now: 33  in both: 32
+   stopped/changed: 51E6168566E9A3009905C290E2EA9C7F69459666 sh97US104R 104.36.87.137 AS400304 2026-10-06 06:32:52 near-open
+   stopped/changed: 808DED5C02DB3C23A222E15F4C098BDD099EF2BD relayon9186 103.39.237.147 AS133255 2026-10-07 22:35:28 accept-list
+   stopped/changed: E8953FFF6D47182B07C6D3F0E092F83D8E45D62F dead 107.189.12.157 AS53667 2026-10-08 00:28:39 accept-list
+   newly in set   : 2B4D5AA9997D4DDFF02BC52E173CF0C8FFFD1B9C JustExiting 199.195.253.124 AS53667 2026-10-08 00:24:54 OUR_POLICY DB last_desc: 2026-10-06 23:25:37 non-exit
+
+== victims whose policy class changed in descriptors published after 2026-10-07 02:18:04
+   2B4D5AA9997D4DDFF02BC52E173CF0C8FFFD1B9C JustExiting DB last: 2026-10-06 23:25:37 non-exit
+      non-exit -> OUR_POLICY at 2026-10-07 21:22:54 (uptime 10924 s, boot ~2026-10-07 18:20:50, platform Tor 0.4.9.13 on Linux)
+   808DED5C02DB3C23A222E15F4C098BDD099EF2BD relayon9186 DB last: 2026-10-06 18:18:53 OUR_POLICY
+      OUR_POLICY -> accept-list at 2026-10-07 07:27:26 (uptime 11285 s, boot ~2026-10-07 04:19:21, platform Tor 0.4.9.10 on Linux)
+   E8953FFF6D47182B07C6D3F0E092F83D8E45D62F dead DB last: 2026-10-06 17:14:52 near-open
+      near-open -> accept-list at 2026-10-07 09:19:38 (uptime 32703 s, boot ~2026-10-07 00:14:35, platform Tor 0.4.9.13 on Linux)
+
+== relays NOT among the 377 with a near-open / OUR_POLICY descriptor in recent files: 0
+wrote /home/user/TorUtils/quetzalcoatl-repro/net/email_current_status_new_attacker_relays.csv 0 rows
+non-victims with attacker p line in any recent consensus: 0 []
+   victim not in Onionoo: 808DED5C02DB3C23A222E15F4C098BDD099EF2BD relayon9186 103.39.237.147 last_consensus_va (DB): 2026-09-30 21:00:00
+
+== Onionoo (relays_published 2026-10-08 03:00:00) for the 377 victims: {'not_running': 375, 'not_in_onionoo': 1, 'running': 1}
+   last_seen date distribution: {'2026-10-02': 1, '2026-10-03': 8, '2026-10-04': 82, '2026-10-05': 284, '2026-10-08': 1}
+   (family, presence, running): {('1', 'in', False): 277, ('0', 'in', False): 98, ('0', 'absent', None): 1, ('0', 'in', True): 1}
+   running victims:
+     ('9CDB4020E69D9E7201C3D1A8BF9DE1DEBF997A76', 'TimberDolphin63', '2026-10-08 03:00:00', 'BadExit Fast MiddleOnly Running Stable Valid', '{"reject": ["23", "25", "110", "143", "445", "465", "587", "1433", "3306", "3389", "5432", "6379", "27017"]}')
+   not-running victims last_seen range: 2026-10-02 19:00:00 .. 2026-10-05 16:00:00
+   victims where Onionoo running != listed in latest consensus: 0 []
+   Onionoo running relays (any) with attacker exit_policy_summary: 0 []
