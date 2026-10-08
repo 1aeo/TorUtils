@@ -10,7 +10,8 @@ table (`net/…`); **Inferences** are labelled. No attribution is made beyond wh
   - Outside the Quetzalcoatl family, attacker exit policies (near-open / OUR_POLICY) hit
     **71 of 101 non-family FranTech relays (70.3 %)** in the reference consensus (2026-10-01 14:00).
   - On every other AS combined they hit **13 of 9,054 (0.14 %)**.
-  - **11 operators hit on FranTech also ran relays on other providers, and none of those was hit.**
+  - **12 operators hit on FranTech also ran relays on other providers (50 relays), and none of those
+    was hit.**
 - **Fact:**
   - Most edits were **in-guest live reloads**: 38 of 40 on 10-01, 311 of 316 on 10-02.
   - Several waves **crossed providers**: 10-01 FranTech + Elxer; 10-03 FranTech + Redoubt + Snaju +
@@ -205,7 +206,7 @@ or refute it.
   - in-guest reloads and byte-exact rollbacks;
   - specific torrc files edited;
   - cross-provider waves whose victims are mostly FranTech customers;
-  - 11 multi-provider operators hit only on FranTech;
+  - 12 multi-provider operators hit only on FranTech;
   - a known Ebury infection on a FranTech VPS (Switzerland2) since 2026-08-28;
   - Ebury's documented behaviour of spreading via harvested SSH credentials and targeting Tor exits;
   - FreeBSD hosts never hit.
@@ -219,7 +220,7 @@ or refute it.
 
 ### 2. Provider-specific access (FranTech panel, hypervisor, rescue system, guest agent)
 - **For:** 70 % hit rate on FranTech versus 0.14 % elsewhere; the profile cannot explain it; the
-  within-operator contrast.
+  within-operator contrast (12 operators, 50 non-FranTech relays, 0 hit).
 - **Against:**
   - reloads require in-guest signalling;
   - edits and rollbacks are per-file and per-relay;
