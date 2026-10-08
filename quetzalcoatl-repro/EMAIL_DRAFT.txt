@@ -176,6 +176,6 @@ Data and method
 - AS: CAIDA pfx2as 20261001-1200 and as-org 20261001; IPFire location
   2026-10-01 gives the same AS for all 147 affected IPs.
 - Scripts and CSVs:
-  https://github.com/1aeo/TorUtils/tree/COMMIT/quetzalcoatl-repro
+  https://github.com/1aeo/TorUtils/tree/c7faa5b/quetzalcoatl-repro
 
 <name>
