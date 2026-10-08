@@ -23,12 +23,14 @@ Summary
   (clear, TLS optional) open, a mix that only 3 of 2,767 unaffected
   relays with an exit policy had at 10-01 14:00.
 - No relay with A or B has been in the consensus since 10-05 17:00,
-  but 14 relays with A or B (none Quetzalcoatl) were still usable
-  exits after flags first reached the consensus (10-04 21:00), 11 of
-  them until 10-05 15:00, with no BadExit or MiddleOnly vote as of
-  10-08 13:00; at 10-08 13:00, 42 relays (9 Quetzalcoatl) still
-  publish A or B, each in only 2-3 of the 9 authority votes (5
-  needed).
+  so no Tor client can use them now. Before that, 14 relays with A
+  or B (none Quetzalcoatl) stayed usable exits after flags first
+  reached the consensus (10-04 21:00), 11 of them until 10-05 15:00;
+  none of the 14 has a BadExit or MiddleOnly vote as of 10-08 23:00.
+  At 10-08 23:00, 41 relays (9 Quetzalcoatl) still publish A or B
+  but are not in the consensus, as only 2-3 of the 9 authorities
+  include them in their votes (5 needed); they are listed at the
+  end so their operators can check them.
 
 Terms
 - Policy A, in short: blocks all mail ports (sending and reading,
@@ -190,11 +192,11 @@ Timeline
     First BadExit/MiddleOnly vote on an affected relay other than
     9CDB4020 (item 15, flagged since 08-17): gabelmoo and dannenberg
     18:00, moria1 19:00, bastet 20:00, longclaw 21:00, maatuska 10-05
-    08:00; dizum, faravahar, tor26: none as of 10-08 13:00. These
+    08:00; dizum, faravahar, tor26: none as of 10-08 23:00. These
     flags reach the consensus at 21:00. 14 relays with A or B (none
     Quetzalcoatl; 5 TorDola) were usable exits 10-04 21:00..10-05
     15:00 (11 throughout, 3 for part) and have no BadExit or
-    MiddleOnly vote from any authority as of 10-08 13:00.
+    MiddleOnly vote from any authority as of 10-08 23:00.
 12. 10-04 22:23:39..22:47:33: 22 other-operator relays leave B.
     Each restarts with its exact pre-B policy text (13 pre-10-01, 9
     A). 1 new key starts with A (22:21:18).
@@ -209,44 +211,45 @@ Timeline
     from 6 to 4 of 9 votes and BadExit from 3 to 2 of 5: no flag. The
     other 51 were in only 5 votes at 11:00 and 12:00 (MiddleOnly 2,
     BadExit 1), so not flagged then, nor in any consensus as of 10-08
-    13:00. All 208 still meet the listing bar. 40 other-operator
+    23:00. All 208 still meet the listing bar. 40 other-operator
     relays lose their flags at 12:00 the same way.
-15. 10-05 17:00..10-08 13:00: no relay with A or B is listed.
+15. 10-05 17:00..10-08 23:00: no relay with A or B is listed.
     One affected relay is listed: TimberDolphin63
     9CDB4020E69D9E7201C3D1A8BF9DE1DEBF997A76. It has carried BadExit
     since 08-17 17:00 and MiddleOnly since 08-17 19:00, so it gets
     no exit traffic. It had B 10-02 10:15:20..10-04 22:43:13 and is
     back on its pre-10-01 policy.
-16. 10-08 13:00 (latest consensus): 1 of 377 affected relays listed.
-    From descriptors published 10-07 13:00..10-08 13:00 (CollecTor
-    files and the r lines of the votes) and the Running votes:
-    - 315 (268 Quetzalcoatl): newest descriptor 10-03 10:26:02..
-      10-06 10:40:07; in none of the 13:00 votes. Offline, or every
+16. 10-08 23:00 (latest consensus): only 9CDB4020 (item 15) of the
+    377 is listed, so no Tor client can use the other 376.
+    From descriptors published 10-07 23:00..10-08 23:00 (CollecTor
+    files and the r lines of the votes) and the 23:00 votes:
+    - 316 (268 Quetzalcoatl): newest descriptor 10-03 10:26:02..
+      10-07 15:56:50; in none of the 23:00 votes. Offline, or every
       authority rejects their uploads; public data cannot tell which.
-    - 50 (0 Quetzalcoatl, 35 FranTech) published, and 1-3
-      authorities vote them Running at 13:00: 31 with A or B (9 A,
-      22 B); 19 with another policy: 11 their exact pre-10-01 policy
-      text; 8 an accept-list: TorDola and TorDola1-3 (pre-10-01: A's
-      first 7 rules only), TorDola4 (new 10-04), dead and drear
-      (pre-10-01 list minus IRC ports), relayon9186 (pre-10-01 list
-      minus 465,587, plus reject 993,995).
-    - 11 (9 Quetzalcoatl, 2 FranTech) published B but have no Running
-      vote at 13:00. Last Running votes: 12:00 for 8 Quetzalcoatl
-      relays on 192.210.214.13 (descriptors 11:22..11:25, so far only
-      in vote r lines); 05:00 for Quetzalcoatl
-      07DCECDF04BE5D470C615C8E1CCF086F74FC8CA6 (107.175.218.6, tor
-      start 04:35:42, descriptor 04:35:57); 04:00 for 2mpe4 (newest
-      descriptor 03:24:13); 10-07 17:00 for HeyBroM (newest
-      descriptor 10-07 15:56:50).
-    - Each of these 61 is in only 1-3 of 9 votes (dizum, tor26,
-      dannenberg); the other 6 authorities leave it out; 5 needed.
-    Onionoo (10-08 12:00) has 375 of the 376 unlisted relays, all
+    - 60 published but are not listed: each is in only 1-3 of the 9
+      votes (dizum, tor26, dannenberg); the other 6 authorities leave
+      it out, and 5 are needed. Of the 60:
+      - 49 (0 Quetzalcoatl, 34 FranTech) get 1-3 Running votes: 30
+        with A or B (9 A, 21 B); 19 with another policy: 11 their
+        exact pre-10-01 policy text; 8 an accept-list: TorDola and
+        TorDola1-3 (pre-10-01: A's first 7 rules only), TorDola4 (new
+        10-04), dead and drear (pre-10-01 list minus IRC ports),
+        relayon9186 (pre-10-01 list minus 465,587, plus reject
+        993,995).
+      - 11 (9 Quetzalcoatl, 2 FranTech) published B but get no
+        Running vote. Last Running votes: 12:00 for 8 Quetzalcoatl
+        relays on 192.210.214.13 (tor start 11:20:44..11:21:16);
+        05:00 for Quetzalcoatl
+        07DCECDF04BE5D470C615C8E1CCF086F74FC8CA6 (107.175.218.6,
+        tor start 04:35:42); 04:00 for 2mpe4; 15:00 for NgePTimE.
+    - The 41 that publish A or B are listed at the end.
+    Onionoo (10-08 22:00) has 375 of the 376 unlisted relays, all
     running=false, because it takes running/last_seen from the
     consensus: e.g. 07DCECDF last_seen 10-05 12:00 ("down 3 days")
     but last_restarted 10-08 04:35:42. relayon9186 (last listed 09-30
-    21:00) has aged out of Onionoo. For all 375, Onionoo's
-    last_restarted equals the tor start in the newest CollecTor
-    descriptor (for the 8 on 192.210.214.13 that is still 10-04).
+    21:00) has aged out of Onionoo. For the 375, Onionoo's
+    last_restarted matches the tor start in the newest CollecTor
+    descriptor (to within 1 s).
 
 Who was affected
 - 377 relays on 147 hosts, 15 ASes, 59 operators. Quetzalcoatl: 277
@@ -271,12 +274,12 @@ Who was affected
   then on those 6 ASes: 0/452 became affected.
 - 230/377 were flagged in >=1 consensus (incl. 9CDB4020, item 15).
   57 got no BadExit or MiddleOnly vote from any authority 10-01
-  00:00..10-08 13:00: 14 Quetzalcoatl, 43 others (incl. all 5
+  00:00..10-08 23:00: 14 Quetzalcoatl, 43 others (incl. all 5
   TorDola). 36 published only B (incl. the 14 Quetzalcoatl), 13 only
   A, 8 both. 56 were usable exits with A or B in >=1 consensus. At
-  10-08 13:00, 37 have no descriptor since 10-06 10:40:07 (incl. the
-  14 Quetzalcoatl); 20 published 10-08 03:24:13..12:46:06 (13 A or
-  B, 7 another policy), each in only 1-3 of 9 votes, so not listed.
+  10-08 23:00, 37 have no descriptor in the last 24 h (incl. the 14
+  Quetzalcoatl); 20 published 10-08 03:24:13..22:49:30 (13 A or B, 7
+  another policy), each in only 1-3 of 9 votes, so not listed.
 
 Thread questions
 - hiro (non-exits made exits): 24 affected relays were non-exits
@@ -294,9 +297,9 @@ Thread questions
 
 Data and method
 - CollecTor archive and recent/: consensuses 2025-01-01..2026-10-08
-  13:00 (775 of 15,494 hours, 5.0%, missing, incl. 2026-04-02
-  16:00..04-21 01:00); server descriptors 2026-01-01..10-08 12:37
-  (file time); votes 10-01 00:00..10-08 13:00 (10-01 19:00 missing;
+  23:00 (775 of 15,504 hours, 5.0%, missing, incl. 2026-04-02
+  16:00..04-21 01:00); server descriptors 2026-01-01..10-08 22:44
+  (file time); votes 10-01 00:00..10-08 23:00 (10-01 19:00 missing;
   no dizum vote 10-01 09:00 and 10-05 18:00..20:00).
 - p lines: our re-implementation of tor's policy_summarize() gives
   the consensus p line for all 203,044 descriptors we have of the
@@ -304,8 +307,83 @@ Data and method
   9,091 of the 9,096 entries at 10-08 06:00 whose descriptor we have.
 - AS: CAIDA pfx2as 20261001-1200 and as-org 20261001; IPFire location
   2026-10-01 gives the same AS for all 147 affected IPs.
-- Onionoo details of 10-08 12:00, as a cross-check only.
+- Onionoo details of 10-08 22:00, as a cross-check only.
 - Scripts and CSVs:
   https://github.com/1aeo/TorUtils/tree/f2f553e/quetzalcoatl-repro
+
+
+Relays still publishing A or B at 10-08 23:00
+Not in the consensus, so not used by Tor clients; listed for their
+operators. nickname | fingerprint | ContactInfo (long ContactInfo
+shortened to its email and url fields), grouped by ContactInfo.
+
+Reachable (>= 1 authority votes it Running): 30 relays, 23 contacts
+devvulLU | E207721091F48D6A02A2F8F0BFF438A714279B81 | < asara AT devvul DOT com >
+devvulLV | 95AA4899FA8F312323C2628B2AFD45EF7D6005C7 | < asara AT devvul DOT com >
+devvulMI | 3A78F9C8C874866F430D31188F7C98322AF2E9AC | < asara AT devvul DOT com >
+devvulNY | 2325905203E9CFB5206D6811315EB5ED57AF97BD | < asara AT devvul DOT com >
+
+andr788k | 4954B51AF0CBADA08E4BC389DF1E3E419535165A | andr788k(at)airmail(dot)cc [tor-relay.co]
+
+luxvptorex | 0A11C7546A1332412D1EBD13BD4C3D6A6644D7E0 | dhnet.torcontact@gmail.com
+
+sk4d9f2m8x1q7w3j | FDBEAC98530F2A4CF7FDF164695A93F6AC15BA18 | diskstats@mailboxly.example
+
+azadisrvs2 | 91D9FFB5030F645818505EF983AF8AA4EE2D00A7 | diyarciftciatprotonmaildotcom
+
+2mpe4b | 0D8826A5646B352A7EB843FFBE80326F4D018F1B | DoNotDisturb AT NoContact NoWarnings
+2mpe4c | BC7A5E911554477F7346FA9B680250D1D84B14AF | DoNotDisturb AT NoContact NoWarnings
+
+Alberta | 3B85067588C3F017D5CCF7D8F65B5881B7D4C97C | email:denny.obreham[]a-n-o-n-y-m-e.net url:https://a-n-o-n-y-m-e.net
+
+4714 | FA9F92CB28E2285A589643DDA31448361076D0C7 | email:tor [] middelstaedt dot com url:https://middelstaedt.com
+4715 | FEDA854291A94B8CA5BB6920AE100346EBC4E522 | email:tor [] middelstaedt dot com url:https://middelstaedt.com
+
+dn3a | 144C5DBEBD925D54A246A10832CBB293EE84C834 | gleepdorf AT proton DOT me
+
+TorDotTeitelNet | 76959901386E8C908F50235D9894007886B67C2E | Jeff Teitel email:jeff[]teitel.net url:teitel.net
+
+TorExitForYou | 1322EE47D35541471D3A00F30FFF2EE7585E5B52 | mailforhkvps@atomicmail.io
+
+mbserver | 982FF2DAC80C1454E826B43F8FF003CF2CDC1CD7 | mb-server <tor AT mb-server dot com>
+
+txn1copeland | 3D01CE600B2DC5C719684800E8C6990FE4CB8F9A | Ralph Copeland <copelandhosting AT pissmail dot com>
+
+JustExiting | 2B4D5AA9997D4DDFF02BC52E173CF0C8FFFD1B9C | Random Person <thud_erasure020@simplelogin.com>
+
+sh97US104R | 7E2FF265BE20E154CED120D46E39058F6CCC34D7 | stealthprivacy.eu
+
+DingBerry | 0AE156113CAF79C28EDF599F55FABDE03D5416DC | t(at)randomperson(dot)com
+Dumbledore | 7ED6B42716B1D393E7BAC2FFDDE3853CD9896A95 | t(at)randomperson(dot)com
+
+thb8b35d95b69765 | AE6507A440E9353C19C39B5448A13EB60A77B525 | thermalmon@outlook.example
+
+stubbornoxen | 7B67A3AD2395536FD15CB97588A0BC1A015AC267 | tor(at)thewellinspired(dot)com [tor-relay.co]
+
+Triangulum1 | 7417085A0CC99550CF82ADD3F7B1CD01E64AAADE | tor-relay-admin@carlos1001.com
+
+privatebrowsingorg | 2858C4BF05D57D7FEBEE28DEA82BAC374222F858 | tor@privatebrowing.org
+
+sullyhelpstor | 3B49A31F1DD5D929133AF10B0B33BB7AE42B53E7 | tor@sully.plus
+sullyhelpstor | E0999C5F42D12204AA8038653DBACDCE1F40E7FF | tor@sully.plus
+
+CarabineroDeChile | 58698C5E518D428DCA4D9780AD8379BB63B57B42 | torrelayoperator@tutanota.com
+
+RunningOnFumes1 | 93D3B5088A6813F679A426323AE0125FB4FE7728 | (no contact line)
+
+Not reachable (no authority votes it Running): 11 relays, 3 contacts
+2mpe4 | 5957F8B3503BB566D36F8B9A20280FD990E4C298 | DoNotDisturb AT NoContact NoWarnings
+
+NgePTimE | DB451037C23AF3D028AE1B7E2F82BE5CA77B98A5 | email:a78i2efsewr0neeknk[]proton.me url:allium.observer
+
+Quetzalcoatl | 07DCECDF04BE5D470C615C8E1CCF086F74FC8CA6 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | 09768BD9ACA211008713BA481E0B8EE3239A9F0B | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | 552C2E2AFDD1B740A38CA9768C51EC011B2AF701 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | 728AEDB2DA037D9032F9697FFA7D9E070783A1F6 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | 75ADD82FA44C8E7D76414148CFE5E1131CD2AD0D | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | 9A11E4B46DC53E13043B9FC1EBAFE0128D699B58 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | B04176E992478C82F1AD7A5DC1D1D206B623D624 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | EDCC2668AF97EBA53CD8C228B9127F6CC73D9552 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
+Quetzalcoatl | F922C23FF68AAADBD2C9A384471B63694A879BA5 | email:Quetzalcoatl_relays[]proton.me url:https://quetzalcoatl-relays.org
 
 <name>

@@ -94,20 +94,22 @@ cross-checked with IPFire Location 2026-10-01.
   majority: excluded from the consensus, not omitted by every authority.
 - CollecTor `recent/` to 2026-10-08 03:38: 0 attacker `p` lines in the 2026-10-08 03:00 consensus;
   33 victims still publishing an attacker policy, all excluded (`net/email_current_status.csv`).
-- Update to the 2026-10-08 13:00 consensus, every vote 10-07 02:00..10-08 13:00 and descriptors to the
-  10-08 12:37 CollecTor file (`scripts/email_votes_recent.py`, `scripts/email_status_now.py`,
-  `net/email_status_now.csv/.log`; a vote's `r` line carries the publication time of the descriptor that
-  authority holds, and CollecTor's descriptor files lag the votes by a few hours):
+- Update to the 2026-10-08 23:00 consensus, every vote 10-07 02:00..10-08 23:00 and descriptors to the
+  10-08 22:44 CollecTor file (`scripts/email_votes_recent.py`, `scripts/email_status_now.py`,
+  `net/email_status_now.csv/.log`, list in `net/email_list_publishing.txt`):
   - listed: 1 (9CDB4020, BadExit since 08-17 17:00, MiddleOnly since 08-17 19:00, own pre-10-01 policy);
-  - silent: 315 (268 family): no descriptor since 2026-10-06 10:40:07, in no vote;
-  - publishing 10-07 13:00..10-08 13:00 but not listed: 61, each in only 1-3 of 9 votes (dizum, tor26,
-    dannenberg). 50 (0 family) get 1-3 Running votes: 31 attacker policy, 19 other (11 exact pre-10-01
+    no Tor client can use the other 376;
+  - silent: 316 (268 family): newest descriptor 10-03 10:26:02..10-07 15:56:50, in no 23:00 vote;
+  - publishing 10-07 23:00..10-08 23:00 but not listed: 60, each in only 1-3 of 9 votes (dizum, tor26,
+    dannenberg). 49 (0 family) get 1-3 Running votes: 30 attacker policy, 19 other (11 exact pre-10-01
     text, 8 accept-list). 11 (9 family) get no Running vote, all near-open: 8 family relays on
-    192.210.214.13 (r-line descriptors 10-08 11:22..11:25), family 07DCECDF (107.175.218.6, tor start
-    10-08 04:35:42, Running only in the 05:00 votes), 2mpe4, HeyBroM;
-  - Onionoo (10-08 12:00) shows every unlisted victim as not running (its running/last_seen come from the
-    consensus); its last_restarted matches the newest CollecTor descriptors.
-  - 57 victims have no BadExit/MiddleOnly vote from any authority 10-01 00:00..10-08 13:00 (unchanged).
+    192.210.214.13 (tor start 10-08 11:20:44..11:21:16, last Running 12:00), family 07DCECDF
+    (107.175.218.6, tor start 10-08 04:35:42, last Running 05:00), 2mpe4, NgePTimE;
+  - 41 victims still publish an attacker policy (30 reachable, 11 not);
+  - Onionoo (10-08 22:00) shows every unlisted victim as not running (its running/last_seen come from the
+    consensus); its last_restarted matches the newest CollecTor descriptors to within 1 s (375 of 376;
+    relayon9186 has aged out);
+  - 57 victims have no BadExit/MiddleOnly vote from any authority 10-01 00:00..10-08 23:00 (unchanged).
 - Of the 100 non-family victims, 67 kept publishing after
   leaving the consensus (strict count: descriptors at or after the first missing consensus), which
   points to authority rejection; 32 went silent; 1 is still listed.
