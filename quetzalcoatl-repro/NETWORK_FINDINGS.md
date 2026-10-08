@@ -94,6 +94,13 @@ cross-checked with IPFire Location 2026-10-01.
   majority: excluded from the consensus, not omitted by every authority.
 - CollecTor `recent/` to 2026-10-08 03:38: 0 attacker `p` lines in the 2026-10-08 03:00 consensus;
   33 victims still publishing an attacker policy, all excluded (`net/email_current_status.csv`).
+- Update to the 2026-10-08 06:00 consensus and votes (`scripts/email_followup_answers.py`,
+  `net/email_followup_answers.log`; the votes' `r` lines carry descriptors that CollecTor's descriptor files
+  do not have yet): 1 victim listed (9CDB4020); 34 publish an attacker policy, each in only 2-3 of 9
+  votes (dizum, tor26, dannenberg), incl. family relay 07DCECDF04BE5D470C615C8E1CCF086F74FC8CA6
+  (107.175.218.6), policy near-open, published 2026-10-08 04:35:57, its first descriptor since 10-05
+  09:21:42; 19 publish another policy (11 their exact pre-10-01 text, 8 an accept-list); 323 (276 family)
+  have no descriptor since 2026-10-06 10:40:07 and are in no vote.
 - Of the 100 non-family victims, 67 kept publishing after
   leaving the consensus (strict count: descriptors at or after the first missing consensus), which
   points to authority rejection; 32 went silent; 1 is still listed.
@@ -187,14 +194,22 @@ cross-checked with IPFire Location 2026-10-01.
   - On 10-05: longclaw and maatuska at 12:00, faravahar at 14:00, gabelmoo at 16:00.
   - Most non-family victims left the consensus on 10-05 16:00–17:00 (54), when the number of
     authorities listing them fell below a majority.
+- **Listing needs Running too.** A relay is in the consensus only if ≥ 5 of 9 votes list it and ≥ 5 vote
+  it Running. This rule reproduces all 54,665 victim relay-hours of 10-01..10-07 01:00; "≥ 5 votes" alone
+  over-predicts 3,769. The family's 10-04 exit was lost reachability, not omission: at 10-04 21:00, 182
+  family relays were in all 9 votes with 0 Running votes (263 in ≥ 5 votes, 8 with ≥ 5 Running, 8 listed).
 
 ### 3.1 The 10-05 12:00–13:00 gap
 **Fact.**
-- At 12:00, longclaw and maatuska stopped listing the family relays. The 7 remaining listing
-  authorities voted as follows:
+- At 12:00, longclaw and maatuska stopped listing the family relays (and every other victim except
+  9CDB4020). For the 157 family relays still in 7 votes:
   - BadExit: 2 (gabelmoo, moria1) of 4 BadExit-knowing listers;
   - MiddleOnly: 4 (bastet, dannenberg, gabelmoo, moria1) of 7;
   - Exit: 3 (dizum, faravahar, tor26) of 7.
+  The other 51 listed family relays were in only 5 votes at 11:00 and 12:00 (MiddleOnly 2, BadExit 1) and
+  were never flagged. A flag needs > half of the authorities that know it (BadExit 3 of 5, MiddleOnly 5
+  of 9), counted over all votes, so omission counts against the flag. 40 non-family victims lost their
+  flags at 12:00 the same way.
 - Result: **208 (12:00) and 111 (13:00) family relays sat in the consensus with near-open `p` lines and
   neither BadExit, MiddleOnly nor Exit** (`net/votes_consensus_20261005.csv`).
 - Exit-flag exposure was then only 13 relays, but the `p` lines still advertised near-open exits.

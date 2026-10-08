@@ -19,149 +19,160 @@ Terms
 - Affected relay: published >=1 server descriptor whose IPv4 summary
   is exactly A or B. A policy match, not proof of compromise.
 - Quetzalcoatl: relays in that family's MyFamily line (362
-  fingerprints) or with its ContactInfo. 277 were listed on 10-02.
-- Other operators: all other relays, incl. TorDola.
+  fingerprints) or with its ContactInfo.
+- Other operators: all operators except Quetzalcoatl, incl. TorDola.
 - TorDola: relays TorDola and TorDola1-4 of one operator on AS211720
   (Datashield). TorDola4 is new on 10-04.
 - Operator: one ContactInfo string; each of the 7 relays without one
-  counts as its own operator.
-- Host: one IPv4 address. Relays sharing an IPv4 count as one host;
-  physical machines are not visible in the data.
+  counts as its own operator. A proxy: one person may use several.
+- Host: one IPv4 address; physical machines are not visible.
 - FranTech: AS53667 (FranTech Solutions, BuyVM).
 - Reload: new policy, same tor start time (published minus uptime),
   i.e. config re-read. Restart: new tor start time.
-- Listed: in the hourly consensus. A relay is listed when more than
-  half of the 9 directory authorities (5) include it in their votes.
-- Flagged: BadExit or MiddleOnly in the consensus. A flag is set when
-  more than half of the authorities that use it vote for it (BadExit
-  3 of 5, MiddleOnly 5 of 9). An authority that leaves a relay out
-  of its vote counts as not voting for the flag.
+- Listed: in the hourly consensus. Needs at least 5 of the 9
+  directory authorities to include the relay in their votes, and at
+  least 5 to vote it Running (they can reach it).
+- Flagged: BadExit or MiddleOnly in the consensus. A flag needs votes
+  from more than half of the authorities that use it (BadExit 3 of 5,
+  MiddleOnly 5 of 9). Leaving a relay out of a vote = no flag vote.
 - Usable exit: listed with Exit and without BadExit.
 - Text order: IPs sorted as strings (107.189.13.x before 107.189.5.x).
-- Dates MM-DD 2026, times UTC. hh:mm:ss = descriptor published, but
-  tor start time in restart runs (items 4, 12). hh:00 = consensus or
-  vote.
+  "k of n pairs": of all n pairs of hosts in a run, k ran in reverse
+  text order.
+- Dates MM-DD 2026, times UTC, a..b = a to b. hh:mm:ss = descriptor
+  published (tor start time in items 4, 12); hh:00 = consensus/vote.
 
 Timeline
-1. Before 10-01: no relay used A or B.
-   Checked: consensuses 2025-01..2026-09 (~5% of hours missing, see
-   Data), server descriptors 2026-01..09. Nearest earlier policy: the
-   TorDola relays (2 from 09-26, 4 by 09-30) rejected
-   25,465,587,110,143,993,995: A's first 7 rules, in A's order.
-2. 10-01 14:44:20-14:50:03: the 4 TorDola relays reach A in 2 reloads.
-   +3389 at 14:44:20-14:44:31; +135,137-139,445 at 14:49:51-14:50:03.
-   First relay with A: 4F72DEF09B015E9B6F210597083D95D8A3BC38AD
-   (TorDola1, 14:49:51).
-3. 10-01 15:33:55-15:39:19: A appears on 40 relays of 21 more operators.
-   28 hosts; 39 on FranTech; 38 reloads, 2 restarts.
-4. 10-01 15:36:30-15:47:53: Quetzalcoatl relays restart, policy kept.
-   275 relays on 72 of its 73 hosts. Host order is neither text order
-   nor its routine order.
-5. 10-02 09:27:42-09:35:18: all 277 listed Quetzalcoatl relays get B.
-   73 hosts; 273 by reload, 4 by restart. First relay with B:
-   F532DA2085F87777CE05EA947BF7B4F49B625754.
-6. 10-02 09:29:25-18:53:05: 38 other-operator relays get B, 9 drop A.
-   09:29-09:44, 39 FranTech relays: 30 to B (15 of them from A); 9
-   leave A without B (8 back to the exact policy text they had before
-   10-01). 10:15-18:53: 8 more to B (5 FranTech; 5 were non-exits).
-7. 10-03 10:26:02-16:18:40: 19 non-exit relays restart with B.
-   Also 1 exit reloads to B, and 9 new identity keys, each with the
-   nickname and IP:ORPort of an affected relay, publish B from their
-   first descriptor. 5 ASes, 0 Quetzalcoatl.
-8. 10-04 01:00: affected relays' share of exit capacity peaks.
-   351 are usable exits, with 7.46% of the consensus weight of all
-   usable exits.
-9. 10-04 15:00..10-05 02:00: Quetzalcoatl relays leave the consensus.
-   Listed: 277 at 14:00, 8 at 21:00, 0 at 10-05 02:00, so 269 left
-   before flags first reached the consensus (21:00). No Quetzalcoatl
-   descriptor 22:35:57..10-05 08:56:37.
-10. 10-04 18:00..10-05 08:00: authorities start voting BadExit or
-    MiddleOnly on affected relays.
-    First such vote: gabelmoo and dannenberg 18:00, moria1 19:00,
-    bastet 20:00, longclaw 21:00, maatuska 10-05 08:00; dizum,
-    faravahar, tor26 never. Flags reach the consensus at 21:00.
-    12 or 13 affected relays (none Quetzalcoatl) are never flagged
-    and stay usable exits until 10-05 15:00.
-11. 10-04 22:23:39-22:47:33: 22 other-operator relays leave B.
-    Each restarts with the exact policy text it had before B: 13
-    their pre-10-01 policy, 9 A. Hosts in text order except 4 of 253
-    host pairs. Also 1 new relay key with A (22:21:18).
-12. 10-05 08:56:30-10:39:50: Quetzalcoatl relays restart in one sweep.
-    253 relays on 70 hosts (Zimmer's post: 55), policy still B. Hosts
-    in text order except 14 of 2,415 pairs. Routine Quetzalcoatl
-    restarts (07-30..09-23) use one fixed, unsorted host order.
-13. 10-05 10:00..14:00: Quetzalcoatl relays are listed again, flagged,
-    then unflagged, then dropped.
+1. Before 10-01: no relay used A or B (sources under Data).
+   Nearest earlier policy: TorDola relays (2 from 09-26, 4 by 09-30)
+   rejected 25,465,587,110,143,993,995: A's first 7 rules, in A's
+   order. The same 7 ports in other orders: a few relays in 2025,
+   11 others in 09-2026.
+2. 10-01 14:44:20..14:50:03: the 4 TorDola relays reach A in 2 reloads.
+   +3389 at 14:44:20..14:44:31; +135,137-139,445 at 14:49:51..14:50:03.
+   First with A: TorDola1 4F72DEF09B015E9B6F210597083D95D8A3BC38AD.
+3. 10-01 15:33:55..15:39:19: A reaches 40 relays of 21 more operators.
+   28 hosts; 39 on FranTech. 38 reloads, 1 restart, 1 unknown (no
+   descriptor between its 12:56:18 tor start and A).
+4. 10-01 15:36:30..15:47:53: Quetzalcoatl relays restart, policy kept.
+   275 relays on 72 of its 73 hosts; host order is neither text
+   order nor the order of its 09-08 and 09-23 restarts (item 12).
+5. 10-02 09:27:42..09:35:18: all 277 listed Quetzalcoatl relays get B.
+   73 hosts; 273 by reload. The other 4 published nothing between a
+   10-01 restart and B, so reload or restart is unknown.
+   First with B: F532DA2085F87777CE05EA947BF7B4F49B625754.
+6. 10-02 09:29:25..18:53:05: 38 other-operator relays get B, 9 drop A.
+   09:29:25..09:44:12, 39 FranTech relays: 30 to B (15 from A); 9
+   leave A without B (8 back to their exact pre-10-01 policy text).
+   10:15:20..18:53:05: 8 more to B (5 FranTech; 5 non-exits before).
+7. 10-03 10:26:02..16:18:40: 19 non-exit relays restart with B.
+   Also 1 exit reloads to B; 9 new keys, each reusing an affected
+   relay's nickname and IP:ORPort, start with B. 5 ASes, 0 Quetzalcoatl.
+8. 10-04 01:00: usable exits with A or B peak.
+   351 relays, with 7.46% of the consensus weight of all usable exits.
+9. 10-04 15:00..10-05 02:00: Quetzalcoatl relays go unreachable.
+   Listed: 277 at 14:00, 8 at 21:00, 0 at 10-05 02:00. At 21:00, 182
+   were still in all 9 votes, but no authority voted them Running.
+   269 left before flags first reached the consensus (21:00). No
+   Quetzalcoatl descriptor 22:35:57..10-05 08:56:37.
+10. 10-04 18:00..10-05 08:00: 6 of 9 authorities start voting flags.
+    First BadExit/MiddleOnly vote on an affected relay: gabelmoo and
+    dannenberg 18:00, moria1 19:00, bastet 20:00, longclaw 21:00,
+    maatuska 10-05 08:00; dizum, faravahar, tor26 never. Flags reach
+    the consensus at 21:00. 14 relays with A or B (none Quetzalcoatl;
+    5 TorDola) are never flagged and are usable exits 21:00..10-05
+    15:00 (11 throughout, 3 for part); none from 16:00.
+11. 10-04 22:23:39..22:47:33: 22 other-operator relays leave B.
+    Each restarts with its exact pre-B policy text (13 pre-10-01, 9
+    A); hosts in text order but 4 of 231 pairs. 1 new key with A
+    (22:21:18).
+12. 10-05 08:56:30..10:39:50: Quetzalcoatl relays restart in one sweep.
+    253 relays on 70 hosts (Zimmer's post: 55), policy still B; hosts
+    in text order but 14 of 2,415 pairs. Its 09-08 and 09-23 upgrade
+    restarts (69 hosts each) used one unsorted order; none of its 43
+    earlier runs of 20+ hosts is near text order.
+13. 10-05 10:00..14:00: Quetzalcoatl relays are listed again, lose
+    their flags, then drop out. None has the Exit flag.
     Listed (flagged): 10:00 82 (81); 11:00 218 (167); 12:00 208 (0);
-    13:00 111 (0); 14:00 0. None has Exit.
-    At 12:00 longclaw and maatuska leave them out of their votes.
-    MiddleOnly falls to 4 of 9 votes and BadExit to 2 of 5, below
-    the bar, so no flag. 7 of 9 still list them, so they stay listed.
+    13:00 111 (0); 14:00 0.
+    At 12:00 longclaw and maatuska leave every affected relay except
+    item 14's out of their votes. For 157 relays, MiddleOnly falls
+    from 6 to 4 of 9 votes and BadExit from 3 to 2 of 5: no flag. The
+    other 51 were in only 5 votes at 11:00 and 12:00 (MiddleOnly 2,
+    BadExit 1), so never flagged. All 208 still meet the listing bar.
+    40 other-operator relays lose their flags at 12:00 the same way.
 14. 10-05 17:00..10-08 06:00: no relay with A or B is listed.
     One affected relay is listed, flagged since 08-17 and now on its
     pre-10-01 policy: 9CDB4020E69D9E7201C3D1A8BF9DE1DEBF997A76.
 15. 10-08 06:00: 1 of 377 affected relays is listed (item 14).
     Newest descriptors (CollecTor files and the 10-08 06:00 votes):
     - 323 (276 Quetzalcoatl, 47 others): none since 10-06 10:40:07;
-      no authority lists them. Offline, or every authority rejects
-      their uploads; public data cannot tell which.
+      in no vote. Offline, or every authority rejects their uploads;
+      public data cannot tell which.
     - 34 still publish A or B (28 FranTech; 1 Quetzalcoatl:
       07DCECDF04BE5D470C615C8E1CCF086F74FC8CA6, B, 10-08 04:35:57,
       its first since 10-05). Only dizum, tor26 and dannenberg list
       them (2-3 of 9; 5 needed), so they are not listed.
-    - 19 publish another policy and are also listed by only 1-3 of 9:
-      11 their exact pre-10-01 policy text, 8 a new accept-list
-      (incl. all 5 TorDola).
+    - 19 publish another policy and are in only 1-3 of 9 votes: 11
+      their exact pre-10-01 policy text; 8 an accept-list unlike their
+      last pre-10-01 policy (all 5 TorDola, dead, drear, relayon9186).
 
 Who was affected
 - 377 relays on 147 hosts, 15 ASes, 59 operators. Quetzalcoatl: 277
   relays, 73 hosts. 58 other operators: 100 relays, 74 hosts.
 - On FranTech: 129/377 relays (34.2%), 82/147 hosts (55.8%), 47/59
-  operators (79.7%). Other operators alone: 81/100 relays, 58/74
-  hosts, 46/58 operators.
+  operators (79.7%). Excluding Quetzalcoatl (all 58 other
+  operators): 81/100 relays, 58/74 hosts, 46/58 operators (79.3%).
+  Each of the 58 has its affected relays all on FranTech (46) or
+  all off it (12).
 - 10-01 14:00 (last consensus before A), other operators' relays
   that later became affected: FranTech 71/101 (70.3%), all other
-  ASes 13/9,054 (0.14%). Per operator: 44/59 (74.6%) of operators
-  with a FranTech relay then, 10/3,604 (0.28%) of those without.
-- 12 other operators affected on FranTech also had 50 relays listed
-  on other ASes at 10-01 14:00: none of the 50 became affected.
-- Not every affected operator used FranTech: 12 other operators (19
-  affected relays, 8 ASes) had no FranTech relay 05-01..10-07.
+  ASes 13/9,054 (0.14%). By operator, of the 3,663 other operators
+  listed then: with a FranTech relay 44/59 (74.6%), without 10/3,604
+  (0.28%).
+- 12 of the 46 FranTech operators also had 50 relays listed on other
+  ASes at 10-01 14:00: none of the 50 became affected. The other 12
+  operators (19 affected relays, 8 ASes) had no FranTech relay
+  05-01..10-07.
 - Quetzalcoatl: all 273 of its relays listed at 10-01 14:00 became
   affected: 48 on FranTech, 225 on its 6 other ASes (HostPapa,
   netcup, MAXKO, 3 Contabo ASes). Other operators' relays listed
   then on those 6 ASes: 0/452 became affected.
-- 230/377 were flagged in >=1 consensus. 57 never got BadExit or
-  MiddleOnly in any vote (10-01 00:00..10-07 01:00): 14 Quetzalcoatl
-  (all B) and 43 others, incl. all 5 TorDola; 36 had B, 13 A, 8
-  both. 56 of the 57 were usable exits for a time. 20 of them still
-  publish (newest 10-08 05:35:35); 1-3 of 9 authorities list them,
-  so none is listed.
+- 230/377 were flagged in >=1 consensus (incl. 9CDB4020, item 14).
+  57 never got BadExit or MiddleOnly in any vote 10-01..10-07 01:00:
+  14 Quetzalcoatl, 43 others (incl. all 5 TorDola). 36 published
+  only B (incl. the 14 Quetzalcoatl), 13 only A, 8 both. 56 were
+  usable exits with A or B in >=1 consensus. At 10-08 06:00, 37 are
+  silent (incl. the 14 Quetzalcoatl); 20 published between 10-08
+  03:09:17 and 05:35:35 (13 A or B, 7 an accept-list), each in only
+  1-3 of 9 votes, so not listed.
 
 Thread questions
-- hiro (non-exits made exits): 24 of 377 affected relays were
-  non-exits before (0 Quetzalcoatl); all 24 got the Exit flag.
+- hiro (non-exits made exits): 24 affected relays were non-exits
+  before (0 Quetzalcoatl); all 24 got the Exit flag. Of the other
+  353, 342 already had an exit policy and 11 were new keys.
 - Toralf (does it boil down to the cleartext password?): Unlikely for
   the whole incident: A or B also appeared on 100 relays of 58 other
   operators.
-- mpan (one shared vulnerability, or node by node?): Likely
-  coordinated: A reached 40 relays of 21 operators in 5 min 24 s,
-  38 by reload (item 3), so whoever changed them already had access
-  to all 40. How and when that access was gained is not in the data;
-  the FranTech rates above are the strongest pointer.
-- Zimmer: item 12's sweep walked hosts in text order, like item 11 on
-  other operators' relays, not in your routine order. Did your
-  tooling run it, and from what host list? Also, 07DCECDF... (item
-  15) published B again at 10-08 04:35:57.
+- mpan, in hiro's thread (one shared vulnerability, or node by
+  node?): Likely coordinated: A reached 40 relays of 21 operators in
+  5 min 24 s, 38 by reload (item 3), so one actor already had access
+  to all 40. Whether that access came from one shared hole or from
+  earlier break-ins is not in the data; the FranTech rates are the
+  strongest pointer.
+- Zimmer: item 12's sweep walked hosts in text order, like item 11,
+  not in your 09-08/09-23 order. Did your tooling run it, and from
+  what host list? Also see 07DCECDF in item 15.
 
 Data and method
-- CollecTor archive and recent/: consensuses 2025-01..10-08 06:00
-  (~5% of hours missing, incl. 2026-04-02 16:00..04-21 01:00),
-  server descriptors 2026-01..10-08 05:49 (file time), votes
-  10-01 00:00..10-07 01:00 (10-01 19:00 missing) and 10-08 06:00.
-- Summaries: tor's policy_summarize() re-implemented; it matches the
-  p line of all 203,044 consensus entries tested (09-24..10-07) and
-  all 9,091 checked at 10-08 06:00.
+- CollecTor archive and recent/: consensuses Jan 2025..10-08 06:00
+  (~5% of hours missing, incl. 2026-04-02 16:00..04-21 01:00); server
+  descriptors Jan 2026..10-08 05:49 (file time); votes 10-01
+  00:00..10-07 01:00 (10-01 19:00 missing; no dizum vote 10-01 09:00
+  and 10-05 18:00..20:00) and 10-08 06:00.
+- p lines: our re-implementation of tor's policy_summarize() matches
+  all 203,044 descriptors the 09-24..10-07 consensuses point to and
+  all 9,091 entries checked at 10-08 06:00.
 - AS: CAIDA pfx2as 20261001-1200 and as-org 20261001; IPFire location
   2026-10-01 gives the same AS for all 147 affected IPs.
 - Scripts and CSVs:
