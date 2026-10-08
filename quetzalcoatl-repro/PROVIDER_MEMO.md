@@ -254,8 +254,9 @@ or refute it.
 ### 6. Attacker-run relays
 - **For:**
   - TorDola, 4+1 relays on Datashield first seen 09-01 → 09-30, published the unique OUR_POLICY order
-    first (14:49:51, 45 min before the FranTech wave). TorDola4 was created on 10-04 with OUR_POLICY.
-    No authority flagged them.
+    first (14:49:51, 45 min before the FranTech wave). The order was built up on them in steps from
+    2026-09-26 (7 rules), with 3389 added at 14:44:20 and the last 3 rules at 14:49:51.
+    TorDola4 was created on 10-04 with OUR_POLICY. No authority flagged them.
   - `sk4d9f2m8x1q7w3j` / `thb8b35d95b69765` (BSE, `.example` contacts, created 2026-08-25).
 - **Against:**
   - TorDola reverted to a new accept-list on 10-06 09:14 (restarts), which could be an operator fixing

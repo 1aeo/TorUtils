@@ -28,12 +28,15 @@ Server descriptors - for every descriptor, the accept/reject lines are tested:
 Consensuses - every "p" line (the summary the authorities publish for each LISTED relay) is compared with
   "p " + OUR_POLICY / "p " + near-open; loose_summary as (e). A relay only has a p line while it is listed.
 
+Per archive it also reports the summary (descriptor summary / consensus p line) closest to OUR_POLICY and
+to near-open, measured as the number of ports 1-65535 whose accept/reject status differs (in DB consensus
+rows the n of that column counts cons_interval rows, not entries).
 Per archive it also records coverage: descriptors / consensus entries scanned, unique fingerprints,
 min/max published (or valid-after), consensus hours present / missing, days without descriptors.
 
 --db PATH adds rows for the DB window (CollecTor May-Oct 2026), computed from tables descriptor+policy
 (same tests (a)-(e), applied to each policy text) and consensus.counts (pol:OUR_POLICY / pol:near-open
-counts of p-line classes per consensus).
+counts of p-line classes per consensus; the loose test and unique fingerprints are n/a there).
 
 Usage (from quetzalcoatl-repro/):
   python3 -I scripts/email_history_check.py --db net/netdb.sqlite --out net/email_history_check.csv \
@@ -98,6 +101,48 @@ def rejects_all(summary, ports=(110, 143, 3389)):
     return all(any(lo <= p <= hi for lo, hi in rng) for p in ports)
 
 
+FULL_MASK = ((1 << 65535) - 1) << 1  # bits 1..65535
+
+
+def rejected_mask(summary):
+    """int bitmask of the ports a summary rejects (bit p set = port p rejected)."""
+    kind, _, plist = summary.strip().partition(" ")
+    m = 0
+    for part in plist.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        a, _, b = part.partition("-")
+        try:
+            lo, hi = int(a), int(b) if b else int(a)
+        except ValueError:
+            continue
+        m |= ((1 << (hi - lo + 1)) - 1) << lo
+    m &= FULL_MASK
+    return m if kind == "reject" else FULL_MASK & ~m
+
+
+OUR_MASK = rejected_mask(OUR_POLICY)
+NEAR_MASK = rejected_mask(NEAR_OPEN)
+
+
+def closest(summary_counts):
+    """For a Counter {summary: n}, the summary nearest to OUR_POLICY and to near-open, measured as the
+    number of ports whose accept/reject status differs. Returns two strings 'ports_differing=D n=N <summary>'."""
+    out = []
+    for target in (OUR_MASK, NEAR_MASK):
+        best = None
+        for sm, n in summary_counts.items():
+            if not sm:
+                continue
+            d = (rejected_mask(sm) ^ target).bit_count()
+            k = (d, -n, sm)
+            if best is None or k < best:
+                best = k
+        out.append("ports_differing=%d n=%d %s" % (best[0], -best[1], best[2]) if best else "")
+    return out
+
+
 def analyse_policy(lines):
     """lines: list of str policy lines. Returns (dict test->bool, summary, tuple of ignored /32 IPs)."""
     kept, ign32 = [], []
@@ -135,7 +180,8 @@ def month_of(path):
 def new_stats():
     return {"items": 0, "fps": set(), "tmin": None, "tmax": None,
             "count": collections.Counter(), "tfps": collections.defaultdict(set),
-            "first": {}, "matches": {}, "errors": 0, "error_msg": "", "members": 0}
+            "first": {}, "matches": {}, "errors": 0, "error_msg": "", "members": 0,
+            "summaries": collections.Counter()}
 
 
 def note(st, test, t, fp, nick, addr, extra):
@@ -196,6 +242,7 @@ def desc_worker(path):
                         r = analyse_policy([x.decode("utf-8", "replace") for x in pol])
                         cache[key] = r
                     res, summ, ign32 = r
+                    st["summaries"][summ] += 1
                     if not any(res.values()):
                         continue
                     own = {addr}
@@ -290,6 +337,8 @@ def cons_worker(path):
         st["errors"] += 1
         st["error_msg"] = "%s: %s" % (type(ex).__name__, ex)
     st["unique_policy_texts"] = len(pcount)
+    for pv, n in pcount.items():
+        st["summaries"][pv.decode("utf-8", "replace").strip()] += n
     st["unique_member_names"] = st["members"]
     st["n_consensuses"] = len(vas)
     mo = month_of(path)
@@ -316,6 +365,8 @@ def finish(path, source, st):
            "coverage_gaps": st.get("coverage_gaps", ""), "errors": st["errors"], "error_msg": st["error_msg"],
            "count": dict(st["count"]), "ufps": {k: len(v) for k, v in st["tfps"].items()},
            "first": st["first"], "matches": st["matches"]}
+    out["closest_ourpolicy"], out["closest_nearopen"] = closest(st["summaries"])
+    out["distinct_summaries"] = len(st["summaries"])
     return out
 
 
@@ -346,6 +397,8 @@ def db_rows(dbpath):
         if st["tmax"] is None or pub > st["tmax"]:
             st["tmax"] = pub
         r = pol.get(ph)
+        if r is not None:
+            st["summaries"][r[1]] += 1
         if r is None or not any(r[0].values()):
             continue
         res, summ, ign32 = r
@@ -383,6 +436,17 @@ def db_rows(dbpath):
             e = (va, fp, nick, ip, "p " + s)
             if k not in st["matches"] or e < st["matches"][k]:
                 st["matches"][k] = e
+    for mo_key, source in list(rows):
+        if source != "consensuses":
+            continue
+        mo = mo_key[3:]
+        y, mm = int(mo[:4]), int(mo[5:7])
+        m0 = "%04d-%02d-01 00:00:00" % (y, mm)
+        m1 = "%04d-%02d-01 00:00:00" % (y + (mm == 12), mm % 12 + 1)
+        st = rows[(mo_key, source)]
+        for pv, n in db.execute("SELECT policy, count(*) FROM cons_interval WHERE start_va < ? AND end_va >= ? "
+                                "GROUP BY policy", (m1, m0)):
+            st["summaries"][pv or ""] += n
     out = []
     for (mo, source), st in sorted(rows.items()):
         o = {"month": mo, "source": source, "archive": "net/netdb.sqlite", "archive_bytes": "",
@@ -392,8 +456,13 @@ def db_rows(dbpath):
              "coverage_gaps": "", "errors": 0, "error_msg": "",
              "count": dict(st["count"]), "ufps": {k: len(v) for k, v in st["tfps"].items()},
              "first": st["first"], "matches": st["matches"]}
+        o["closest_ourpolicy"], o["closest_nearopen"] = closest(st["summaries"])
+        o["distinct_summaries"] = len(st["summaries"])
         if source == "consensuses":
-            o["coverage_gaps"] = "unique fps n/a (counts table); fps per test from cons_entry (va >= 2026-09-24)"
+            o["coverage_gaps"] = ("DB consensus table: counts only (no unique fps, no loose test); "
+                                  "fps per test from cons_entry (va >= 2026-09-24)")
+            o["unique_fps"] = "n/a"
+            o["applicable"] = ("ourpolicy_summary", "nearopen_summary")
         out.append(o)
     return out
 
@@ -424,7 +493,7 @@ def main():
     for t in ("ourpolicy_sequence", "nearopen_sequence", "ourpolicy_summary", "nearopen_summary",
               "loose_rules_110_143_3389", "loose_summary_110_143_3389"):
         cols += ["earliest_" + t]
-    cols += ["coverage_gaps", "errors", "error_msg"]
+    cols += ["distinct_summaries", "closest_ourpolicy", "closest_nearopen", "coverage_gaps", "errors", "error_msg"]
     with open(a.out, "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(cols)
@@ -434,8 +503,10 @@ def main():
                    "unique_member_names": r["unique_member_names"], "items_scanned": r["items_scanned"],
                    "unique_fps": r["unique_fps"], "n_consensuses": r["n_consensuses"], "p_lines": r["p_lines"],
                    "first_time": r["tmin"], "last_time": r["tmax"], "unique_policy_texts": r["unique_policy_texts"],
-                   "coverage_gaps": r["coverage_gaps"], "errors": r["errors"], "error_msg": r["error_msg"]}
-            applicable = DESC_TESTS if r["source"] == "server-descriptors" else CONS_TESTS
+                   "coverage_gaps": r["coverage_gaps"], "errors": r["errors"], "error_msg": r["error_msg"],
+                   "distinct_summaries": r["distinct_summaries"], "closest_ourpolicy": r["closest_ourpolicy"],
+                   "closest_nearopen": r["closest_nearopen"]}
+            applicable = r.get("applicable") or (DESC_TESTS if r["source"] == "server-descriptors" else CONS_TESTS)
             for t in ALL_TESTS:
                 if t in applicable:
                     row[t] = r["count"].get(t, 0)
