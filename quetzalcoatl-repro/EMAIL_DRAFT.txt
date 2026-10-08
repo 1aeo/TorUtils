@@ -14,30 +14,34 @@ Terms
     reject 25,110,135,137-139,143,445,465,587,993,995,3389
   i.e. exit to every port except these. Every relay with A lists the
   rules in this order: 25,465,587,110,143,993,995,3389,135,137-139,445.
-  Ports A rejects, usual traffic (encryption):
-    mail: 25 SMTP relay (opportunistic STARTTLS), 110 POP3 and 143
-      IMAP (clear or STARTTLS), 465 SMTPS (TLS), 587 submission
-      (STARTTLS), 993 IMAPS (TLS), 995 POP3S (TLS)
-    Windows: 135 RPC and 137-139 NetBIOS (clear), 445 SMB (clear
-      unless SMB3 encryption is on), 3389 Remote Desktop (TLS)
+  Ports A rejects, usual use (clear = readable by the exit):
+    mail: 25 SMTP (clear, TLS optional), 110 POP3 (clear, TLS
+      optional), 143 IMAP (clear, TLS optional), 465 SMTPS
+      (encrypted), 587 submission (encrypted), 993 IMAPS
+      (encrypted), 995 POP3S (encrypted)
+    Windows: 135 RPC (clear), 137-139 NetBIOS (clear), 445 SMB
+      (mostly clear), 3389 Remote Desktop (encrypted)
 - Policy B: the exit-policy summary (consensus "p" line)
     reject 25,119,135-139,445,465,563,587,993,995,1214,
            4661-4666,6346-6429,6699,6881-6999
   i.e. tor's default exit policy plus reject 465,587,993,995. Every
   relay with B lists the rules in this order: 25,465,587,993,995,119,
   135-139,445,563,1214,4661-4666,6346-6429,6699,6881-6999.
-  Ports B rejects, usual traffic (encryption):
-    mail: 25, 465, 587, 993, 995 (as in A)
-    news: 119 NNTP (clear), 563 NNTPS (TLS)
-    Windows: 135 RPC and 137-139 NetBIOS (clear), 445 SMB (as in A);
-      136 has no common use (part of tor's default 135-139 range)
-    file sharing (clear or only obfuscated): 1214 Kazaa, 4661-4666
-      eDonkey, 6346-6429 Gnutella, 6699 WinMX, 6881-6999 BitTorrent
+  Ports B rejects, usual use:
+    mail: 25 SMTP (clear, TLS optional), 465 SMTPS (encrypted), 587
+      submission (encrypted), 993 IMAPS (encrypted), 995 POP3S
+      (encrypted); B allows 110 POP3 and 143 IMAP (clear)
+    news: 119 NNTP (clear), 563 NNTPS (encrypted)
+    Windows: 135 RPC (clear), 137-139 NetBIOS (clear), 445 SMB
+      (mostly clear); 136 has no common use (in tor's default range)
+    file sharing (mostly clear): 1214 Kazaa, 4661-4666 eDonkey,
+      6346-6429 Gnutella, 6699 WinMX, 6881-6999 BitTorrent
 - A vs B: both reject 25,135,137-139,445,465,587,993,995, and both
   rule orders start 25,465,587. Only A rejects 110,143,3389. Only B
   rejects 119,136,563,1214,4661-4666,6346-6429,6699,6881-6999. Both
   allow every other port, e.g. 21 FTP (clear), 22 SSH (encrypted),
-  23 Telnet (clear), 53 DNS (clear), 80 HTTP (clear), 443 HTTPS (TLS).
+  23 Telnet (clear), 53 DNS (clear), 80 HTTP (clear), 443 HTTPS
+  (encrypted).
 - Affected relay: published >=1 server descriptor whose IPv4 summary
   is exactly A or B. A policy match, not proof of compromise.
 - Quetzalcoatl: relays in that family's MyFamily line (362
@@ -63,6 +67,32 @@ Terms
 - Usable exit: listed with Exit and without BadExit.
 - Dates MM-DD 2026, times UTC, a..b = a to b. hh:mm:ss = descriptor
   published (tor start time in items 5, 13); hh:00 = consensus/vote.
+
+What the switch changed (each relay's A or B vs its own policy just
+before 10-01; "opened" = clients can now exit there to that port)
+- Quetzalcoatl, 277 relays to B: opened 22 SSH (encrypted), 23 Telnet
+  (clear), 110 POP3 and 143 IMAP (clear), 3389 RDP, 6667 IRC; closed
+  993 IMAPS and 995 POP3S (encrypted). For mail reading, the clear
+  ports were opened and the encrypted ones closed.
+- Other operators, 44 exits to A: opened 22 on 26, 23 on 24; closed
+  mail on both clear and encrypted ports (110/143 on 36, 993/995 on
+  37), 3389 on 19.
+- Other operators, 21 exits to B: opened 22 on 15, 23 on 10, 110/143
+  on 8; closed 993/995 on 20. 24 non-exits to B: all ports opened.
+- All 366 affected relays with an earlier policy: opened 22 on 342,
+  23 on 335, 6667 on 317, 3389 on 311, 110/143 on 309; closed
+  993/995 on 334. For comparison, at 10-01 14:00 1,120 of 2,767
+  other relays with an exit policy allowed 22, and 1,665 allowed
+  993/995.
+- B's mail mix (110/143 open, 465/587/993/995 closed) was on 3 of
+  2,767 other relays with an exit policy at 10-01 14:00; A's (all
+  mail closed) on 1,085.
+- A tor client only uses exits that allow the destination port, so
+  closing 993 does not push a user to 143; it means these relays
+  carry no IMAPS/POP3S, while they now carry SSH and Telnet, and
+  under B clear POP3/IMAP.
+- Inference: opening 22 fits hiro's report of SSH interception. Why
+  993/995 were closed is not visible in the data.
 
 Timeline
 1. 2025-01-01..2026-09-26 06:00: no relay used A or B.
