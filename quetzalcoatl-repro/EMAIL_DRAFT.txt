@@ -80,8 +80,8 @@ Terms
 
 What the switch changed (each relay's A or B vs its own policy just
 before 10-01, all ports; "opened" = clients can now exit there to it)
-- Quetzalcoatl, 277 relays to B (all from one 79-port accept-list):
-  opened 65,235 ports, incl. 22 SSH (encrypted), 23 Telnet (clear),
+- Quetzalcoatl, 277 relays: each allowed the same 79 ports before;
+  B opened 65,235 more, incl. 22 SSH (encrypted), 23 Telnet (clear),
   110 POP3 (clear, TLS optional), 143 IMAP (clear, TLS optional),
   3389 Remote Desktop (encrypted), 6667 IRC (clear), 6697 IRC
   (encrypted); closed only 563 NNTPS (encrypted), 993 IMAPS
