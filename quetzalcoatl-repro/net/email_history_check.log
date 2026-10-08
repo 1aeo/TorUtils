@@ -9,3 +9,35 @@ done consensuses-2026-02.tar.xz               items=6378955   errors=0  counts={
 done consensuses-2025-11.tar.xz               items=6617820   errors=0  counts={'loose_summary_110_143_3389': 2692}
 done consensuses-2025-10.tar.xz               items=6715058   errors=0  counts={'loose_summary_110_143_3389': 2960}
 done consensuses-2026-03.tar.xz               items=6223488   errors=0  counts={'loose_summary_110_143_3389': 2915}
+done consensuses-2025-09.tar.xz               items=6385827   errors=0  counts={'loose_summary_110_143_3389': 2824}
+done consensuses-2025-08.tar.xz               items=6599084   errors=0  counts={'loose_summary_110_143_3389': 3010}
+done consensuses-2025-07.tar.xz               items=6436322   errors=0  counts={'loose_summary_110_143_3389': 4355}
+done consensuses-2025-06.tar.xz               items=6166104   errors=0  counts={'loose_summary_110_143_3389': 4597}
+done consensuses-2025-03.tar.xz               items=6647933   errors=0  counts={'loose_summary_110_143_3389': 3705}
+done consensuses-2025-05.tar.xz               items=6299385   errors=0  counts={'loose_summary_110_143_3389': 3833}
+done consensuses-2025-04.tar.xz               items=5727360   errors=0  counts={'loose_summary_110_143_3389': 3255}
+done consensuses-2025-01.tar.xz               items=5918089   errors=0  counts={'loose_summary_110_143_3389': 3718}
+done consensuses-2025-02.tar.xz               items=5502060   errors=0  counts={'loose_summary_110_143_3389': 3333}
+done DB rows
+
+EARLIEST PER TEST AND SOURCE (over all rows)
+server-descriptors  ourpolicy_sequence           earliest=(('2026-10-01 14:49:51', '4F72DEF09B015E9B6F210597083D95D8A3BC38AD', 'TorDola1', '185.231.33.82', 'summary=reject 25,110,135,137-139,143,445,465,587,993,995,3389; ignored_32=185.231.33.82; own_ip_ok=True'), 'db:2026-10') | earliest in downloaded history archives=none
+server-descriptors  nearopen_sequence            earliest=(('2026-10-02 09:27:42', 'F532DA2085F87777CE05EA947BF7B4F49B625754', 'Quetzalcoatl', '104.168.0.177', 'summary=reject 25,119,135-139,445,465,563,587,993,995,1214,4661-4666,6346-6429,6699,6881-6999; ignored_32=104.168.0.177; own_ip_ok=True'), 'db:2026-10') | earliest in downloaded history archives=none
+server-descriptors  ourpolicy_set                earliest=(('2026-10-01 14:49:51', '4F72DEF09B015E9B6F210597083D95D8A3BC38AD', 'TorDola1', '185.231.33.82', 'summary=reject 25,110,135,137-139,143,445,465,587,993,995,3389; ignored_32=185.231.33.82; own_ip_ok=True'), 'db:2026-10') | earliest in downloaded history archives=none
+server-descriptors  nearopen_set                 earliest=(('2026-10-02 09:27:42', 'F532DA2085F87777CE05EA947BF7B4F49B625754', 'Quetzalcoatl', '104.168.0.177', 'summary=reject 25,119,135-139,445,465,563,587,993,995,1214,4661-4666,6346-6429,6699,6881-6999; ignored_32=104.168.0.177; own_ip_ok=True'), 'db:2026-10') | earliest in downloaded history archives=none
+server-descriptors  loose_rules_110_143_3389     earliest=(('2026-01-01 05:04:00', '849626A2A3DD1364E8C51423D6F3213A3AE16FFD', 'OnionsHaveLayers', '104.192.3.74', 'summary=reject 21-22,25,110,143,465,587,993,995,2525,3389; ignored_32=104.192.3.74; own_ip_ok=True'), '2026-01') | earliest in downloaded history archives=(('2026-01-01 05:04:00', '849626A2A3DD1364E8C51423D6F3213A3AE16FFD', 'OnionsHaveLayers', '104.192.3.74', 'summary=reject 21-22,25,110,143,465,587,993,995,2525,3389; ignored_32=104.192.3.74; own_ip_ok=True'), '2026-01')
+server-descriptors  ourpolicy_summary            earliest=(('2026-10-01 14:49:51', '4F72DEF09B015E9B6F210597083D95D8A3BC38AD', 'TorDola1', '185.231.33.82', 'summary=reject 25,110,135,137-139,143,445,465,587,993,995,3389; ignored_32=185.231.33.82; own_ip_ok=True'), 'db:2026-10') | earliest in downloaded history archives=none
+server-descriptors  nearopen_summary             earliest=(('2026-10-02 09:27:42', 'F532DA2085F87777CE05EA947BF7B4F49B625754', 'Quetzalcoatl', '104.168.0.177', 'summary=reject 25,119,135-139,445,465,563,587,993,995,1214,4661-4666,6346-6429,6699,6881-6999; ignored_32=104.168.0.177; own_ip_ok=True'), 'db:2026-10') | earliest in downloaded history archives=none
+server-descriptors  loose_summary_110_143_3389   earliest=(('2026-01-01 05:04:00', '849626A2A3DD1364E8C51423D6F3213A3AE16FFD', 'OnionsHaveLayers', '104.192.3.74', 'summary=reject 21-22,25,110,143,465,587,993,995,2525,3389; ignored_32=104.192.3.74; own_ip_ok=True'), '2026-01') | earliest in downloaded history archives=(('2026-01-01 05:04:00', '849626A2A3DD1364E8C51423D6F3213A3AE16FFD', 'OnionsHaveLayers', '104.192.3.74', 'summary=reject 21-22,25,110,143,465,587,993,995,2525,3389; ignored_32=104.192.3.74; own_ip_ok=True'), '2026-01')
+consensuses         ourpolicy_sequence           earliest=none | earliest in downloaded history archives=none
+consensuses         nearopen_sequence            earliest=none | earliest in downloaded history archives=none
+consensuses         ourpolicy_set                earliest=none | earliest in downloaded history archives=none
+consensuses         nearopen_set                 earliest=none | earliest in downloaded history archives=none
+consensuses         loose_rules_110_143_3389     earliest=none | earliest in downloaded history archives=none
+consensuses         ourpolicy_summary            earliest=(('2026-10-01 15:00:00', '15CA183DC161A0AF6FACDD7A0B6DA84C593E8D09', 'TorDola', '185.56.83.3', 'p reject 25,110,135,137-139,143,445,465,587,993,995,3389'), 'db:2026-10') | earliest in downloaded history archives=none
+consensuses         nearopen_summary             earliest=(('2026-10-02 10:00:00', '02FCF62C0AD3AD1D208D7F27E12E8840EF53C7E0', 'Quetzalcoatl', '104.223.84.121', 'p reject 25,119,135-139,445,465,563,587,993,995,1214,4661-4666,6346-6429,6699,6881-6999'), 'db:2026-10') | earliest in downloaded history archives=none
+consensuses         loose_summary_110_143_3389   earliest=(('2025-01-01 00:00:00', '05E15FF6930D656BB85744263D556657280D822E', 'Orion01', '51.195.166.174', 'p reject 20-23,25,110-111,119,135-139,143,161,179,194,445,465,520,563,587,993-995,1214,3128,3306,3389,4661-4666,5900,6346-6429,6660-6699,6881-6999,8000'), '2025-01') | earliest in downloaded history archives=(('2025-01-01 00:00:00', '05E15FF6930D656BB85744263D556657280D822E', 'Orion01', '51.195.166.174', 'p reject 20-23,25,110-111,119,135-139,143,161,179,194,445,465,520,563,587,993-995,1214,3128,3306,3389,4661-4666,5900,6346-6429,6660-6699,6881-6999,8000'), '2025-01')
+
+real	12m16.369s
+user	33m23.163s
+sys	1m1.011s

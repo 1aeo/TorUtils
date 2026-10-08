@@ -57,13 +57,13 @@ cross-checked with IPFire Location 2026-10-01.
 | 3 | **10-02 09:27:42 → 09:44:12** | **316 events / 108 hosts / 29** | family 277 accept → near-open (09:27:42–09:35:18); non-family: 15 into near-open, 15 OUR_POLICY → near-open, 9 OUR_POLICY → their original policy | 311 reloads, 5 restarts | HostPapa 125, FranTech 87, netcup 40, Contabo 48, MAXKO 16 | family 0.40 / 0.39 / 0.40; non-family sub-run 09:36:57–09:40:33 (31 FranTech hosts) **0.075 / 0.31 / 0.071** |
 | 4 | 10-02 10:15:20 → 10:21:10 | 5 / 5 / 4 | **non-exit → near-open** (incl. `diskstats@mailboxly.example`) | reloads | FranTech 4, BSE 1 | — |
 | 5–7 | 10-02 11:51:14, 14:26:22, 18:53:05 | 1 each | → near-open | reloads | BSE, DataWagon, FranTech | — |
-| 8 | **10-03 10:26:02 → 11:04:30** | 23 / 15 / 11 | 15 non-exit/accept → near-open; then **8 new identity keys** at the same hosts, first descriptor near-open (10:39:20–11:04:30) | 14 restarts, 8 first, 1 reload | FranTech 17, Redoubt 2, Snaju 2, ALEXHOST 2 | 0.54 / 0.46 / 0.54 (parallel) |
+| 8 | **10-03 10:26:02 → 11:04:30** | 23 / 15 / 13 (10 contacts + 3 without contact) | 15 non-exit/accept → near-open; then **8 new identity keys** at the same hosts, first descriptor near-open (10:39:20–11:04:30) | 14 restarts, 8 first, 1 reload | FranTech 17, Redoubt 2, Snaju 2, ALEXHOST 2 | 0.54 / 0.46 / 0.54 (parallel) |
 | 9 | 10-03 11:46:10 | 1 | new key devvulLV 95AA4899 near-open | first | FranTech | — |
 | 10 | 10-03 13:28:38 | 1 | non-exit → near-open (InnerRelayRP 9BB10876) | restart | Constant AS20473 | — |
 | 11 | 10-03 16:17:09 → 16:18:40 | 4 / 4 / 4 | non-exit → near-open | restarts | ALEXHOST 3, FranTech 1 | 0 / 0.5 / 0 (4 hosts) |
 | 12 | 10-04 08:26:36 | 1 | new relay TorDola4 EEF7AB01, first descriptor OUR_POLICY | first | Datashield | — |
-| 13 | 10-04 17:49:24 → 17:52:02 | 6 / 6 / 4 | accept → near-open (relays that had reverted on 10-02) | restarts | FranTech | 0.40 / 0.73 / 0.33 |
-| 14 | **10-04 22:21:18 → 22:47:33** | **23 / 23 / 19** | **rollback**: 9 near-open → OUR_POLICY, 13 near-open → their pre-attack policy, 1 new key with OUR_POLICY | 22 restarts | FranTech 18, ALEXHOST 3, DataWagon 1, Constant 1 | **0.016 / 0.24 / 0.020 (text-sorted)** |
+| 13 | 10-04 17:49:24 → 17:52:02 | 6 / 6 / 4 | accept/other → near-open: 4 had been OUR_POLICY on 10-01 and reverted on 10-02 (F507D9EE, 607DD424, 0CB83F63, 67221DF5); 2 had no earlier attacker policy (0932F900, D76D33B4) | restarts | FranTech | 0.40 / 0.73 / 0.33 |
+| 14 | **10-04 22:21:18 → 22:47:33** | **23 / 23 / 22** (18 contacts + 4 without contact) | **rollback**: 9 near-open → OUR_POLICY, 13 near-open → their pre-attack policy, 1 new key with OUR_POLICY | 22 restarts | FranTech 18, ALEXHOST 3, DataWagon 1, Constant 1 | **0.016 / 0.24 / 0.020 (text-sorted)** |
 | 15–16 | 10-05 06:24:35, 07:46:34 | 1 each | near-open/OUR → non-exit | restarts | FranTech | — |
 | 17–18 | 10-06 09:14:03, 12:00:43 | 4 + 1 | TorDola OUR_POLICY → a new accept-list | restarts | Datashield | — |
 | 19 | 10-06 22:40:08 | 1 | drear FC088734 OUR_POLICY → accept-list | restart | FranTech | — |
@@ -89,7 +89,12 @@ cross-checked with IPFire Location 2026-10-01.
   - F2F423F8 HeyBroM 209.141.46.203, 2026-10-07 00:14:42;
   - the devvul relays E2077210, 23259052, 3A78F9C8, 95AA4899 (new keys), 23:16–23:27;
   - 808DED5C relayon9186 (Elxer, OUR_POLICY), 2026-10-06 18:18:53.
-- None of the 35 is in the final consensus. Of the 100 non-family victims, 67 kept publishing after
+- None of the 35 is in the final consensus. In the last vote round in the data (2026-10-07 01:00) each
+  was still listed by 1–3 of the 9 authorities (dizum 35, tor26 34, dannenberg 24), below the 5-vote
+  majority: excluded from the consensus, not omitted by every authority.
+- CollecTor `recent/` to 2026-10-08 03:38: 0 attacker `p` lines in the 2026-10-08 03:00 consensus;
+  33 victims still publishing an attacker policy, all excluded (`net/email_current_status.csv`).
+- Of the 100 non-family victims, 67 kept publishing after
   leaving the consensus (strict count: descriptors at or after the first missing consensus), which
   points to authority rejection; 32 went silent; 1 is still listed.
 - The one still listed is 9CDB4020 TimberDolphin63 (209.141.51.226). It had carried BadExit+MiddleOnly
@@ -128,8 +133,8 @@ cross-checked with IPFire Location 2026-10-01.
   - 10-04 22:25–22:47, → non-exit, 8 / 7 (rollback);
   - 10-06 09:00:59–09:02:36, 15 relays / 15 gmail contacts → `accept 1-65535` (Vultr/AS399629;
     unrelated to the victims).
-- **Precursors:** none before 2026-10-01, and none before 2026-08-28. The OUR_POLICY ordered rule
-  sequence occurs in no policy before 14:49:51 on 10-01 (§6).
+- **Precursors:** no attacker-class group before 2026-10-01. The OUR_POLICY rule order, however, was
+  built up beforehand on the TorDola relays (§6).
 
 ## 3. Directory-authority actions
 
@@ -153,6 +158,9 @@ cross-checked with IPFire Location 2026-10-01.
     **10-03 11:00 ×14**, 10-03 14:00, 17:00 ×4.
   - Exit was lost on 10-04 21:00 (50), 10-05 10:00 (82) and 11:00 (136) as MiddleOnly applied.
   - Guard was lost on 10-04 16:00–21:00 (91) and 10-05 10:00–11:00 (117).
+- **Note:** victim 9CDB4020 (TimberDolphin63) carried BadExit+MiddleOnly since 2026-08-17, before it
+  published near-open (2026-10-02 10:15:20). It is excluded from the "first flag" times below; with it
+  included, the first consensus with a BadExit victim is 2026-10-02 11:00.
 - **Votes** (`net/votes_authority_summary.csv`). Nine authorities vote. Only faravahar, gabelmoo,
   longclaw, moria1 and tor26 list BadExit in known-flags; all nine list MiddleOnly.
 
@@ -201,7 +209,7 @@ cross-checked with IPFire Location 2026-10-01.
 | consensus | victims usable as exits | share |
 |---|---|---|
 | 2026-10-01 15:00 | 3 | 0.22 % |
-| 2026-10-01 17:00 | 43 | 2.03 % |
+| 2026-10-01 16:00 | 43 | 2.04 % |
 | 2026-10-02 10:00 | 325 | 7.10 % |
 | 2026-10-04 01:00 (peak) | 351 | **7.46 %** |
 | 2026-10-04 20:00 | 107 | 2.73 % |
@@ -364,9 +372,21 @@ Details are in `PROVIDER_MEMO.md`; CSVs: `net/as_hit_rates.csv`, `net/provider_p
 - **Policy lineage:**
   - Only two normalized attacker texts exist in the whole window (`net/policy_lineage.csv`): OUR_POLICY
     (12 rules) and near-open (15 rules).
-  - **The OUR_POLICY ordered sequence `25, 465, 587, 110, 143, 993, 995, 3389, 135, 137-139, 445` first
-    appears at 2026-10-01 14:49:51 (TorDola1, Datashield) and nowhere earlier.** It is contained in 33
-    policy texts, all OUR_POLICY, on 46 relays (`net/ourpolicy_line_order.csv`).
+  - **The full OUR_POLICY ordered sequence `25, 465, 587, 110, 143, 993, 995, 3389, 135, 137-139,
+    445` first appears at 2026-10-01 14:49:51 (TorDola1 4F72DEF0, Datashield) and nowhere earlier**
+    (descriptors 2026-01 → 09; consensus `p` lines 2025-01 → 2026-09; `net/email_history_check.csv`).
+    It is contained in 33 policy texts, all OUR_POLICY, on 46 relays (`net/ourpolicy_line_order.csv`).
+  - **It was built up in steps on the 4 TorDola relays** (contact `dolas422@…`, AS211720):
+    - the first 7 rules in the same order (25, 465, 587, 110, 143, 993, 995) from 2026-09-26 06:10:06
+      (all 4 by 09-30 13:46:12; 36 descriptors);
+    - 3389 added 2026-10-01 14:44:20–14:44:31;
+    - 135, 137-139 and 445 added 14:49:51–14:50:03.
+    No other relay used these ordered prefixes (≥ 7 rules) before 10-01 (`scripts/email_timeline_verify.py`).
+  - The nearest earlier relative is the mail-only `reject 25,110,143,465,587,993,995`, used in 2025-01,
+    2025-09, by TorDola from 2026-09-01 and by 10 new Vultr/AS399629 relays on 2026-09-28 (§2 group 4).
+  - **Inference:** the OUR_POLICY text was developed on the TorDola relays before it appeared on 40
+    relays of 21 other operators 44 minutes later. Whether TorDola's operator or an intruder on those
+    hosts wrote it cannot be told from public data.
   - The near-open text first appears at 2026-10-02 09:27:42 (family).
 
 **Inference.**
