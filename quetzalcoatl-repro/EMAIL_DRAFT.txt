@@ -14,26 +14,44 @@ Terms
     reject 25,110,135,137-139,143,445,465,587,993,995,3389
   i.e. exit to every port except these. Every relay with A lists the
   rules in this order: 25,465,587,110,143,993,995,3389,135,137-139,445.
-  Ports A rejects, usual use (clear = readable by the exit):
-    mail: 25 SMTP, 110 POP3, 143 IMAP, 587 submission (clear, TLS
-      optional); 465 SMTPS, 993 IMAPS, 995 POP3S (encrypted)
-    Windows: 135 RPC (clear), 137-139 NetBIOS and 445 SMB (mostly
-      clear), 3389 Remote Desktop (encrypted)
+  Ports A rejects (clear = readable by the exit; TLS optional = clear
+  unless the application upgrades to TLS):
+    25 SMTP mail relay (clear, TLS optional)
+    110 POP3 mail (clear, TLS optional)
+    135 Windows RPC (clear)
+    137-139 Windows NetBIOS (clear)
+    143 IMAP mail (clear, TLS optional)
+    445 Windows SMB file sharing (clear, encryption optional)
+    465 SMTPS mail submission (encrypted)
+    587 mail submission (clear, TLS optional)
+    993 IMAPS mail (encrypted)
+    995 POP3S mail (encrypted)
+    3389 Windows Remote Desktop (encrypted)
 - Policy B: the exit-policy summary (consensus "p" line)
     reject 25,119,135-139,445,465,563,587,993,995,1214,
            4661-4666,6346-6429,6699,6881-6999
   i.e. tor's default exit policy plus reject 465,587,993,995. Every
   relay with B lists the rules in this order: 25,465,587,993,995,119,
   135-139,445,563,1214,4661-4666,6346-6429,6699,6881-6999.
-  Ports B rejects, usual use:
-    mail: 25 SMTP, 587 submission (clear, TLS optional); 465 SMTPS,
-      993 IMAPS, 995 POP3S (encrypted). B allows 110 POP3 and 143
-      IMAP (clear, TLS optional)
-    news: 119 NNTP (clear), 563 NNTPS (encrypted)
-    Windows: 135 RPC (clear), 137-139 NetBIOS and 445 SMB (mostly
-      clear); 136 has no common use (in tor's default range)
-    file sharing (mostly clear): 1214 Kazaa, 4661-4666 eDonkey,
-      6346-6429 Gnutella, 6699 WinMX, 6881-6999 BitTorrent
+  Ports B rejects:
+    25 SMTP mail relay (clear, TLS optional)
+    119 NNTP news (clear)
+    135 Windows RPC (clear)
+    136 no common use (part of tor's default 135-139 range)
+    137-139 Windows NetBIOS (clear)
+    445 Windows SMB file sharing (clear, encryption optional)
+    465 SMTPS mail submission (encrypted)
+    563 NNTPS news (encrypted)
+    587 mail submission (clear, TLS optional)
+    993 IMAPS mail (encrypted)
+    995 POP3S mail (encrypted)
+    1214 Kazaa file sharing (clear)
+    4661-4666 eDonkey file sharing (clear, obfuscation optional)
+    6346-6429 Gnutella file sharing (clear)
+    6699 WinMX file sharing (clear)
+    6881-6999 BitTorrent file sharing (clear, obfuscation optional)
+  B allows 110 POP3 mail (clear, TLS optional) and 143 IMAP mail
+  (clear, TLS optional).
 - A vs B: both reject 25,135,137-139,445,465,587,993,995, and both
   rule orders start 25,465,587. Only A rejects 110,143,3389. Only B
   rejects 119,136,563,1214,4661-4666,6346-6429,6699,6881-6999. Both
@@ -70,31 +88,43 @@ What the switch changed (each relay's A or B vs its own policy just
 before 10-01, all ports; "opened" = clients can now exit there to it)
 - Quetzalcoatl, 277 relays to B (all from one 79-port accept-list):
   opened 65,235 ports, incl. 22 SSH (encrypted), 23 Telnet (clear),
-  110 POP3 and 143 IMAP (clear, TLS optional), 3389 Remote Desktop
-  (encrypted), 6667 IRC (clear), 6697 IRC (encrypted); closed only
-  563 NNTPS, 993 IMAPS and 995 POP3S (encrypted). For mail reading,
-  110/143 (clear, TLS optional) were opened, 993/995 (encrypted)
-  closed.
-- Other operators, 44 exits to A: opened 22 on 26, 23 on 24, 6667 on
-  10; closed mail on both clear and encrypted ports (110/143 on 36,
-  993/995 on 37), 3389 on 23.
-- Other operators, 21 exits to B: opened 22 on 15, 23 on 10, 3389 on
-  10, 110/143 on 8, 6667 on 6; closed 993/995 on 20, 563 on 15. 24
-  non-exits to B: opened every port B allows (65,311).
-- All 366 affected relays with an earlier policy: opened 22 on 342,
-  23 on 335, 6667 on 317, 3389 on 311, 110/143 on 309; closed
-  993/995 on 334, 563 on 292. For comparison, at 10-01 14:00 1,120 of
-  2,767 unaffected relays with an exit policy allowed 22, and 1,665
-  allowed 993/995.
-- B's mail mix (110/143 open, 465/587/993/995 closed) was on 3 of
-  2,767 unaffected relays with an exit policy at 10-01 14:00; A's
-  (all mail closed) on 1,085.
+  110 POP3 (clear, TLS optional), 143 IMAP (clear, TLS optional),
+  3389 Remote Desktop (encrypted), 6667 IRC (clear), 6697 IRC
+  (encrypted); closed only 563 NNTPS (encrypted), 993 IMAPS
+  (encrypted), 995 POP3S (encrypted). For mail reading: 110 (clear,
+  TLS optional) and 143 (clear, TLS optional) opened; 993 (encrypted)
+  and 995 (encrypted) closed.
+- Other operators, 44 exits to A: opened 22 SSH (encrypted) on 26, 23
+  Telnet (clear) on 24, 6667 IRC (clear) on 10; closed 110 POP3
+  (clear, TLS optional) and 143 IMAP (clear, TLS optional) on 36, 993
+  IMAPS (encrypted) and 995 POP3S (encrypted) on 37, 3389 Remote
+  Desktop (encrypted) on 23.
+- Other operators, 21 exits to B: opened 22 SSH (encrypted) on 15, 23
+  Telnet (clear) on 10, 3389 Remote Desktop (encrypted) on 10, 110
+  POP3 (clear, TLS optional) and 143 IMAP (clear, TLS optional) on 8,
+  6667 IRC (clear) on 6; closed 993 IMAPS (encrypted) and 995 POP3S
+  (encrypted) on 20, 563 NNTPS (encrypted) on 15. 24 non-exits to B:
+  opened every port B allows (65,311).
+- All 366 affected relays with an earlier policy: opened 22 SSH
+  (encrypted) on 342, 23 Telnet (clear) on 335, 6667 IRC (clear) on
+  317, 3389 Remote Desktop (encrypted) on 311, 110 POP3 (clear, TLS
+  optional) and 143 IMAP (clear, TLS optional) on 309; closed 993
+  IMAPS (encrypted) and 995 POP3S (encrypted) on 334, 563 NNTPS
+  (encrypted) on 292. For comparison, at 10-01 14:00, of 2,767
+  unaffected relays with an exit policy, 1,120 allowed 22 and 1,665
+  allowed 993 and 995.
+- B's mail mix was on 3 of those 2,767 relays at 10-01 14:00: open
+  110 (clear, TLS optional) and 143 (clear, TLS optional); closed 465
+  (encrypted), 587 (clear, TLS optional), 993 (encrypted) and 995
+  (encrypted). A's (all mail ports closed) was on 1,085.
 - A tor client only uses exits that allow the destination port, so
-  closing 993 does not push a user to 143; it means these relays
-  carry no IMAPS/POP3S, while they now carry SSH and Telnet, and
-  under B POP3/IMAP on 110/143 (clear, TLS optional).
-- Inference: opening 22 fits hiro's report of SSH interception. Why
-  993/995 were closed is not visible in the data.
+  closing 993 IMAPS (encrypted) does not push a user to 143 IMAP
+  (clear, TLS optional); it means these relays carry no IMAPS or
+  POP3S, while they now carry 22 SSH (encrypted), 23 Telnet (clear)
+  and, under B, 110 POP3 and 143 IMAP (clear, TLS optional).
+- Inference: opening 22 (encrypted) fits hiro's report of SSH
+  interception. Why 993 and 995 (encrypted) were closed is not
+  visible in the data.
 
 Timeline
 1. 2025-01-01..2026-09-26 06:00: no relay used A or B.
