@@ -2,10 +2,11 @@
 """email_port_changes.py - which ports the switch to Policy A / B opened and closed, for the section
 "What the switch changed" of EMAIL_DRAFT.txt.
 
-For every affected relay (net/victims.csv) the IPv4 summary of its last descriptor before its first A/B
-descriptor (net/netdb.sqlite) is compared with the summary it switched to (A = common.OUR_POLICY,
-B = common.NEAR_OPEN). A port is "opened" if the old summary rejects it and the new one accepts it, "closed"
-the other way round. Relays without an earlier descriptor (new keys) are left out.
+For every affected relay (net/victims.csv) the IPv4 summary of its last descriptor published before
+2026-10-01 00:00:00 (or before its first A/B descriptor, if earlier; net/netdb.sqlite) is compared with the
+summary it switched to (A = common.OUR_POLICY, B = common.NEAR_OPEN), over all ports 1-65535. A port is
+"opened" if the old summary rejects it and the new one accepts it, "closed" the other way round. Relays without
+an earlier descriptor (new keys) are left out.
 
 Also: how common A's and B's mail-port mixes were among the other relays with an exit policy (p line not
 "reject 1-65535") in the consensus of 2026-10-01 14:00:00, the last before the first A descriptor, and among
@@ -59,10 +60,12 @@ def main():
     total_open = collections.Counter()
     total_closed = collections.Counter()
     no_pre = 0
+    nopen = collections.defaultdict(list)
     for fp, r in vic.items():
+        cut = min(r["first_attacker_desc"], "2026-10-01 00:00:00")
         pre = db.execute("""SELECT p.summary FROM descriptor d JOIN policy p ON p.policy_h=d.policy_h
                             WHERE d.fp=? AND d.published < ? ORDER BY d.pub_epoch DESC LIMIT 1""",
-                         (fp, r["first_attacker_desc"])).fetchone()
+                         (fp, cut)).fetchone()
         if not pre:
             no_pre += 1
             continue
@@ -71,21 +74,25 @@ def main():
         grp = ("Quetzalcoatl" if r["family"] == "1" else "other") + " -> " + \
               ("A" if new == OUR_POLICY else "B") + (" (was non-exit)" if pre == "reject 1-65535" else "")
         n[grp] += 1
-        for port in KEY:
+        k = 0
+        for port in range(1, 65536):
             a0, a1 = allowed(pre, port), allowed(new, port)
             if a1 and not a0:
+                k += 1
                 opened[grp][port] += 1
                 total_open[port] += 1
             if a0 and not a1:
                 closed[grp][port] += 1
                 total_closed[port] += 1
+        nopen[grp].append(k)
     print("affected relays with an earlier descriptor:", sum(n.values()), " without (new keys):", no_pre)
     for g in sorted(n):
         print(f"\n{g}: {n[g]} relays")
-        print("   opened:", dict(sorted(opened[g].items())))
-        print("   closed:", dict(sorted(closed[g].items())))
-    print("\nall groups, opened:", dict(sorted(total_open.items())))
-    print("all groups, closed:", dict(sorted(total_closed.items())))
+        print("   ports opened per relay: min", min(nopen[g]), "max", max(nopen[g]))
+        print("   opened, key ports:", {p: opened[g][p] for p in KEY + [6697] if opened[g][p]})
+        print("   closed, all ports (port: relays):", dict(sorted(closed[g].items(), key=lambda x: (-x[1], x[0]))[:25]))
+    print("\nall groups, opened, key ports:", {p: total_open[p] for p in KEY + [6697] if total_open[p]})
+    print("all groups, closed (top):", dict(sorted(total_closed.items(), key=lambda x: (-x[1], x[0]))[:12]))
 
     rows = db.execute("SELECT fp, policy FROM cons_entry WHERE va='2026-10-01 14:00:00'").fetchall()
     ex = [p for fp, p in rows if fp not in vic and p and p != "reject 1-65535"]
