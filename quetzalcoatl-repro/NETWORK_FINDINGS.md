@@ -54,7 +54,7 @@ cross-checked with IPFire Location 2026-10-01.
 |---|---|---|---|---|---|---|
 | 1 | 10-01 14:49:51 → 14:50:03 | 4 / 4 / 1 | other reject-list → **OUR_POLICY** (TorDola, TorDola1-3; `dolas422@gazeta.pl`) | 4 reloads | Datashield AS211720 | 0 / 0.5 / 0 (4 hosts) |
 | 2 | **10-01 15:33:55 → 15:39:19** | **40 / 28 / 21** | accept/other → **OUR_POLICY** | 38 reloads, 2 restarts | FranTech 39, Elxer 1 | 0.29 / 0.38 / 0.29; 16 Polyphemus relays (4 hosts) at 15:37:16 |
-| 3 | **10-02 09:27:42 → 09:44:12** | **316 events / 108 hosts / 29** | family 277 accept → near-open (09:27:42–09:35:18); non-family: 15 into near-open, 15 OUR_POLICY → near-open, 9 OUR_POLICY → their original policy | 311 reloads, 5 restarts | HostPapa 125, FranTech 87, netcup 40, Contabo 48, MAXKO 16 | family 0.40 / 0.39 / 0.40; non-family sub-run 09:36:57–09:40:33 (31 FranTech hosts) **0.075 / 0.31 / 0.071** |
+| 3 | **10-02 09:27:42 → 09:44:12** | **316 events / 108 hosts / 29** | family 277 accept → near-open (09:27:42–09:35:18); non-family: 15 into near-open, 15 OUR_POLICY → near-open, 9 OUR_POLICY reverted (8 byte-exact to their pre-10-01 policy; C3233B17 to a different accept-list) | 311 reloads, 5 restarts | HostPapa 125, FranTech 87, netcup 40, Contabo 48, MAXKO 16 | family 0.40 / 0.39 / 0.40; non-family sub-run 09:36:57–09:40:33 (31 FranTech hosts) **0.075 / 0.31 / 0.071** |
 | 4 | 10-02 10:15:20 → 10:21:10 | 5 / 5 / 4 | **non-exit → near-open** (incl. `diskstats@mailboxly.example`) | reloads | FranTech 4, BSE 1 | — |
 | 5–7 | 10-02 11:51:14, 14:26:22, 18:53:05 | 1 each | → near-open | reloads | BSE, DataWagon, FranTech | — |
 | 8 | **10-03 10:26:02 → 11:04:30** | 23 / 15 / 13 (10 contacts + 3 without contact) | 15 non-exit/accept → near-open; then **8 new identity keys** at the same hosts, first descriptor near-open (10:39:20–11:04:30) | 14 restarts, 8 first, 1 reload | FranTech 17, Redoubt 2, Snaju 2, ALEXHOST 2 | 0.54 / 0.46 / 0.54 (parallel) |
@@ -319,11 +319,13 @@ Details are in `PROVIDER_MEMO.md`; CSVs: `net/as_hit_rates.csv`, `net/provider_p
   - Host level: 56/85 hit; the same direction for IPv6, family-cert, version and OS.
   - Operator level: 44/59 hit; operators without family-cert 36/42 vs with 8/17 (p = 0.006); without
     IPv6 27/29 vs with 17/30 (p = 0.002).
-- **Operators on several providers (Fact):** 11 operators were hit on FranTech, and **none of them was
+- **Operators on several providers (Fact):** 12 operators were hit on FranTech, and **none of them was
   hit on any other provider**. For example:
   - Brandon Kuschel: FranTech 16/16 hit; GoDaddy 0/5; OVH 0/3.
   - "Satanist": FranTech 2/2; 18 relays on 10 other ASes 0.
   - middelstaedt: FranTech 2/2; Gigahost 0/6.
+  - Triangulum1's operator: FranTech 1/1; OVH 0/1 (found by `scripts/email_operator_pattern.py`;
+    `net_infra.py` missed it and gave 11).
   - Also Jeff Teitel (OVH 0/1), DoNotDisturb (Comcast 0/1), passmail (IONOS 0/1, Oracle 0/1) and
     others (`net/multi_provider_operators.csv`).
 - **Suspicious newcomers (Facts, `net/newcomers.csv`):**
@@ -436,7 +438,7 @@ Details are in `PROVIDER_MEMO.md`; CSVs: `net/as_hit_rates.csv`, `net/provider_p
   - The summarizer was validated against `p` lines.
   - The name-based coverage artefact is documented (§9).
   - Operators counted by contact may overstate independence (see the §2 baseline groups). Even so,
-    the 11 multi-provider operators hit only on FranTech is a within-operator contrast that does not
+    the 12 multi-provider operators hit only on FranTech is a within-operator contrast that does not
     depend on that count.
 
 ## 9. Independent verification
