@@ -9,6 +9,27 @@ IP-to-AS maps, and exact matching of exit-policy port lists, incl.
 rule order, this is the timeline for this thread and hiro's 10-05
 thread "Security incident affecting some relay operators".
 
+Summary
+- From 10-01 14:49 to 10-04 22:21, 377 relays of 59 operators (277
+  Quetzalcoatl, 100 of 58 other operators) switched to one of two
+  exit policies, A or B below, that no relay had used in any
+  consensus since 2025-01; of other operators' relays listed at
+  10-01 14:00, 71 of 101 on FranTech became affected vs 13 of 9,054
+  elsewhere.
+- Of the 366 affected relays with an earlier policy, the switch
+  opened 22 SSH (encrypted) on 342 and 23 Telnet (clear) on 335 and
+  closed 993 IMAPS and 995 POP3S (encrypted) on 334; B, used by 350
+  relays incl. all of Quetzalcoatl, keeps 110 POP3 and 143 IMAP
+  (clear, TLS optional) open, a mix that only 3 of 2,767 unaffected
+  relays with an exit policy had at 10-01 14:00.
+- No relay with A or B has been in the consensus since 10-05 17:00,
+  but 14 relays with A or B (none Quetzalcoatl) were still usable
+  exits after flags first reached the consensus (10-04 21:00), 11 of
+  them until 10-05 15:00, with no BadExit or MiddleOnly vote as of
+  10-08 13:00; at 10-08 13:00, 42 relays (9 Quetzalcoatl) still
+  publish A or B, each in only 2-3 of the 9 authority votes (5
+  needed).
+
 Terms
 - Policy A, in short: blocks all mail ports (sending and reading,
   clear and encrypted), Windows file sharing and Remote Desktop;
@@ -80,6 +101,14 @@ Terms
 
 What the switch changed (each relay's A or B vs its own policy just
 before 10-01, all ports; "opened" = clients can now exit there to it)
+- All 366 affected relays with an earlier policy: opened 22 SSH
+  (encrypted) on 342, 23 Telnet (clear) on 335, 6667 IRC (clear) on
+  317, 3389 Remote Desktop (encrypted) on 311, 110 POP3 (clear, TLS
+  optional) and 143 IMAP (clear, TLS optional) on 309; closed 993
+  IMAPS (encrypted) and 995 POP3S (encrypted) on 334, 563 NNTPS
+  (encrypted) on 292. For comparison, at 10-01 14:00, of 2,767
+  unaffected relays with an exit policy, 1,120 allowed 22 and 1,665
+  allowed 993 and 995.
 - Quetzalcoatl, 277 relays: each allowed the same 79 ports before;
   B opened 65,235 more, incl. 22 SSH (encrypted), 23 Telnet (clear),
   110 POP3 (clear, TLS optional), 143 IMAP (clear, TLS optional),
@@ -99,14 +128,6 @@ before 10-01, all ports; "opened" = clients can now exit there to it)
   6667 IRC (clear) on 6; closed 993 IMAPS (encrypted) and 995 POP3S
   (encrypted) on 20, 563 NNTPS (encrypted) on 15. 24 non-exits to B:
   opened every port B allows (65,311).
-- All 366 affected relays with an earlier policy: opened 22 SSH
-  (encrypted) on 342, 23 Telnet (clear) on 335, 6667 IRC (clear) on
-  317, 3389 Remote Desktop (encrypted) on 311, 110 POP3 (clear, TLS
-  optional) and 143 IMAP (clear, TLS optional) on 309; closed 993
-  IMAPS (encrypted) and 995 POP3S (encrypted) on 334, 563 NNTPS
-  (encrypted) on 292. For comparison, at 10-01 14:00, of 2,767
-  unaffected relays with an exit policy, 1,120 allowed 22 and 1,665
-  allowed 993 and 995.
 - B's mail mix was on 3 of those 2,767 relays at 10-01 14:00: open
   110 (clear, TLS optional) and 143 (clear, TLS optional); closed 465
   (encrypted), 587 (clear, TLS optional), 993 (encrypted) and 995
