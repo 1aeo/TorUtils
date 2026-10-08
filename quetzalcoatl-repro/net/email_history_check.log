@@ -1,0 +1,11 @@
+done server-descriptors-2026-03.tar.xz        items=601381    errors=0  counts={'loose_rules_110_143_3389': 256, 'loose_summary_110_143_3389': 256}
+done server-descriptors-2026-02.tar.xz        items=1003061   errors=0  counts={'loose_rules_110_143_3389': 152, 'loose_summary_110_143_3389': 152}
+done server-descriptors-2026-04.tar.xz        items=851287    errors=5  counts={'loose_rules_110_143_3389': 344, 'loose_summary_110_143_3389': 344}
+done consensuses-2026-04.tar.xz               items=2320136   errors=0  counts={'loose_summary_110_143_3389': 916}
+done server-descriptors-2026-01.tar.xz        items=612792    errors=0  counts={'loose_rules_110_143_3389': 169, 'loose_summary_110_143_3389': 169}
+done consensuses-2026-01.tar.xz               items=7168347   errors=0  counts={'loose_summary_110_143_3389': 2944}
+done consensuses-2025-12.tar.xz               items=6955621   errors=0  counts={'loose_summary_110_143_3389': 2636}
+done consensuses-2026-02.tar.xz               items=6378955   errors=0  counts={'loose_summary_110_143_3389': 2596}
+done consensuses-2025-11.tar.xz               items=6617820   errors=0  counts={'loose_summary_110_143_3389': 2692}
+done consensuses-2025-10.tar.xz               items=6715058   errors=0  counts={'loose_summary_110_143_3389': 2960}
+done consensuses-2026-03.tar.xz               items=6223488   errors=0  counts={'loose_summary_110_143_3389': 2915}
