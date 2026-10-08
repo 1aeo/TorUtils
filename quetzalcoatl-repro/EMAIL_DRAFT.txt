@@ -10,48 +10,42 @@ rule order, this is the timeline for this thread and hiro's 10-05
 thread "Security incident affecting some relay operators".
 
 Terms
-- Policy A: the exit-policy summary (consensus "p" line)
+- Policy A, in short: blocks all mail ports (sending and reading,
+  clear and encrypted), Windows file sharing and Remote Desktop;
+  allows everything else, incl. SSH, Telnet, FTP and HTTP.
+  The exit-policy summary (consensus "p" line):
     reject 25,110,135,137-139,143,445,465,587,993,995,3389
-  i.e. exit to every port except these. Every relay with A lists the
-  rules in this order: 25,465,587,110,143,993,995,3389,135,137-139,445.
+  Every relay with A lists the rules in this order:
+  25,465,587,110,143,993,995,3389,135,137-139,445.
   Ports A rejects (clear = readable by the exit; TLS optional = clear
   unless the application upgrades to TLS):
-    25 SMTP mail relay (clear, TLS optional)
-    110 POP3 mail (clear, TLS optional)
-    135 Windows RPC (clear)
-    137-139 Windows NetBIOS (clear)
-    143 IMAP mail (clear, TLS optional)
+    25 SMTP (clear, TLS optional), 110 POP3 (clear, TLS optional),
+    143 IMAP (clear, TLS optional), 465 SMTPS (encrypted),
+    587 mail submission (clear, TLS optional), 993 IMAPS (encrypted),
+    995 POP3S (encrypted), 135 Windows RPC (clear),
+    137-139 Windows NetBIOS (clear), 3389 Remote Desktop (encrypted),
     445 Windows SMB file sharing (clear, encryption optional)
-    465 SMTPS mail submission (encrypted)
-    587 mail submission (clear, TLS optional)
-    993 IMAPS mail (encrypted)
-    995 POP3S mail (encrypted)
-    3389 Windows Remote Desktop (encrypted)
-- Policy B: the exit-policy summary (consensus "p" line)
+- Policy B, in short: tor's default exit policy (blocks mail relay,
+  Windows file sharing, Usenet news, P2P file sharing) plus blocks
+  mail submission (465, 587) and encrypted mail reading (993 IMAPS,
+  995 POP3S), but leaves 110 POP3 and 143 IMAP (clear, TLS optional)
+  open; allows everything else, incl. SSH, Telnet, Remote Desktop.
+  The exit-policy summary (consensus "p" line):
     reject 25,119,135-139,445,465,563,587,993,995,1214,
            4661-4666,6346-6429,6699,6881-6999
-  i.e. tor's default exit policy plus reject 465,587,993,995. Every
-  relay with B lists the rules in this order: 25,465,587,993,995,119,
-  135-139,445,563,1214,4661-4666,6346-6429,6699,6881-6999.
+  i.e. tor's default plus reject 465,587,993,995. Every relay with B
+  lists the rules in this order: 25,465,587,993,995,119,135-139,445,
+  563,1214,4661-4666,6346-6429,6699,6881-6999.
   Ports B rejects:
-    25 SMTP mail relay (clear, TLS optional)
-    119 NNTP news (clear)
-    135 Windows RPC (clear)
-    136 no common use (part of tor's default 135-139 range)
-    137-139 Windows NetBIOS (clear)
-    445 Windows SMB file sharing (clear, encryption optional)
-    465 SMTPS mail submission (encrypted)
-    563 NNTPS news (encrypted)
-    587 mail submission (clear, TLS optional)
-    993 IMAPS mail (encrypted)
-    995 POP3S mail (encrypted)
-    1214 Kazaa file sharing (clear)
-    4661-4666 eDonkey file sharing (clear, obfuscation optional)
-    6346-6429 Gnutella file sharing (clear)
-    6699 WinMX file sharing (clear)
-    6881-6999 BitTorrent file sharing (clear, obfuscation optional)
-  B allows 110 POP3 mail (clear, TLS optional) and 143 IMAP mail
-  (clear, TLS optional).
+    25 SMTP (clear, TLS optional), 465 SMTPS (encrypted),
+    587 mail submission (clear, TLS optional), 993 IMAPS (encrypted),
+    995 POP3S (encrypted), 119 NNTP news (clear), 563 NNTPS (encrypted),
+    135 Windows RPC (clear), 137-139 Windows NetBIOS (clear),
+    445 Windows SMB file sharing (clear, encryption optional),
+    136 (no common use; in tor's default 135-139 range),
+    1214 Kazaa (clear), 4661-4666 eDonkey (clear, obfuscation optional),
+    6346-6429 Gnutella (clear), 6699 WinMX (clear),
+    6881-6999 BitTorrent (clear, obfuscation optional)
 - A vs B: both reject 25,135,137-139,445,465,587,993,995, and both
   rule orders start 25,465,587. Only A rejects 110,143,3389. Only B
   rejects 119,136,563,1214,4661-4666,6346-6429,6699,6881-6999. Both
