@@ -94,8 +94,8 @@ cross-checked with IPFire Location 2026-10-01.
   majority: excluded from the consensus, not omitted by every authority.
 - CollecTor `recent/` to 2026-10-08 03:38: 0 attacker `p` lines in the 2026-10-08 03:00 consensus;
   33 victims still publishing an attacker policy, all excluded (`net/email_current_status.csv`).
-- Update to the 2026-10-08 23:00 consensus, every vote 10-07 02:00..10-08 23:00 and descriptors to the
-  10-08 22:44 CollecTor file (`scripts/email_votes_recent.py`, `scripts/email_status_now.py`,
+- Update to the 2026-10-09 01:00 consensus, every vote 10-07 02:00..10-09 01:00 and descriptors to the
+  10-09 00:43 CollecTor file (numbers unchanged since 10-08 23:00) (`scripts/email_votes_recent.py`, `scripts/email_status_now.py`,
   `net/email_status_now.csv/.log`, list in `net/email_list_publishing.txt`):
   - listed: 1 (9CDB4020, BadExit since 08-17 17:00, MiddleOnly since 08-17 19:00, own pre-10-01 policy);
     no Tor client can use the other 376;
@@ -407,7 +407,7 @@ Details are in `PROVIDER_MEMO.md`; CSVs: `net/as_hit_rates.csv`, `net/provider_p
       (all 4 by 09-30 13:46:12; 36 descriptors);
     - 3389 added 2026-10-01 14:44:20–14:44:31;
     - 135, 137-139 and 445 added 14:49:51–14:50:03.
-    Correction (`scripts/email_prefix_scan.py`, which also scans the 2026-01..04 descriptor archives): the 7-rule prefix in A's order was used once before, by 18 relays on 9 IPs (Cypher, Tank, Satoshi, Cypherpunk, Agorist, Switch, Mixmaster, ZeroProof, CryptoRebel) on 2026-03-30 11:36:35..03-31 23:34:06, followed by 22-23,135-139,445,161-162,5900-5901,3389 and 13 more rejects (not OUR_POLICY); no other relay used the 8-rule prefix (with 3389) before 10-01. Every OUR_POLICY relay (46) and every near-open relay (350) uses one rule order each.
+    Correction (`scripts/email_prefix_scan.py` for 2026-01..04, `scripts/email_descriptor_scan_2025.py` for all of 2025; no OUR_POLICY or near-open descriptor in either): the 7-rule prefix in A's order was used twice before: by NeonCitadel01 87BF0F86B12EF5CD8DBB890A48457A67E71EDFF2 on 2025-10-08..10-21 (followed by 6881-6999,51413,8999), and by 18 relays on 9 IPs (Cypher, Tank, Satoshi, Cypherpunk, Agorist, Switch, Mixmaster, ZeroProof, CryptoRebel) on 2026-03-30 11:36:35..03-31 23:34:06, followed by 22-23,135-139,445,161-162,5900-5901,3389 and 13 more rejects (not OUR_POLICY); no other relay used the 8-rule prefix (with 3389) before 10-01. Every OUR_POLICY relay (46) and every near-open relay (350) uses one rule order each.
   - The nearest earlier relative is the mail-only `reject 25,110,143,465,587,993,995`, used in 2025-01,
     2025-09, by TorDola from 2026-09-01 and by 10 new Vultr/AS399629 relays on 2026-09-28 (§2 group 4).
   - **Inference:** the OUR_POLICY text was developed on the TorDola relays before it appeared on 40
