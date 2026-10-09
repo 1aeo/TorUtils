@@ -1,8 +1,0 @@
-month,op_bursts_ge3,op_bursts_ge5,op_bursts_ge10,op_bursts_ge5_perfect_textsort,multi_op_coincidences,multi_op_coincidences_touching_victim_hosts
-2026-04,222,117,60,1,22,18
-2026-05,1588,870,372,17,153,45
-2026-06,1514,679,252,10,199,27
-2026-07,2080,683,262,16,84,50
-2026-08,1903,870,312,13,229,89
-2026-09,1172,485,212,16,205,46
-2026-10,200,69,28,6,27,9

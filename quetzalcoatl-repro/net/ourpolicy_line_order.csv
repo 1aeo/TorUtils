@@ -1,2 +1,0 @@
-reject_sequence,ourpolicy_texts_with_it,policies_containing_sequence,relays_using_them,first_published,first_fp,first_nick,first_ip,first_contact,first_class,classes_of_containing_policies
-reject *:25 ; reject *:465 ; reject *:587 ; reject *:110 ; reject *:143 ; reject *:993 ; reject *:995 ; reject *:3389 ; reject *:135 ; reject *:137-139 ; reject *:445,33,33,46,2026-10-01 14:49:51,4F72DEF09B015E9B6F210597083D95D8A3BC38AD,TorDola1,185.231.33.82,dolas422@gazeta.pl,OUR_POLICY,{'OUR_POLICY': 33}
