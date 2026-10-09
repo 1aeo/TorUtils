@@ -118,7 +118,7 @@ Data and method
 - p lines: our re-implementation of tor's policy_summarize() gives the consensus p line for all 203,044 descriptors we have of the 203,479 the 09-24..10-07 02:00 consensuses point to, and for all 9,091 of the 9,096 entries at 10-08 06:00 whose descriptor we have.
 - AS: CAIDA pfx2as 20261001-1200 and as-org 20261001; IPFire location 2026-10-01 gives the same AS for all 147 affected IPs.
 - Onionoo details of 10-09 01:00, as a cross-check only.
-- Scripts and CSVs: https://github.com/1aeo/TorUtils/tree/2f0082c/quetzalcoatl-repro
+- Scripts and CSVs: https://github.com/1aeo/TorUtils/tree/44a049b/quetzalcoatl-repro
 
 Relays still publishing A or B at 10-09 01:00
 Not in the consensus, so not used by Tor clients; listed for their operators. nickname | fingerprint | ContactInfo (long ContactInfo shortened to its email and url fields), grouped by ContactInfo.
