@@ -71,7 +71,7 @@ sudo systemctl daemon-reload
 
 ## Debian 13 Warning
 
-The `libmimalloc2.0` package on Debian 13 ships **mimalloc 3.0.1**—the version with the regression. Build 2.0.9 from source instead.
+Debian 13's mimalloc package, `libmimalloc3`, ships **mimalloc 3.0.1**—the version with the regression. Debian 13 has no mimalloc 2.x package (`libmimalloc2.0`, 2.0.9 in Debian 12, was renamed to `libmimalloc3` with the 3.0.1 upgrade). Build 2.0.9 from source instead.
 
 ## Summary
 

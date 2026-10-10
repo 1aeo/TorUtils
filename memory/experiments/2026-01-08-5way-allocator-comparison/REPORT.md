@@ -24,7 +24,7 @@
 |-----------|---------|--------|
 | glibc malloc | 2.41 | System default |
 | jemalloc | 5.3.0 | `apt install libjemalloc2` |
-| mimalloc | 3.0.1 | `apt install libmimalloc2.0` |
+| mimalloc | 3.0.1 | `apt install libmimalloc3` |
 | mimalloc | 2.1.7 | Custom build |
 | mimalloc | 2.0.9 | Custom build |
 
