@@ -1,4 +1,4 @@
-From f908f8dbe2b3977797f38408579c329f9e0410d1 Mon Sep 17 00:00:00 2001
+From 214fee5e47132f221bbc020961ff89a712f13dfa Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Tue, 13 Oct 2026 17:10:20 +0000
 Subject: [PATCH 5/7] dirserv: Discard client input received after the request

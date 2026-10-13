@@ -1,0 +1,9 @@
+target=004r fpr=0A613FD99F9C447FDDAA0647CAE069EB0A521E3D onion=7op5kxuemugxvs7el7sj6h26tf4bsxqvpaugfru2n6dcqey74f5wqhqd metrics=19104
+--- observe (enforcement off): reuse counted, nothing closed ---
+reuse client (EVIL_ISO) x5       n=5    reused+=1   begin_dir+=5    client recv=5   fail=0  
+reuse client (EVIL_ISO) x22      n=22   reused+=0   begin_dir+=22   client recv=22  fail=0  
+fetch client (1/circuit) x22     n=22   reused+=0   begin_dir+=24   client recv=22  fail=0  
+--- enforce (HSDirOneRequestPerCircuit=1 on target) ---
+reuse client (EVIL_ISO) x5       n=5    reused+=0   begin_dir+=4    client recv=0   fail=0  
+reuse client (EVIL_ISO) x22      n=22   reused+=1   begin_dir+=4    client recv=0   fail=0  
+fetch client (1/circuit) x22     n=22   reused+=0   begin_dir+=25   client recv=22  fail=0  

@@ -1,4 +1,4 @@
-From 99d8fa440134c8fea55bc4b9314129e4ada07aa7 Mon Sep 17 00:00:00 2001
+From 6aa293c95851ac144dde6c4fecf86477012d2991 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Tue, 13 Oct 2026 17:14:11 +0000
 Subject: [PATCH 7/7] hs_cache: Only credit HSDir downloads once the response
@@ -36,7 +36,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 diff --git a/changes/hsdir_download_credit b/changes/hsdir_download_credit
 new file mode 100644
-index 0000000..1546dfd
+index 0000000..6ee4013
 --- /dev/null
 +++ b/changes/hsdir_download_credit
 @@ -0,0 +1,9 @@
@@ -48,7 +48,7 @@ index 0000000..1546dfd
 +      enough to raise the count that decides which descriptors are removed
 +      first when the cache is full. The new boundary is the outbuf being fully
 +      flushed, which still does not prove the client received the descriptor.
-+      Bugfix on 0.4.8.14.
++      Bugfix on 0.4.8.14. Related to ticket 41339.
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
 index 8b960e1..7a62ac1 100644
 --- a/src/feature/dircache/dircache.c
@@ -130,7 +130,7 @@ index 03d2bdf..06f2e31 100644
  hs_cache_mark_dowloaded_as_dir(const hs_ident_dir_conn_t *ident)
  {
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 248f1bf..45f1979 100644
+index 8ac1a6d..b600e6a 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -16,6 +16,8 @@
@@ -142,7 +142,7 @@ index 248f1bf..45f1979 100644
  #include "feature/nodelist/networkstatus.h"
  #include "core/mainloop/connection.h"
  #include "core/proto/proto_http.h"
-@@ -1035,6 +1037,97 @@ test_client_cache_remove(void *arg)
+@@ -1047,6 +1049,97 @@ test_client_cache_remove(void *arg)
    UNMOCK(networkstatus_get_reasonably_live_consensus);
  }
  
@@ -240,7 +240,7 @@ index 248f1bf..45f1979 100644
  struct testcase_t hs_cache[] = {
    /* Encoding tests. */
    { "directory", test_directory, TT_FORK,
-@@ -1051,6 +1144,10 @@ struct testcase_t hs_cache[] = {
+@@ -1063,6 +1156,10 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "hsdir_refuse_unknown_prev_hop", test_hsdir_refuse_unknown_prev_hop,
      TT_FORK, NULL, NULL },

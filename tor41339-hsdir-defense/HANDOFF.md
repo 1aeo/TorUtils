@@ -53,7 +53,7 @@ This directory (`tor41339-hsdir-defense/`) holds the bundle:
 - `simulator/loadclient-testonly.diff` — the **test-only** client change (env `EVIL_ISO_SESSIONGRP` makes a client reuse one circuit for several HS fetches; `EVIL_ONEHOP` makes an unpublished relay do one-hop fetches). Drives the simulator's "reuse" and "unknown-hop" cases. Throwaway harness, never for upstream.
 - `simulator/ctl.py` — control-port driver starting point. `simulator/SIMULATOR.md` — the full design (also §6 below).
 
-These patches are v2. A finalization pass (the three fixes in `analysis/claims-ledger.md` under "PATCH DEFECTS": the POST-under-enforcement test, the heartbeat label, the 0007 ticket ref) produces v3; if `patches/` here still says v2 in the README, apply those three fixes first (they are small and described precisely).
+These patches are **v3**: the three finalization fixes (POST-under-enforcement test that kills mutation 1.04, the reworded heartbeat label, the 0007 ticket ref) are already folded in. Still to do before upstream submission: reorder 0002 before 0001 (or squash), refresh `scripts/maint/practracker/exceptions.txt` on an in-sync tree, and confirm the author/trailer identity you want upstream (the published copies use `1aeo`).
 
 Everything else you need, re-fetch:
 - Tarball: `curl -O https://dist.torproject.org/tor-0.4.9.14.tar.gz` (sha256 `182449ac1c8ff43278da27b69b02040e11d03d0327db6d9126e4190ec6235e4a`).

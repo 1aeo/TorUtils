@@ -1,4 +1,4 @@
-From c4efb795360b3fb507b40a992fc39ad39f9a9df1 Mon Sep 17 00:00:00 2001
+From 80c37066670e2b3eeacb21de00cdeed154fe8a95 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Tue, 13 Oct 2026 16:57:56 +0000
 Subject: [PATCH 1/7] hsdir: Serve one onion service directory request per
@@ -39,9 +39,9 @@ Part of 41339.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
- changes/ticket41339_hsdir_circ_reuse |  12 ++
+ changes/ticket41339_hsdir_circ_reuse |  13 ++
  doc/man/tor.1.txt                    |  16 +++
- src/core/or/dos.c                    |  45 +++++++
+ src/core/or/dos.c                    |  45 ++++++
  src/core/or/dos.h                    |   3 +
  src/core/or/dos_options.inc          |   6 +
  src/core/or/or_circuit_st.h          |   9 ++
@@ -51,29 +51,30 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  src/feature/relay/relay_metrics.c    |   6 +
  src/test/opts_test_helpers.c         |   9 ++
  src/test/opts_test_helpers.h         |   1 +
- src/test/test_hs_cache.c             | 189 +++++++++++++++++++++++++++
+ src/test/test_hs_cache.c             | 201 +++++++++++++++++++++++++++
  src/test/test_status.c               |   3 +-
- 14 files changed, 346 insertions(+), 1 deletion(-)
+ 14 files changed, 359 insertions(+), 1 deletion(-)
  create mode 100644 changes/ticket41339_hsdir_circ_reuse
 
 diff --git a/changes/ticket41339_hsdir_circ_reuse b/changes/ticket41339_hsdir_circ_reuse
 new file mode 100644
-index 0000000..e9d4286
+index 0000000..30d86c8
 --- /dev/null
 +++ b/changes/ticket41339_hsdir_circ_reuse
-@@ -0,0 +1,12 @@
+@@ -0,0 +1,13 @@
 +  o Minor features (DoS-resistance, onion service directory):
 +    - HSDirs now count every circuit that makes more than one onion service
 +      descriptor fetch or upload, and can close it (with reason
 +      RESOURCELIMIT). Tor and Arti make each such request on its own circuit,
 +      so this only affects clients that reuse a circuit to multiply their
-+      requests. The reuse is counted in the DoS heartbeat ("HSDir requests on
-+      reused circuits") and in the tor_relay_dos_total{type="hsdir_circ_reused"}
-+      MetricsPort metric. Closing is off by default (counting only): it is
-+      controlled by the new HSDirOneRequestPerCircuit torrc option, which
-+      overrides the new "hsdir_one_request_per_circ" consensus parameter, which
-+      in turn defaults to off so that a relay with no opinion only observes.
-+      Part of ticket 41339.
++      requests. The reuse is counted in the DoS heartbeat ("circuits with
++      repeated HSDir requests") and in the
++      tor_relay_dos_total{type="hsdir_circ_reused"} MetricsPort metric.
++      Closing is off by default (counting only): it is controlled by the new
++      HSDirOneRequestPerCircuit torrc option, which overrides the new
++      "hsdir_one_request_per_circ" consensus parameter, which in turn defaults
++      to off so that a relay with no opinion only observes. Part of ticket
++      41339.
 diff --git a/doc/man/tor.1.txt b/doc/man/tor.1.txt
 index 88e09e3..0c029d1 100644
 --- a/doc/man/tor.1.txt
@@ -102,7 +103,7 @@ index 88e09e3..0c029d1 100644
  For onion services, mitigations are a work in progress and multiple options
  are currently available.
 diff --git a/src/core/or/dos.c b/src/core/or/dos.c
-index b789f87..a3bd1e8 100644
+index b789f87..78017d0 100644
 --- a/src/core/or/dos.c
 +++ b/src/core/or/dos.c
 @@ -103,6 +103,11 @@ static uint64_t stream_num_rejected;
@@ -173,7 +174,7 @@ index b789f87..a3bd1e8 100644
                           "%" PRIu64 " INTRODUCE2 rejected",
                           hs_dos_get_intro2_rejected_count());
 +  smartlist_add_asprintf(elems,
-+                         "%" PRIu64 " HSDir requests on reused circuits",
++                         "%" PRIu64 " circuits with repeated HSDir requests",
 +                         num_hsdir_circ_reused);
  
    char *msg = smartlist_join_strings(elems, ", ", 0, NULL);
@@ -382,7 +383,7 @@ index a6d3155..840772b 100644
  
  #endif /* !defined(TOR_TEST_OPTS_TESTING_HELPERS_H) */
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 100a90e..deab901 100644
+index 100a90e..98841cf 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -21,9 +21,18 @@
@@ -404,7 +405,7 @@ index 100a90e..deab901 100644
  #include "core/or/edge_connection_st.h"
  #include "core/or/or_circuit_st.h"
  #include "core/or/or_connection_st.h"
-@@ -341,6 +350,184 @@ helper_fetch_desc_from_hsdir(const ed25519_public_key_t *blinded_key)
+@@ -341,6 +350,196 @@ helper_fetch_desc_from_hsdir(const ed25519_public_key_t *blinded_key)
    return received_desc;
  }
  
@@ -482,7 +483,7 @@ index 100a90e..deab901 100644
 +  char *expect = NULL, *out = NULL;
 +  buf_t *buf = buf_new();
 +
-+  tor_asprintf(&expect, "%"PRIu64" HSDir requests on reused circuits", n);
++  tor_asprintf(&expect, "%"PRIu64" circuits with repeated HSDir requests", n);
 +  setup_full_capture_of_logs(LOG_NOTICE);
 +  dos_log_heartbeat();
 +  expect_log_msg_containing(expect);
@@ -554,6 +555,18 @@ index 100a90e..deab901 100644
 +  tt_int_op(TO_CIRCUIT(circ)->marked_for_close, OP_EQ, 1);
 +  tt_int_op(TO_CIRCUIT(circ)->marked_for_close_reason, OP_EQ,
 +            END_CIRC_REASON_RESOURCELIMIT);
++
++  /* The same force-on enforcement covers a second POST (descriptor upload):
++   * the second POST on a fresh circuit is not served and closes the circuit
++   * with RESOURCELIMIT. */
++  circ = or_circuit_new(0, NULL);
++  circ->p_chan = chan;
++  tt_size_op(helper_hs_request_on_circ(circ, true), OP_GT, 0);
++  tt_int_op(TO_CIRCUIT(circ)->marked_for_close, OP_EQ, 0);
++  tt_size_op(helper_hs_request_on_circ(circ, true), OP_EQ, 0); /* closed */
++  tt_int_op(TO_CIRCUIT(circ)->marked_for_close, OP_EQ, 1);
++  tt_int_op(TO_CIRCUIT(circ)->marked_for_close_reason, OP_EQ,
++            END_CIRC_REASON_RESOURCELIMIT);
 +  clear_mock_consensus();
 +
 +  /* Torrc force-off overrides a consensus that says on: observe only. */
@@ -589,7 +602,7 @@ index 100a90e..deab901 100644
  /* Publish a descriptor to the HSDir, then fetch it. Check that the received
     descriptor matches the published one. */
  static void
-@@ -766,6 +953,8 @@ struct testcase_t hs_cache[] = {
+@@ -766,6 +965,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "upload_and_download_hs_desc", test_upload_and_download_hs_desc, TT_FORK,
      NULL, NULL },
@@ -599,7 +612,7 @@ index 100a90e..deab901 100644
      NULL, NULL },
    { "client_cache_decrypt", test_client_cache_decrypt, TT_FORK,
 diff --git a/src/test/test_status.c b/src/test/test_status.c
-index 4ceb81f..de558a6 100644
+index 4ceb81f..b24a4e5 100644
 --- a/src/test/test_status.c
 +++ b/src/test/test_status.c
 @@ -366,7 +366,8 @@ test_status_hb_not_in_consensus(void *arg)
@@ -608,7 +621,7 @@ index 4ceb81f..de558a6 100644
                   "[DoSStreamCreationEnabled disabled], "
 -                 "0 INTRODUCE2 rejected.\n");
 +                 "0 INTRODUCE2 rejected, "
-+                 "0 HSDir requests on reused circuits.\n");
++                 "0 circuits with repeated HSDir requests.\n");
    tt_int_op(mock_saved_log_n_entries(), OP_EQ, 6);
  
   done:

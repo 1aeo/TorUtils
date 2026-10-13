@@ -1,4 +1,4 @@
-From 274339425f81d8b8c8bc0d362e1071ead9e5dd08 Mon Sep 17 00:00:00 2001
+From f18631e22645d1af2a07b15693ce2ca05d574474 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Tue, 13 Oct 2026 17:12:11 +0000
 Subject: [PATCH 6/7] hs_desc: Check signature length before verifying the

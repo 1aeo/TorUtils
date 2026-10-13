@@ -1,4 +1,4 @@
-From 1e41e90aba74aaf8267bb5dba90b4e3ba440264e Mon Sep 17 00:00:00 2001
+From 579d6cfab310b01ef198a73f343a1ce874ce3aee Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Tue, 13 Oct 2026 17:05:54 +0000
 Subject: [PATCH 3/7] dirserv: Stop unthrottled warnings on malformed HTTP

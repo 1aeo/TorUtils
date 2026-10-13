@@ -1,4 +1,4 @@
-From 62843095c6a598ae84accd6991c13ae018e36196 Mon Sep 17 00:00:00 2001
+From bb0e92be3fc2faba5911d529a39d62361bc4c31d Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Tue, 13 Oct 2026 17:04:06 +0000
 Subject: [PATCH 2/7] hsdir: Refuse HS dir requests whose previous hop is not a
@@ -95,7 +95,7 @@ index 0c029d1..2051750 100644
  For onion services, mitigations are a work in progress and multiple options
  are currently available.
 diff --git a/src/core/or/dos.c b/src/core/or/dos.c
-index a3bd1e8..b6b0e3d 100644
+index 78017d0..3114018 100644
 --- a/src/core/or/dos.c
 +++ b/src/core/or/dos.c
 @@ -108,6 +108,11 @@ static uint64_t num_single_hop_client_refused;
@@ -162,7 +162,7 @@ index a3bd1e8..b6b0e3d 100644
  dos_log_heartbeat(void)
 @@ -1121,6 +1162,9 @@ dos_log_heartbeat(void)
    smartlist_add_asprintf(elems,
-                          "%" PRIu64 " HSDir requests on reused circuits",
+                          "%" PRIu64 " circuits with repeated HSDir requests",
                           num_hsdir_circ_reused);
 +  smartlist_add_asprintf(elems,
 +                         "%" PRIu64 " HSDir requests with an unknown "
@@ -326,7 +326,7 @@ index 9e67d99..7853071 100644
                               rentry->help, 0, NULL);
    metrics_store_entry_add_label(sentry,
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index deab901..248f1bf 100644
+index 98841cf..8ac1a6d 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -38,6 +38,7 @@
@@ -337,7 +337,7 @@ index deab901..248f1bf 100644
  
  #include "test/hs_test_helpers.h"
  #include "test/test_helpers.h"
-@@ -528,6 +529,99 @@ test_hsdir_one_request_per_circ(void *arg)
+@@ -540,6 +541,99 @@ test_hsdir_one_request_per_circ(void *arg)
    tor_free(chan);
  }
  
@@ -437,7 +437,7 @@ index deab901..248f1bf 100644
  /* Publish a descriptor to the HSDir, then fetch it. Check that the received
     descriptor matches the published one. */
  static void
-@@ -955,6 +1049,8 @@ struct testcase_t hs_cache[] = {
+@@ -967,6 +1061,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "hsdir_one_request_per_circ", test_hsdir_one_request_per_circ, TT_FORK,
      NULL, NULL },
@@ -447,15 +447,15 @@ index deab901..248f1bf 100644
      NULL, NULL },
    { "client_cache_decrypt", test_client_cache_decrypt, TT_FORK,
 diff --git a/src/test/test_status.c b/src/test/test_status.c
-index de558a6..b3ca0b6 100644
+index b24a4e5..f8ad3e1 100644
 --- a/src/test/test_status.c
 +++ b/src/test/test_status.c
 @@ -367,7 +367,8 @@ test_status_hb_not_in_consensus(void *arg)
                   "[DoSRefuseSingleHopClientRendezvous disabled], "
                   "[DoSStreamCreationEnabled disabled], "
                   "0 INTRODUCE2 rejected, "
--                 "0 HSDir requests on reused circuits.\n");
-+                 "0 HSDir requests on reused circuits, "
+-                 "0 circuits with repeated HSDir requests.\n");
++                 "0 circuits with repeated HSDir requests, "
 +                 "0 HSDir requests with an unknown previous hop.\n");
    tt_int_op(mock_saved_log_n_entries(), OP_EQ, 6);
  

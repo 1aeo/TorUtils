@@ -58,9 +58,19 @@ with the new metric live and enforcement off by default. The adjudicated claim
 ledger (31 PROVEN / 10 PARTLY / 0 REFUTED) and its corrections are in
 `analysis/claims-ledger.md`.
 
-**Not yet measured:** the real efficacy under load and the attacker's adaptation
-cost. Any "% reduction" figure in the analysis is a conditional upper bound, not
-a measurement — which is exactly what the simulator below is for.
+**First lab result (`simulator/results/`).** A closed arm64 chutney run
+(`micro_bench.txt`) shows the mechanism working: with enforcement **off**
+(default), a circuit-reusing client's 5 and 22 descriptor fetches are all served
+and nothing is closed; with enforcement **on**, the reusing client gets **0**
+served (the circuit is closed on its second request) while a **stock
+one-request-per-circuit client still completes 22/22 fetches with 0 failures**.
+So the circuit-reuse multiplier collapses to ~1 request/circuit with no
+collateral to legitimate traffic. This is a small arm64 proof-of-mechanism, not
+a scaled measurement: absolute CPU/byte numbers are not x86-representative, and
+the broader `matrix-results.csv` had flaky cells (chutney consensus timing under
+load). The scaled measurement, the attacker-adaptation cost, and the amd64 +
+seccomp numbers are the x86 tasks in `HANDOFF.md`. Any "% reduction" figure in
+the analysis remains a conditional upper bound, not a measured counterfactual.
 
 ## Benchmark (`simulator/`)
 

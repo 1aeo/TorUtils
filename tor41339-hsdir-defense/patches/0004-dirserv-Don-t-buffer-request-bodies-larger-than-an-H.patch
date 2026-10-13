@@ -1,4 +1,4 @@
-From 7117532304a45cb6311c5356dd8f28df66daa040 Mon Sep 17 00:00:00 2001
+From e2d12d6b3b7c2fc713d762a490e2109020b54a97 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Tue, 13 Oct 2026 17:08:11 +0000
 Subject: [PATCH 4/7] dirserv: Don't buffer request bodies larger than an HS
