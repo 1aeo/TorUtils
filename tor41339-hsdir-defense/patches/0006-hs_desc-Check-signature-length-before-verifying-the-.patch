@@ -1,0 +1,157 @@
+From 274339425f81d8b8c8bc0d362e1071ead9e5dd08 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Tue, 13 Oct 2026 17:12:11 +0000
+Subject: [PATCH 6/7] hs_desc: Check signature length before verifying the
+ signing cert
+
+desc_decode_plaintext_v3() parsed and Ed25519-verified the descriptor
+signing key certificate before desc_sig_is_valid() checked the
+signature's length. Move that length check, with its existing
+rate-limited warning, ahead of cert_parse_and_validate(). A descriptor
+whose signature has the wrong length, like the 88-character padded
+signatures uploaded to HSDirs in August 2026, is now rejected without
+any public key operation. The set of accepted descriptors does not
+change, because ed25519_signature_from_base64() rejects any other
+length anyway.
+
+This saves one Ed25519 verification per such upload, but only for the
+specific wrong-length case: a valid descriptor costs the same, and an
+attacker can simply use a valid-length (86-character) signature, so this
+only cheapens the specific 88-character padded case. A well-formed
+malicious upload still costs two verifications, and the descriptor fetch
+flood in 41339 is unaffected because it never decodes.
+
+Related to 41339.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ changes/ticket41339_sigcheck             |  9 +++++++
+ scripts/maint/practracker/exceptions.txt |  1 +
+ src/feature/hs/hs_descriptor.c           | 33 ++++++++++++------------
+ src/test/test_hs_descriptor.c            | 10 +++++++
+ 4 files changed, 37 insertions(+), 16 deletions(-)
+ create mode 100644 changes/ticket41339_sigcheck
+
+diff --git a/changes/ticket41339_sigcheck b/changes/ticket41339_sigcheck
+new file mode 100644
+index 0000000..3a6e762
+--- /dev/null
++++ b/changes/ticket41339_sigcheck
+@@ -0,0 +1,9 @@
++  o Minor features (onion service directory):
++    - Check the length of an onion service descriptor signature before
++      parsing and verifying its signing key certificate, so a descriptor
++      whose signature has the wrong length is rejected without any public key
++      operation. The set of accepted descriptors is unchanged, since
++      ed25519_signature_from_base64() rejects any other length anyway. This
++      only makes a flood of wrong-length uploads, such as the 88-character
++      padded signatures seen in August 2026, slightly cheaper to reject; an
++      attacker can still send a valid-length signature. Part of ticket 41339.
+diff --git a/scripts/maint/practracker/exceptions.txt b/scripts/maint/practracker/exceptions.txt
+index 3d033c5..7dea4ba 100644
+--- a/scripts/maint/practracker/exceptions.txt
++++ b/scripts/maint/practracker/exceptions.txt
+@@ -247,6 +247,7 @@ problem function-size /src/feature/hs/hs_descriptor.c:decrypt_desc_layer() 111
+ problem function-size /src/feature/hs/hs_descriptor.c:decode_introduction_point() 122
+ problem function-size /src/feature/hs/hs_descriptor.c:desc_decode_superencrypted_v3() 107
+ problem function-size /src/feature/hs/hs_descriptor.c:desc_decode_encrypted_v3() 109
++problem function-size /src/feature/hs/hs_descriptor.c:desc_decode_plaintext_v3() 102
+ problem file-size /src/feature/hs/hs_service.c 4300
+ problem function-size /src/feature/keymgt/loadkey.c:ed_key_init_from_file() 326
+ problem function-size /src/feature/nodelist/authcert.c:trusted_dirs_load_certs_from_string() 123
+diff --git a/src/feature/hs/hs_descriptor.c b/src/feature/hs/hs_descriptor.c
+index 0f1cdef..8106f2f 100644
+--- a/src/feature/hs/hs_descriptor.c
++++ b/src/feature/hs/hs_descriptor.c
+@@ -2055,17 +2055,6 @@ desc_sig_is_valid(const char *b64_sig,
+   /* Verifying nothing won't end well :). */
+   tor_assert(encoded_len > 0);
+ 
+-  /* Signature length check. */
+-  if (strlen(b64_sig) != ED25519_SIG_BASE64_LEN) {
+-    static ratelim_t warning_limit = RATELIM_INIT(600);
+-    log_fn_ratelim(&warning_limit, LOG_WARN, LD_REND,
+-                   "Service descriptor has an invalid signature length. "
+-                   "Expected %d but got %lu",
+-                   ED25519_SIG_BASE64_LEN,
+-                   (unsigned long) strlen(b64_sig));
+-    goto err;
+-  }
+-
+   /* First, convert base64 blob to an ed25519 signature. */
+   if (ed25519_signature_from_base64(&sig, b64_sig) != 0) {
+     log_warn(LD_REND, "Service descriptor does not contain a valid "
+@@ -2224,6 +2213,21 @@ desc_decode_plaintext_v3(smartlist_t *tokens,
+     goto err;
+   }
+ 
++  /* Check the signature length before any public key operation, so a
++   * descriptor with a wrong-length signature is rejected without one. */
++  tok = find_by_keyword(tokens, R3_SIGNATURE);
++  tor_assert(tok->n_args == 1);
++  const char *b64_sig = tok->args[0];
++  if (strlen(b64_sig) != ED25519_SIG_BASE64_LEN) {
++    static ratelim_t warning_limit = RATELIM_INIT(600);
++    log_fn_ratelim(&warning_limit, LOG_WARN, LD_REND,
++                   "Service descriptor has an invalid signature length. "
++                   "Expected %d but got %lu",
++                   ED25519_SIG_BASE64_LEN,
++                   (unsigned long) strlen(b64_sig));
++    goto err;
++  }
++
+   /* Descriptor signing certificate. */
+   tok = find_by_keyword(tokens, R3_DESC_SIGNING_CERT);
+   tor_assert(tok->object_body);
+@@ -2273,11 +2277,8 @@ desc_decode_plaintext_v3(smartlist_t *tokens,
+   desc->superencrypted_blob = tor_memdup(tok->object_body, tok->object_size);
+   desc->superencrypted_blob_size = tok->object_size;
+ 
+-  /* Extract signature and verify it. */
+-  tok = find_by_keyword(tokens, R3_SIGNATURE);
+-  tor_assert(tok->n_args == 1);
+-  /* First arg here is the actual encoded signature. */
+-  if (!desc_sig_is_valid(tok->args[0], &desc->signing_pubkey,
++  /* Verify the signature, whose length we checked above. */
++  if (!desc_sig_is_valid(b64_sig, &desc->signing_pubkey,
+                          encoded_desc, encoded_len)) {
+     goto err;
+   }
+diff --git a/src/test/test_hs_descriptor.c b/src/test/test_hs_descriptor.c
+index 89815f4..716e53f 100644
+--- a/src/test/test_hs_descriptor.c
++++ b/src/test/test_hs_descriptor.c
+@@ -654,6 +654,7 @@ static void
+ test_decode_bad_signature(void *arg)
+ {
+   hs_desc_plaintext_data_t desc_plaintext;
++  char *padded = NULL;
+   int ret;
+ 
+   (void) arg;
+@@ -663,6 +664,14 @@ test_decode_bad_signature(void *arg)
+   /* Update approx time to dodge cert expiration */
+   update_approx_time(1502661599);
+ 
++  /* A padded (88-character) signature is rejected on its length, before the
++   * signing key certificate is parsed and verified. */
++  tor_asprintf(&padded, "%.*s==\n", (int) strlen(HS_DESC_BAD_SIG) - 1,
++               HS_DESC_BAD_SIG);
++  ret = hs_desc_decode_plaintext(padded, &desc_plaintext);
++  tt_int_op(ret, OP_EQ, HS_DESC_DECODE_PLAINTEXT_ERROR);
++  tt_ptr_op(desc_plaintext.signing_key_cert, OP_EQ, NULL);
++
+   setup_full_capture_of_logs(LOG_WARN);
+   ret = hs_desc_decode_plaintext(HS_DESC_BAD_SIG, &desc_plaintext);
+   tt_int_op(ret, OP_EQ, HS_DESC_DECODE_PLAINTEXT_ERROR);
+@@ -670,6 +679,7 @@ test_decode_bad_signature(void *arg)
+   teardown_capture_of_logs();
+ 
+  done:
++  tor_free(padded);
+   hs_desc_plaintext_data_free_contents(&desc_plaintext);
+ }
+ 
+-- 
+2.39.5
+
