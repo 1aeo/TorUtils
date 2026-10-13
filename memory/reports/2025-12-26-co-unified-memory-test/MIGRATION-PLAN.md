@@ -28,7 +28,7 @@
 
 ```bash
 # Create experiment archive
-cd /home/krim/TorUtils/memory/reports
+cd /home/tor/TorUtils/memory/reports
 tar -czvf 2025-12-26-co-unified-memory-test-archive.tar.gz \
     2025-12-26-co-unified-memory-test/
 
@@ -59,12 +59,12 @@ done
 
 ```bash
 # Collect final measurements before migration
-/home/krim/TorUtils/memory/tools/collect.sh \
-    --output /home/krim/TorUtils/memory/reports/2025-12-26-co-unified-memory-test/memory_measurements.csv \
-    --config /home/krim/TorUtils/memory/reports/2025-12-26-co-unified-memory-test/relay_config.csv
+/home/tor/TorUtils/memory/tools/collect.sh \
+    --output /home/tor/TorUtils/memory/reports/2025-12-26-co-unified-memory-test/memory_measurements.csv \
+    --config /home/tor/TorUtils/memory/reports/2025-12-26-co-unified-memory-test/relay_config.csv
 
 # Generate final chart
-cd /home/krim/TorUtils/memory/reports/2025-12-26-co-unified-memory-test
+cd /home/tor/TorUtils/memory/reports/2025-12-26-co-unified-memory-test
 python3 chart-memory.py
 ```
 
@@ -147,10 +147,10 @@ done
 
 ```bash
 # Review the script first
-cat /home/krim/TorUtils/memory/reports/2025-12-26-co-unified-memory-test/migrate-to-production.sh
+cat /home/tor/TorUtils/memory/reports/2025-12-26-co-unified-memory-test/migrate-to-production.sh
 
 # Execute migration
-sudo /home/krim/TorUtils/memory/reports/2025-12-26-co-unified-memory-test/migrate-to-production.sh
+sudo /home/tor/TorUtils/memory/reports/2025-12-26-co-unified-memory-test/migrate-to-production.sh
 ```
 
 ### 4.2 Verify Configuration
@@ -202,7 +202,7 @@ systemctl list-units 'tor@*' --state=failed
 
 ```bash
 # Create a simple monitoring script for ongoing checks
-cat > /home/krim/TorUtils/memory/tools/check-memory.sh << 'EOF'
+cat > /home/tor/TorUtils/memory/tools/check-memory.sh << 'EOF'
 #!/bin/bash
 echo "=== Tor Relay Memory Summary ==="
 echo "Date: $(date)"
@@ -225,7 +225,7 @@ echo "Relays running: $count"
 echo "Average RSS: ${avg} MB"
 echo "Total RSS: ${total} GB"
 EOF
-chmod +x /home/krim/TorUtils/memory/tools/check-memory.sh
+chmod +x /home/tor/TorUtils/memory/tools/check-memory.sh
 ```
 
 ### 5.3 Ongoing Monitoring (Optional)
@@ -234,7 +234,7 @@ If desired, set up periodic monitoring:
 
 ```bash
 # Add to crontab for daily memory check
-(crontab -l 2>/dev/null; echo "0 6 * * * /home/krim/TorUtils/memory/tools/check-memory.sh 2>&1 | logger -t tor-memory") | crontab -
+(crontab -l 2>/dev/null; echo "0 6 * * * /home/tor/TorUtils/memory/tools/check-memory.sh 2>&1 | logger -t tor-memory") | crontab -
 ```
 
 ---
