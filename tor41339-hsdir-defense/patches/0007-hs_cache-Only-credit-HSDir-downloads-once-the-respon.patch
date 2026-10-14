@@ -1,0 +1,254 @@
+From 5dae0e008960953f8fbba32d87b545a83cce7cdf Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Wed, 14 Oct 2026 01:49:22 +0000
+Subject: [PATCH 7/7] hs_cache: Only credit HSDir downloads once the response
+ is written out
+
+b628ffeb6 (40996) increments n_downloaded when the HSDir's directory
+connection closes, to raise the bar for an attacker trying to keep its
+descriptors out of the OOM cleanup. Any close counted, including a GET
+followed by END or DESTROY before the response was moved to the exit
+stream. Since 28a76bd5a the counter persists for the blinded key's
+lifetime, so such cheap credits last.
+
+Credit in connection_dir_finished_flushing() instead, guarded on
+hs_ident so a non-HS response still closes cleanly. The precise
+accounting boundary is now the dir connection's outbuf being fully
+flushed to the linked edge; whether that earns credit before a close
+depends on their ordering (a close that happens first still earns
+none). For BEGIN_DIR the response is moved into the exit edge's inbuf
+regardless of the circuit's package window, so this is still not proof
+that the client received the descriptor. It does not affect the fetch
+flood in 41339.
+
+Related to 41339.
+---
+ changes/hsdir_download_credit             |  9 +++
+ src/feature/dircache/dircache.c           |  2 +-
+ src/feature/dircommon/dir_connection_st.h |  4 +-
+ src/feature/dircommon/directory.c         | 18 ++---
+ src/feature/hs/hs_cache.c                 |  5 +-
+ src/test/test_hs_cache.c                  | 97 +++++++++++++++++++++++
+ 6 files changed, 119 insertions(+), 16 deletions(-)
+ create mode 100644 changes/hsdir_download_credit
+
+diff --git a/changes/hsdir_download_credit b/changes/hsdir_download_credit
+new file mode 100644
+index 0000000000..6ee401367b
+--- /dev/null
++++ b/changes/hsdir_download_credit
+@@ -0,0 +1,9 @@
++  o Minor bugfixes (onion service directory cache):
++    - On HSDirs, only count an onion service descriptor as downloaded once the
++      directory connection has written the whole response out to the linked
++      edge, instead of whenever it closes. Previously, requesting a descriptor
++      and closing the stream or circuit before the response was written out was
++      enough to raise the count that decides which descriptors are removed
++      first when the cache is full. The new boundary is the outbuf being fully
++      flushed, which still does not prove the client received the descriptor.
++      Bugfix on 0.4.8.14. Related to ticket 41339.
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index 8b960e1ff4..7a62ac16a7 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1392,7 +1392,7 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+ 
+   /* We have successfully written the descriptor on the connection outbuf so
+    * save this query identifier into the dir_connection_t in order
+-   * to associate it to the descriptor when closing. */
++   * to associate it to the descriptor once the response is written out. */
+   {
+     /* Decode blinded key. This is certain to work else
+      * hs_cache_lookup_as_dir() would have failed. */
+diff --git a/src/feature/dircommon/dir_connection_st.h b/src/feature/dircommon/dir_connection_st.h
+index ee26fd3627..b774d32cdb 100644
+--- a/src/feature/dircommon/dir_connection_st.h
++++ b/src/feature/dircommon/dir_connection_st.h
+@@ -45,8 +45,8 @@ struct dir_connection_t {
+   /* Hidden service connection identifier for dir connections: Used by HS
+      client-side code to fetch HS descriptors, and by the service-side code to
+      upload descriptors. Also used by the HSDir, setting only the blinded key,
+-     in order to locate back the descriptor in the cache once the dir stream is
+-     closed. */
++     in order to locate back the descriptor in the cache once the response is
++     written out. */
+   struct hs_ident_dir_conn_t *hs_ident;
+ 
+   /** If this is a one-hop connection, tracks the state of the directory guard
+diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
+index 3f410fc67c..764fe6a691 100644
+--- a/src/feature/dircommon/directory.c
++++ b/src/feature/dircommon/directory.c
+@@ -639,17 +639,6 @@ connection_dir_about_to_close(dir_connection_t *dir_conn)
+     connection_dir_client_request_failed(dir_conn);
+   }
+ 
+-  /* If we are an HSDir, mark the corresponding descriptor as downloaded. This
+-   * is needed for the OOM cache cleanup.
+-   *
+-   * This is done when the direction connection is closed in order to raise the
+-   * attack cost of filling the cache with bogus descriptors. That attacker
+-   * would need to increase that downloaded counter for the attack to be
+-   * successful which is expensive. */
+-  if (conn->purpose == DIR_PURPOSE_SERVER && dir_conn->hs_ident) {
+-    hs_cache_mark_dowloaded_as_dir(dir_conn->hs_ident);
+-  }
+-
+   connection_dir_client_refetch_hsdesc_if_needed(dir_conn);
+ }
+ 
+@@ -688,6 +677,13 @@ connection_dir_finished_flushing(dir_connection_t *conn)
+         connection_mark_for_close(TO_CONN(conn));
+       } else {
+         log_debug(LD_DIRSERV, "Finished writing server response. Closing.");
++        /* If we are an HSDir, count the descriptor as downloaded for the OOM
++         * cache cleanup only now that the whole response has been written out
++         * to the linked edge, so that closing the stream or circuit before
++         * then earns no credit. This is not proof the client received it. */
++        if (conn->hs_ident) {
++          hs_cache_mark_dowloaded_as_dir(conn->hs_ident);
++        }
+         connection_mark_for_close(TO_CONN(conn));
+       }
+       return 0;
+diff --git a/src/feature/hs/hs_cache.c b/src/feature/hs/hs_cache.c
+index 03d2bdfd6b..06f2e31e48 100644
+--- a/src/feature/hs/hs_cache.c
++++ b/src/feature/hs/hs_cache.c
+@@ -436,8 +436,9 @@ hs_cache_lookup_as_dir(uint32_t version, const char *query,
+ }
+ 
+ /** Using the given directory identifier, lookup the descriptor in our cache
+- * and if present, increment the downloaded counter. This is done when the
+- * directory connection fetching this descriptor is closed. */
++ * and if present, increment the downloaded counter. This is done once the
++ * directory connection serving it has written out the whole response, which
++ * does not prove that the client received it. */
+ void
+ hs_cache_mark_dowloaded_as_dir(const hs_ident_dir_conn_t *ident)
+ {
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index 8ac1a6df3d..b600e6a171 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -16,6 +16,8 @@
+ #include "feature/hs/hs_cache.h"
+ #include "feature/dircache/dircache.h"
+ #include "feature/dirclient/dirclient.h"
++#include "feature/dircommon/directory.h"
++#include "feature/hs/hs_ident.h"
+ #include "feature/nodelist/networkstatus.h"
+ #include "core/mainloop/connection.h"
+ #include "core/proto/proto_http.h"
+@@ -1047,6 +1049,97 @@ test_client_cache_remove(void *arg)
+   UNMOCK(networkstatus_get_reasonably_live_consensus);
+ }
+ 
++static void
++hsdir_mock_mark_for_close(connection_t *conn, int line, const char *file)
++{
++  (void) line;
++  (void) file;
++  conn->marked_for_close = 1;
++}
++
++/* An HSDir counts a descriptor as downloaded only once the whole response has
++ * been written out (connection_dir_finished_flushing()), not when the
++ * connection closes. So closing before the response is written out -- for
++ * example when the circuit's package window is empty and nothing has moved to
++ * the linked edge yet -- earns no credit, and a normal flush earns exactly
++ * one. The accounting boundary is the dir-conn outbuf being fully flushed to
++ * the linked edge, which does not prove the client received the descriptor. */
++static void
++test_downloaded_counter_as_dir(void *arg)
++{
++  int ret;
++  char *desc_str = NULL;
++  hs_descriptor_t *desc = NULL;
++  ed25519_keypair_t signing_kp;
++  dir_connection_t *conns[2] = { NULL, NULL };
++  const hs_cache_dir_descriptor_t *entry;
++
++  (void) arg;
++
++  init_test();
++  MOCK(connection_mark_for_close_internal_, hsdir_mock_mark_for_close);
++
++  ret = ed25519_keypair_generate(&signing_kp, 0);
++  tt_int_op(ret, OP_EQ, 0);
++  desc = hs_helper_build_hs_desc_with_ip(&signing_kp);
++  tt_assert(desc);
++  ret = hs_desc_encode_descriptor(desc, &signing_kp, NULL, &desc_str);
++  tt_int_op(ret, OP_EQ, 0);
++  ret = hs_cache_store_as_dir(desc_str);
++  tt_int_op(ret, OP_EQ, 0);
++  entry = lookup_v3_desc_as_dir(desc->plaintext_data.blinded_pubkey.pubkey);
++  tt_assert(entry);
++
++  /* Two server-side connections that each served this descriptor. */
++  for (int i = 0; i < 2; i++) {
++    conns[i] = dir_connection_new(AF_INET);
++    TO_CONN(conns[i])->purpose = DIR_PURPOSE_SERVER;
++    TO_CONN(conns[i])->state = DIR_CONN_STATE_SERVER_WRITING;
++    conns[i]->hs_ident =
++      hs_ident_server_dir_conn_new(&desc->plaintext_data.blinded_pubkey);
++  }
++
++  /* Blocked output / early abort: closed before the response was ever written
++   * out (finished_flushing never ran). No credit. */
++  connection_mark_for_close(TO_CONN(conns[0]));
++  connection_dir_about_to_close(conns[0]);
++  tt_u64_op(entry->n_downloaded, OP_EQ, 0);
++
++  /* Normal flush: the whole response is written out, then the connection
++   * closes. Exactly one credit, and about_to_close does not add a second. */
++  ret = connection_dir_finished_flushing(conns[1]);
++  tt_int_op(ret, OP_EQ, 0);
++  tt_assert(TO_CONN(conns[1])->marked_for_close);
++  connection_dir_about_to_close(conns[1]);
++  tt_u64_op(entry->n_downloaded, OP_EQ, 1);
++
++ done:
++  UNMOCK(connection_mark_for_close_internal_);
++  for (int i = 0; i < 2; i++)
++    connection_free_minimal(TO_CONN(conns[i]));
++  hs_descriptor_free(desc);
++  tor_free(desc_str);
++}
++
++/* A non-HS server response (hs_ident NULL) finishes flushing and closes
++ * normally, without trying to credit a descriptor. */
++static void
++test_downloaded_counter_non_hs(void *arg)
++{
++  dir_connection_t *conn = dir_connection_new(AF_INET);
++  (void) arg;
++
++  MOCK(connection_mark_for_close_internal_, hsdir_mock_mark_for_close);
++  TO_CONN(conn)->purpose = DIR_PURPOSE_SERVER;
++  TO_CONN(conn)->state = DIR_CONN_STATE_SERVER_WRITING;
++  tt_int_op(connection_dir_finished_flushing(conn), OP_EQ, 0);
++  tt_assert(TO_CONN(conn)->marked_for_close);
++
++ done:
++  UNMOCK(connection_mark_for_close_internal_);
++  connection_free_minimal(TO_CONN(conn));
++}
++
+ struct testcase_t hs_cache[] = {
+   /* Encoding tests. */
+   { "directory", test_directory, TT_FORK,
+@@ -1063,6 +1156,10 @@ struct testcase_t hs_cache[] = {
+     NULL, NULL },
+   { "hsdir_refuse_unknown_prev_hop", test_hsdir_refuse_unknown_prev_hop,
+     TT_FORK, NULL, NULL },
++  { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
++    NULL, NULL },
++  { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
++    NULL, NULL },
+   { "client_cache", test_client_cache, TT_FORK,
+     NULL, NULL },
+   { "client_cache_decrypt", test_client_cache_decrypt, TT_FORK,
+-- 
+2.43.0
+
