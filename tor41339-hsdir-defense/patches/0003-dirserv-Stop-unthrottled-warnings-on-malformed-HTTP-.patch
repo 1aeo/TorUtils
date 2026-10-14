@@ -1,0 +1,167 @@
+From 8a12e2bf7e7e53f3255a13d6f79d667cdd9fa5cd Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Wed, 14 Oct 2026 01:49:22 +0000
+Subject: [PATCH 3/7] dirserv: Stop unthrottled warnings on malformed HTTP
+ requests
+
+Anyone can make any directory server log two unthrottled warnings with
+one 37-byte request over BEGIN_DIR or to a DirPort:
+
+  "GET / HTTP/1.0\r\nContent-Length: z\r\n\r\n"
+
+fetch_from_buf_http() warns "Content-Length is bogus; maybe someone is
+trying to crash us.", and directory_handle_command() then warns "Request
+too large from ... to DirPort. Closing."
+
+Log the parser's warn-level failures at info instead: a bogus
+Content-Length, an over-long header line, and an over-long body. (The
+parser already logged its "headers too long" and "not all here yet"
+cases at debug, and the over-long-header-line path above differs from
+the request in the example, which has a well-formed header and trips the
+bogus Content-Length check.) Rate-limit the directory server's own
+warning, and reword it: it also covers malformed requests, and most
+requests now arrive over BEGIN_DIR rather than the DirPort.
+
+The parser change applies to every fetch_from_buf_http() caller.
+Directory clients and the HTTPS proxy code still warn on failure.
+HTTPTunnelPort and MetricsPort, which are local, now report a bogus
+Content-Length only at info level.
+
+Noticed while looking at bug 41339. This only makes a flood of bad
+requests more tolerable; it does nothing about the HSDir fetch flood in
+that ticket. This is a bugfix on all supported versions of Tor.
+---
+ changes/dirserv_http_log_ratelim | 10 ++++++++++
+ src/core/proto/proto_http.c      |  6 +++---
+ src/feature/dircache/dircache.c  |  7 ++++---
+ src/test/test_dir_handle_get.c   | 26 ++++++++++++++++++++++++++
+ src/test/test_proto_http.c       |  1 +
+ 5 files changed, 44 insertions(+), 6 deletions(-)
+ create mode 100644 changes/dirserv_http_log_ratelim
+
+diff --git a/changes/dirserv_http_log_ratelim b/changes/dirserv_http_log_ratelim
+new file mode 100644
+index 0000000000..8100ffbcf1
+--- /dev/null
++++ b/changes/dirserv_http_log_ratelim
+@@ -0,0 +1,10 @@
++  o Minor bugfixes (logging, directory server):
++    - Stop logging unthrottled warnings when a directory server receives a
++      malformed or oversized HTTP request. Previously, one short request with
++      a bogus Content-Length header made any directory server log two
++      warnings, one from the generic HTTP parser and one from the directory
++      server. The parser now logs its Content-Length, header-length and
++      body-length failures at info level for all of its users, and the
++      directory server rate-limits its own (reworded) warning. This is a
++      bugfix on all supported versions of Tor. Noticed while looking at
++      ticket 41339.
+diff --git a/src/core/proto/proto_http.c b/src/core/proto/proto_http.c
+index 8997eb6942..d5d1f60ca9 100644
+--- a/src/core/proto/proto_http.c
++++ b/src/core/proto/proto_http.c
+@@ -79,19 +79,19 @@ fetch_from_buf_http(buf_t *buf,
+   log_debug(LD_HTTP,"headerlen %d, bodylen %d.", (int)headerlen, (int)bodylen);
+ 
+   if (max_headerlen <= headerlen) {
+-    log_warn(LD_HTTP,"headerlen %d larger than %d. Failing.",
++    log_info(LD_HTTP,"headerlen %d larger than %d. Failing.",
+              (int)headerlen, (int)max_headerlen-1);
+     return -1;
+   }
+   if (max_bodylen <= bodylen) {
+-    log_warn(LD_HTTP,"bodylen %d larger than %d. Failing.",
++    log_info(LD_HTTP,"bodylen %d larger than %d. Failing.",
+              (int)bodylen, (int)max_bodylen-1);
+     return -1;
+   }
+ 
+   r = buf_http_find_content_length(headers, headerlen, &contentlen);
+   if (r == -1) {
+-    log_warn(LD_PROTOCOL, "Content-Length is bogus; maybe "
++    log_info(LD_PROTOCOL, "Content-Length is bogus; maybe "
+              "someone is trying to crash us.");
+     return -1;
+   } else if (r == 1) {
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index 9a9f2b06c4..627247db6e 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1752,6 +1752,7 @@ http_set_address_origin(const char *headers, connection_t *conn)
+ int
+ directory_handle_command(dir_connection_t *conn)
+ {
++  static ratelim_t warning_limit = RATELIM_INIT(600);
+   char *headers=NULL, *body=NULL;
+   size_t body_len=0;
+   int r;
+@@ -1763,9 +1764,9 @@ directory_handle_command(dir_connection_t *conn)
+                               &headers, MAX_HEADERS_SIZE,
+                               &body, &body_len, MAX_DIR_UL_SIZE, 0)) {
+     case -1: /* overflow */
+-      log_warn(LD_DIRSERV,
+-               "Request too large from %s to DirPort. Closing.",
+-               connection_describe_peer(TO_CONN(conn)));
++      log_fn_ratelim(&warning_limit, LOG_WARN, LD_DIRSERV,
++                     "Oversized or malformed directory request from %s. "
++                     "Closing.", connection_describe_peer(TO_CONN(conn)));
+       return -1;
+     case 0:
+       log_debug(LD_DIRSERV,"command not all here yet.");
+diff --git a/src/test/test_dir_handle_get.c b/src/test/test_dir_handle_get.c
+index 5f93b04c96..a529ed7afb 100644
+--- a/src/test/test_dir_handle_get.c
++++ b/src/test/test_dir_handle_get.c
+@@ -2722,6 +2722,31 @@ test_dir_handle_get_parse_accept_encoding(void *arg)
+   ;
+ }
+ 
++/* A malformed request makes the directory server log its oversized/malformed
++ * warning once, rate-limited, and at WARN (not silenced to info). */
++static void
++test_dir_handle_get_malformed_warn_ratelim(void *data)
++{
++  dir_connection_t *conn = NULL;
++  (void) data;
++
++  setup_full_capture_of_logs(LOG_WARN);
++  for (int i = 0; i < 2; i++) {
++    conn = new_dir_conn();
++    buf_add_string(TO_CONN(conn)->inbuf,
++                   "GET / HTTP/1.0\r\nContent-Length: z\r\n\r\n");
++    tt_int_op(directory_handle_command(conn), OP_EQ, -1);
++    connection_free_minimal(TO_CONN(conn));
++    conn = NULL;
++  }
++  expect_single_log_msg_containing("Oversized or malformed directory request");
++
++ done:
++  teardown_capture_of_logs();
++  if (conn)
++    connection_free_minimal(TO_CONN(conn));
++}
++
+ #define DIR_HANDLE_CMD(name,flags) \
+   { #name, test_dir_handle_get_##name, (flags), NULL, NULL }
+ 
+@@ -2792,5 +2817,6 @@ struct testcase_t dir_handle_get_tests[] = {
+   DIR_HANDLE_CMD(status_vote_next_consensus_signatures_busy, 0),
+   DIR_HANDLE_CMD(status_vote_next_consensus_signatures, 0),
+   DIR_HANDLE_CMD(parse_accept_encoding, 0),
++  DIR_HANDLE_CMD(malformed_warn_ratelim, TT_FORK),
+   END_OF_TESTCASES
+ };
+diff --git a/src/test/test_proto_http.c b/src/test/test_proto_http.c
+index 7458e40496..198e70eefb 100644
+--- a/src/test/test_proto_http.c
++++ b/src/test/test_proto_http.c
+@@ -193,6 +193,7 @@ test_proto_http_invalid(void *arg)
+     tt_ptr_op(b, OP_EQ, NULL);
+     tt_u64_op(bl, OP_EQ, 0);
+     expect_log_msg_containing(cases[i].expect);
++    expect_no_log_severity(LOG_WARN);
+ 
+     buf_clear(buf);
+     tor_free(h);
+-- 
+2.43.0
+
