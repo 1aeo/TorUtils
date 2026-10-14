@@ -1,0 +1,53 @@
+diff --git a/src/feature/dirclient/dirclient.c b/src/feature/dirclient/dirclient.c
+index ac57bf9..9373409 100644
+--- a/src/feature/dirclient/dirclient.c
++++ b/src/feature/dirclient/dirclient.c
+@@ -1293,7 +1293,7 @@ directory_initiate_request,(directory_request_t *request))
+   log_debug(LD_DIR, "Initiating %s", dir_conn_purpose_to_string(dir_purpose));
+ 
+   if (purpose_needs_anonymity(dir_purpose, router_purpose, resource)) {
+-    tor_assert(anonymized_connection ||
++    tor_assert(anonymized_connection || getenv("EVIL_ONEHOP") ||
+                hs_service_non_anonymous_mode_enabled(options));
+   }
+ 
+@@ -1386,7 +1386,10 @@ directory_initiate_request,(directory_request_t *request))
+     /* Anonymized tunneled connections can never share a circuit.
+      * One-hop directory connections can share circuits with each other
+      * but nothing else. */
+-    int iso_flags = anonymized_connection ? ISO_STREAM : ISO_SESSIONGRP;
++    /* TEST ONLY: EVIL_ISO_SESSIONGRP makes anonymized dir requests share
++     * circuits, as the 41339 attackers do. */
++    int iso_flags = (anonymized_connection && !getenv("EVIL_ISO_SESSIONGRP")) ?
++      ISO_STREAM : ISO_SESSIONGRP;
+ 
+     /* If it's an anonymized connection, remember the fact that we
+      * wanted it for later: maybe we'll want it again soon. */
+diff --git a/src/feature/hs/hs_client.c b/src/feature/hs/hs_client.c
+index ff95cbc..0edc153 100644
+--- a/src/feature/hs/hs_client.c
++++ b/src/feature/hs/hs_client.c
+@@ -413,7 +413,9 @@ directory_launch_v3_desc_fetch(const ed25519_public_key_t *onion_identity_pk,
+   directory_request_t *req =
+     directory_request_new(DIR_PURPOSE_FETCH_HSDESC);
+   directory_request_set_routerstatus(req, hsdir);
+-  directory_request_set_indirection(req, DIRIND_ANONYMOUS);
++  /* TEST ONLY: EVIL_ONEHOP fetches HS descriptors over one-hop circuits. */
++  directory_request_set_indirection(req, getenv("EVIL_ONEHOP") ?
++                                    DIRIND_ONEHOP : DIRIND_ANONYMOUS);
+   directory_request_set_resource(req, base64_blinded_pubkey);
+   directory_request_fetch_set_hs_ident(req, &hs_conn_dir_ident);
+   directory_initiate_request(req);
+diff --git a/src/feature/rend/rendcommon.c b/src/feature/rend/rendcommon.c
+index 5a9689e..eb45560 100644
+--- a/src/feature/rend/rendcommon.c
++++ b/src/feature/rend/rendcommon.c
+@@ -126,6 +126,7 @@ assert_circ_anonymity_ok(const origin_circuit_t *circ,
+   tor_assert(circ->build_state);
+ 
+   if (circ->build_state->onehop_tunnel) {
+-    tor_assert(hs_service_allow_non_anonymous_connection(options));
++    tor_assert(getenv("EVIL_ONEHOP") ||
++               hs_service_allow_non_anonymous_connection(options));
+   }
+ }
