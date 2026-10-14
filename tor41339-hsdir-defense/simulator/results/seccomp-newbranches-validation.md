@@ -33,6 +33,21 @@ pointer-shaped signal mask after that denied `rt_sigprocmask(SIG_BLOCK)`). These
 EPERMs fire only at thread creation (startup), outside the enforcement windows,
 and are not from the patch.
 
+## Cross-confirmation (independent broad EPERM audit)
+A separate audit straced every thread of all 9 sandboxed relays/authorities
+across 3× verify + 18 HSFETCH + DirPort probes, patched vs unpatched. The only
+EPERM returns anywhere were a benign baseline set: `setsockopt(SOL_TCP,
+TCP_ULP, "tls")` (OpenSSL's kernel-TLS probe per new TLS conn — the filter
+refuses it, OpenSSL falls back to userspace TLS; pre-existing in stock),
+an occasional `openat("/proc/sys/vm/overcommit_memory")`, and the startup
+`rt_sigprocmask(SIG_BLOCK)`. Counts: patched-default 25, patched-enforce 12,
+unpatched-control 1 (+1 overcommit) — all TCP_ULP, scaling with new-connection
+count (OR-conns 189/170/157). **The patched EPERM set is a subset of stock.**
+My new-branches windows showing an empty EPERM set is consistent with this:
+the reuse/one-hop load reuses established channels, so few new-TLS TCP_ULP
+probes fell inside the 60 s windows, and nothing outside the benign baseline
+appeared on the close/503 branches. The two audits together are definitive.
+
 ## Conclusion
 The new enforcement branches add **no sandbox-denied syscall** on amd64. The
 amd64 seccomp gate is closed for both the stock paths (0 bad syscalls across
