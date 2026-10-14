@@ -1,0 +1,203 @@
+From 34498e6b1c7400898fe6ab986e819eaaabd883a3 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Wed, 14 Oct 2026 01:49:22 +0000
+Subject: [PATCH 4/7] dirserv: Don't buffer request bodies larger than an HS
+ descriptor
+
+A relay that is not a directory authority accepts only one kind of
+upload: an onion service descriptor POSTed to /tor/hs/.
+directory_handle_command_post() answers every other POST with 400, and
+the GET handlers ignore the body. Yet directory_handle_command() let any
+request buffer a body of up to MAX_DIR_UL_SIZE (16 MB) on every relay.
+
+On non-authorities, limit the body to hs_cache_get_max_descriptor_size(),
+capped at MAX_DIR_UL_SIZE. In addition, make fetch_from_buf_http() fail
+as soon as a request's declared Content-Length reaches the limit, instead
+of returning 0 (incomplete) and buffering until the body arrives; the
+existing actual-bytes limit is unchanged, so this rejects nothing that
+was not already going to be rejected, only sooner. hs_desc_decode_plaintext()
+rejects descriptors whose strlen() reaches the limit, so this refuses no
+descriptor the parser would accept, with two exceptions: the HTTP layer
+counts any bytes sent after Content-Length, and it counts any bytes after
+a NUL inside the body (the descriptor parser stops at the first NUL via
+strlen()). Tor sends exactly Content-Length bytes with no trailing data.
+Authorities, including bridge authorities, keep the 16 MB limit.
+
+The early Content-Length check is scoped to the !force_complete branch,
+so it only affects callers that wait for a complete body. Auditing every
+fetch_from_buf_http()/connection_fetch_from_buf_http() caller -- the dir
+server (force_complete 0), directory clients (dirclient.c, allow_partial),
+the HTTP CONNECT/HTTPTunnel path and the MetricsPort (both force_complete
+0, 1024-byte limit), and the HTTPS proxy response (force_complete 0) --
+none passes a limit that a legitimate body reaches, and the force_complete
+directory-client path that tolerates a truncated download is untouched.
+
+Behaviour changes:
+ - An oversized upload to a non-authority now has its stream closed with
+   no HTTP status, instead of a 400. (It was rejected before as well; a
+   C tor onion service therefore emits no HS_DESC FAILED.)
+ - HSV3MaxDescriptorSize now also limits the HTTP request body that
+   non-authority directory servers buffer. The parameter's entry in
+   torspec's param-spec should say so.
+ - Oversized uploads can no longer trigger the unthrottled "Service
+   descriptor is too big" warning on non-authorities.
+
+This limits buffering per stream, not in total. BEGIN_DIR streams are not
+subject to DoSStreamCreation, so an attacker who opens more streams can
+still make a relay hold about as much memory as they send, until the
+MaxMemInQueues OOM handler or the directory connection stall timeout
+frees it. What this removes is a single stream holding 16 MB.
+
+Hardening related to bug 41339. It does not affect the HSDir fetch flood
+in that ticket, which is made of small GETs with no body, or the August
+malformed uploads, whose bodies were well under 50 KB.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ changes/dirserv_upload_size     |  8 ++++++
+ src/core/proto/proto_http.c     |  8 ++++++
+ src/feature/dircache/dircache.c | 10 ++++---
+ src/test/test_dir_handle_get.c  | 46 +++++++++++++++++++++++++++++++++
+ 4 files changed, 69 insertions(+), 3 deletions(-)
+ create mode 100644 changes/dirserv_upload_size
+
+diff --git a/changes/dirserv_upload_size b/changes/dirserv_upload_size
+new file mode 100644
+index 0000000000..9f30b5e078
+--- /dev/null
++++ b/changes/dirserv_upload_size
+@@ -0,0 +1,8 @@
++  o Minor features (directory server, denial of service):
++    - Relays that are not directory authorities now reject a directory request
++      whose body is too large to be an onion service descriptor, the only
++      upload they accept, instead of buffering up to 16 MB of it. The HTTP
++      parser also now rejects a request as soon as its declared Content-Length
++      exceeds the limit, rather than waiting for the body to arrive. The limit
++      is the HSV3MaxDescriptorSize consensus parameter, capped at 16 MB.
++      Authorities keep the 16 MB limit. Part of ticket 41339.
+diff --git a/src/core/proto/proto_http.c b/src/core/proto/proto_http.c
+index d5d1f60ca9..4f66a5dee0 100644
+--- a/src/core/proto/proto_http.c
++++ b/src/core/proto/proto_http.c
+@@ -99,6 +99,14 @@ fetch_from_buf_http(buf_t *buf,
+     log_debug(LD_HTTP,"Got a contentlen of %d.",(int)contentlen);
+     if (bodylen < contentlen) {
+       if (!force_complete) {
++        /* The declared body is already too large to ever be accepted (the
++         * actual-bytes check below enforces the same limit once the body
++         * arrives). Reject it now instead of buffering until then. */
++        if (max_bodylen <= contentlen) {
++          log_info(LD_HTTP, "Declared Content-Length %d larger than %d. "
++                   "Failing.", (int)contentlen, (int)max_bodylen-1);
++          return -1;
++        }
+         log_debug(LD_HTTP,"body not all here yet.");
+         return 0; /* not all there yet */
+       }
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index 627247db6e..8b960e1ff4 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1637,8 +1637,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+   }
+ 
+   if (!authdir_mode(options)) {
+-    /* we just provide cached directories; we don't want to
+-     * receive anything. */
++    /* we just provide cached directories; we don't want to receive
++     * anything. (directory_handle_command() limits our body size.) */
+     write_short_http_response(conn, 400, "Nonauthoritative directory does not "
+                            "accept posted server descriptors");
+     goto done;
+@@ -1756,13 +1756,17 @@ directory_handle_command(dir_connection_t *conn)
+   char *headers=NULL, *body=NULL;
+   size_t body_len=0;
+   int r;
++  /* Non-authorities only accept HS descriptor posts, so don't buffer a body
++   * that is too large to be one. Authorities keep the 16 MB limit. */
++  const size_t max_body_len = authdir_mode(get_options()) ? MAX_DIR_UL_SIZE :
++    MIN(MAX_DIR_UL_SIZE, hs_cache_get_max_descriptor_size());
+ 
+   tor_assert(conn);
+   tor_assert(conn->base_.type == CONN_TYPE_DIR);
+ 
+   switch (connection_fetch_from_buf_http(TO_CONN(conn),
+                               &headers, MAX_HEADERS_SIZE,
+-                              &body, &body_len, MAX_DIR_UL_SIZE, 0)) {
++                              &body, &body_len, max_body_len, 0)) {
+     case -1: /* overflow */
+       log_fn_ratelim(&warning_limit, LOG_WARN, LD_DIRSERV,
+                      "Oversized or malformed directory request from %s. "
+diff --git a/src/test/test_dir_handle_get.c b/src/test/test_dir_handle_get.c
+index a529ed7afb..a2d6cd4619 100644
+--- a/src/test/test_dir_handle_get.c
++++ b/src/test/test_dir_handle_get.c
+@@ -36,6 +36,7 @@
+ #include "feature/dircache/dirserv.h"
+ #include "feature/dirauth/dirvote.h"
+ #include "test/log_test_helpers.h"
++#include "feature/hs/hs_cache.h"
+ #include "feature/dirauth/voting_schedule.h"
+ 
+ #include "feature/dircommon/dir_connection_st.h"
+@@ -2747,6 +2748,50 @@ test_dir_handle_get_malformed_warn_ratelim(void *data)
+     connection_free_minimal(TO_CONN(conn));
+ }
+ 
++/* Return directory_handle_command()'s result for an HS descriptor POST that
++ * declares Content-Length <b>declared</b> and actually sends <b>sent</b> body
++ * bytes. */
++static int
++handle_hs_post(size_t declared, size_t sent)
++{
++  dir_connection_t *conn = new_dir_conn();
++  char *body = tor_malloc_zero(sent ? sent : 1);
++  buf_add_printf(TO_CONN(conn)->inbuf, "POST /tor/hs/3/publish HTTP/1.0\r\n"
++                 "Content-Length: %"TOR_PRIuSZ"\r\n\r\n", declared);
++  buf_add(TO_CONN(conn)->inbuf, body, sent);
++  int r = directory_handle_command(conn);
++  tor_free(body);
++  connection_free_minimal(TO_CONN(conn));
++  return r;
++}
++
++/* Non-authorities refuse a request body too large to be an HS descriptor,
++ * and refuse one whose declared Content-Length is too large right away,
++ * without waiting for the body to arrive. */
++static void
++test_dir_handle_get_hs_post_size_limit(void *data)
++{
++  const size_t max_len = hs_cache_get_max_descriptor_size();
++  (void) data;
++
++  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
++  /* A body just under the limit is read; one that reaches it is refused. */
++  tt_int_op(handle_hs_post(max_len - 1, max_len - 1), OP_EQ, 0);
++  tt_int_op(handle_hs_post(max_len, max_len), OP_EQ, -1);
++  /* An oversized declared Content-Length with no body yet is refused at once
++   * (-1), not left incomplete (0). */
++  tt_int_op(handle_hs_post(max_len, 0), OP_EQ, -1);
++  tt_int_op(handle_hs_post(max_len - 1, 0), OP_EQ, 0);
++#ifdef HAVE_MODULE_DIRAUTH
++  /* Authorities keep the 16 MB limit. */
++  get_options_mutable()->AuthoritativeDir = 1;
++  tt_int_op(handle_hs_post(max_len, max_len), OP_EQ, 0);
++#endif
++
++ done:
++  UNMOCK(connection_write_to_buf_impl_);
++}
++
+ #define DIR_HANDLE_CMD(name,flags) \
+   { #name, test_dir_handle_get_##name, (flags), NULL, NULL }
+ 
+@@ -2818,5 +2863,6 @@ struct testcase_t dir_handle_get_tests[] = {
+   DIR_HANDLE_CMD(status_vote_next_consensus_signatures, 0),
+   DIR_HANDLE_CMD(parse_accept_encoding, 0),
+   DIR_HANDLE_CMD(malformed_warn_ratelim, TT_FORK),
++  DIR_HANDLE_CMD(hs_post_size_limit, TT_FORK),
+   END_OF_TESTCASES
+ };
+-- 
+2.43.0
+

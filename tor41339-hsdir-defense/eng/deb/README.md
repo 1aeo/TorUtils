@@ -30,3 +30,31 @@
     params, so enforcement is off and the relay only counts.
   - `first-attempt-INVALID-port-clash/` is kept for transparency. That run
     shared chutney's fixed ports with another lab net and never bootstrapped.
+
+## Rebuild from the reordered series (`…+tor41339.2`)
+
+This build exists for provenance: its source order matches the series
+proposed upstream (`../series-reordered/`). It is still **not for
+deployment**, as above.
+
+- `packages-reordered/`: `tor_0.4.9.14-1~noble+1+tor41339.2_amd64.deb`,
+  sha256 `379f8afa…7b02`. Same pipeline; the quilt series is `0000`
+  followed by the reordered `0001`–`0007`. `dh_auto_test`: 1613 ok.
+- **Code identity with `…+tor41339.1`:** in `/usr/bin/tor`, `.text`,
+  `.rodata` and `.data` are byte-identical and the address-normalized
+  disassembly diff is 0 lines. Only `.note.gnu.build-id` differs. See
+  `packages-reordered/code-identity-vs-tor41339.1.txt`.
+- `install-run-reordered/`: fresh-container install. `--verify-config`
+  returns 0 for both torrcs. The private-net relay reached Bootstrapped 100%
+  and was reachable, with `Seccomp: 2`, both `hsdir_*` counters at 0 over
+  120 s, and 0 bad syscalls.
+
+**Shutdown with `Sandbox 1`.** In this run tor did **not** exit within 5 s
+of SIGTERM. This is the known upstream bug tor#41060, and it is present on
+unpatched `main` too. On glibc 2.39, after the seccomp filter is installed,
+`pthread_create`'s `rt_sigprocmask(SIG_BLOCK)` is refused with EPERM, and
+glibc then restores an uninitialized signal mask that blocks
+TERM/INT/QUIT. See `../seccomp/out/anomaly/`. A controlled repro gave:
+Sandbox 1, stuck 15/15 for patched and for stock; Sandbox 0, exited 15/15
+for both. Operators running `Sandbox 1` should expect systemd to fall back
+to SIGKILL at `TimeoutStopSec`. This is independent of this series.

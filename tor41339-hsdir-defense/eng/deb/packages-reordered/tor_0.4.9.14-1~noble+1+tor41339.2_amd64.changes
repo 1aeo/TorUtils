@@ -1,0 +1,34 @@
+Format: 1.8
+Date: Wed, 14 Oct 2026 02:05:50 +0000
+Source: tor
+Binary: tor tor-geoipdb
+Built-For-Profiles: noudeb
+Architecture: amd64 all
+Version: 0.4.9.14-1~noble+1+tor41339.2
+Distribution: noble
+Urgency: medium
+Maintainer: Peter Palfrader <weasel@debian.org>
+Changed-By: 1aeo <github@1aeo.com>
+Description:
+ tor        - anonymizing overlay network for TCP
+ tor-geoipdb - GeoIP database for Tor
+Changes:
+ tor (0.4.9.14-1~noble+1+tor41339.2) noble; urgency=medium
+ .
+   * Apply tor#41339 HSDir-flood defensive series (patches 0001-0007, v3
+     reordered: known-prev-hop rule first); restore doc/nofooter.conf.
+Checksums-Sha1:
+ 7372837b78cf0034380feca7be527c6008406c0b 6924824 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.2_amd64.ddeb
+ 71091ea329528ef0b068a5868f853de908734c8d 2823792 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.2_all.deb
+ 03597b24fae0ccf2c9922370e73351f99fe147aa 8660 tor_0.4.9.14-1~noble+1+tor41339.2_amd64.buildinfo
+ d7306711c7573190c8e52ef360a478d3355fd805 1757032 tor_0.4.9.14-1~noble+1+tor41339.2_amd64.deb
+Checksums-Sha256:
+ b9d0f98dfb5b3dc405c383cf2abe305e7056edb1beedd9910335eb3542595c7b 6924824 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.2_amd64.ddeb
+ 6568117e90e038ca32d02eb5d22d32d36624c5a1ae5c575b350bda7417944fa6 2823792 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.2_all.deb
+ d017e55dcfa88403fd4ffdf24f687bc50762ee4ac6879c801c948a9776ab252f 8660 tor_0.4.9.14-1~noble+1+tor41339.2_amd64.buildinfo
+ 379f8afa76dd32b57119e98ad6cb7fcb48f009d0d0199fd9b02c2ef209e87b02 1757032 tor_0.4.9.14-1~noble+1+tor41339.2_amd64.deb
+Files:
+ 8beb38a0304a6a6a2bb443cc024ea167 6924824 debug optional tor-dbgsym_0.4.9.14-1~noble+1+tor41339.2_amd64.ddeb
+ 6bcee21c75fdc8c6b0fdb6b76740edec 2823792 net optional tor-geoipdb_0.4.9.14-1~noble+1+tor41339.2_all.deb
+ 59c76b6bba872e33f3855ed29d1d0c29 8660 net optional tor_0.4.9.14-1~noble+1+tor41339.2_amd64.buildinfo
+ 78cb1973821801b4f14bc356c0a2263e 1757032 net optional tor_0.4.9.14-1~noble+1+tor41339.2_amd64.deb
