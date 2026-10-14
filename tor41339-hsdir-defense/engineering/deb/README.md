@@ -18,6 +18,13 @@ The built packages are at the top of this subtree in `../../packages/`:
 `tor_0.4.9.14-1~noble+1+tor41339.2_amd64.deb` and `tor-geoipdb_…_all.deb`, with
 `SHA256SUMS`, `.buildinfo` and `.changes`.
 
+**Install the `tor` package alone — it contains the patched daemon with all 7
+patches** (`/usr/bin/tor` + the systemd units). `tor-geoipdb` is the standard
+upstream split-out: arch-independent GeoIP *data* only (no code), unchanged from
+stock, so install it only if you want the bundled GeoIP DB refreshed — most
+relays already have it from the stock package. The `.buildinfo`/`.changes`/
+`SHA256SUMS` files are build-provenance metadata, not installable.
+
 ## How it was built (`build-reordered/`)
 
 A fresh `ubuntu:24.04` container ran `build-in-container-reordered.sh` on the
