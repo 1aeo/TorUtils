@@ -16,3 +16,43 @@ The onion service and the client are stock (unpatched) tor.
 - `sandbox-check.sh <datadir>...`: read-only evidence collector for any lab
   node. It reports the torrc Sandbox value, the live Seccomp mode
   (2 = filter), the bad-syscall count and the `hsdir_*` DoS metrics.
+
+## Results
+
+- `out/`: three configurations under `Sandbox 1`: patched-default,
+  patched-enforce (`HSDirOneRequestPerCircuit 1`,
+  `HSDirRefuseUnknownPrevHop 1`) and unpatched-control.
+  - 33/33 tor processes show `Seccomp: 2`.
+  - 0 "Caught a bad syscall".
+  - 4/4 verify rounds pass in each configuration.
+  - 18 single HSFETCHes each: 16 RECEIVED and 2 NOT_FOUND, from an HSDir
+    that is not on the ring. The pattern is the same in all three.
+  - DirPort probes show 0004 under the sandbox. On a relay, an oversized
+    declared or actual body is rejected at once by patched tor; unpatched
+    tor waits for the body or buffers it.
+- `out-strace-audit/`: the **EPERM audit**. Tor's filter is
+  `seccomp_init(SCMP_ACT_ERRNO(EPERM))`, so a refused syscall returns EPERM
+  silently and does not raise SIGSYS. The audit therefore attaches
+  `strace -f -e status=failed` to every thread of every sandboxed relay and
+  authority during the traffic phase. Per-configuration summary
+  (`EPERM-SUMMARY.txt`):
+  - **patched-default:** only `setsockopt(SOL_TCP, TCP_ULP, "tls")`, 25
+    times.
+  - **patched-enforce:** the same call, 12 times.
+  - **unpatched-control:** the same call once, plus one
+    `openat("/proc/sys/vm/overcommit_memory")`.
+
+  `TCP_ULP` with value 0x736c74 ("tls") is OpenSSL's kernel-TLS probe on a
+  new connection. The filter refuses it and OpenSSL falls back to userspace
+  TLS. The count follows how many connections were opened while strace was
+  attached. Whole-run OR-connection counts are comparable: 189, 170 and 157.
+  The patched EPERM set is a subset of the stock set, so **the patches add
+  no denied syscall** on these paths.
+- **Shutdown correction.** Under `Sandbox 1`, nodes do **not** exit on
+  SIGINT or SIGTERM, on patched and stock alike (upstream tor#41060; see
+  `out/anomaly/`). `chutney stop` sends SIGINT twice and then SIGKILL. The
+  earlier note "all nodes exited on chutney stop" meant they were gone
+  afterwards, not that they shut down cleanly.
+- **Not covered here:** the 0001 circuit-close and 0002 503 branches under
+  the sandbox. Stock traffic never reaches them. The benchmark track runs
+  `sandbox-check.sh` with `STRACE_SECS` in its enforcement cells.
