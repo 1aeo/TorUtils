@@ -151,6 +151,18 @@ Remove the two `HSDir*` torrc lines (or set them to `0`) and reload — you are
 back to stock behaviour immediately. To revert the binary, copy the stock binary
 back and reload. Nothing persistent was changed.
 
+### Sandbox 1 caveat (pre-existing upstream tor#41060 — NOT these patches)
+If your relay runs with `Sandbox 1` on Ubuntu 24.04 (glibc 2.39), tor's main
+thread can end up ignoring `SIGTERM`/`SIGINT` after the seccomp filter installs
+— a **pre-existing upstream bug (tor#41060)** that reproduces identically on
+stock Tor 0.4.9.14 and is unrelated to this series (confirmed 15/15 on stock and
+patched; `Sandbox 0` exits cleanly). Practical effect: `systemctl stop`/`reload`
+via signals may not take, and systemd `SIGKILL`s the process at `TimeoutStopSec`.
+For this observe deployment: either run the canary **without** `Sandbox 1`
+(observe mode needs no sandbox), or, if you keep `Sandbox 1`, roll back with
+`systemctl restart` and verify the PID actually changed. The count-only patches
+add nothing to this behaviour.
+
 ## 7. Privacy
 Keep the raw capture (and anything with fingerprints/IPs) operator-private.
 Share back only the derived aggregates — the ratios and the shape — with no
