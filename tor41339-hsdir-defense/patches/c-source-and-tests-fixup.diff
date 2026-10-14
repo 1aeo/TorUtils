@@ -146,16 +146,18 @@ index b9ab998569..e35f3e1418 100644
  uint64_t dos_get_num_stream_rejected(void);
  
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 9a9f2b06c4..74d9484648 100644
+index 9a9f2b06c4..f038877950 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
-@@ -1366,13 +1366,13 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+@@ -1366,13 +1366,14 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
                                "Rejecting single hop HS v3 descriptor request");
      goto done;
    }
+-  if (!connection_dir_check_prev_hop(conn)) {
++  const bool prev_hop_known = connection_dir_check_prev_hop(conn);
 +  if (!connection_dir_note_hs_request(conn))
 +    goto done;
-   if (!connection_dir_check_prev_hop(conn)) {
++  if (!prev_hop_known) {
      write_short_http_response(conn, 503, "Rejecting HS request: previous hop "
                                "is not a known relay");
      goto done;
@@ -165,13 +167,15 @@ index 9a9f2b06c4..74d9484648 100644
  
    /* After the path prefix follows the base64 encoded blinded pubkey which we
     * use to get the descriptor from the cache. Skip the prefix and get the
-@@ -1618,13 +1618,13 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+@@ -1618,13 +1619,14 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
                                  "Rejecting single hop HS descriptor post");
        goto done;
      }
+-    if (!connection_dir_check_prev_hop(conn)) {
++    const bool prev_hop_known = connection_dir_check_prev_hop(conn);
 +    if (!connection_dir_note_hs_request(conn))
 +      goto done;
-     if (!connection_dir_check_prev_hop(conn)) {
++    if (!prev_hop_known) {
        write_short_http_response(conn, 503, "Rejecting HS request: previous "
                                  "hop is not a known relay");
        goto done;
@@ -240,7 +244,7 @@ index 7853071cb9..8537a3277a 100644
                               rentry->help, 0, NULL);
    metrics_store_entry_add_label(sentry,
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 8ac1a6df3d..a0f7c29c7f 100644
+index 8ac1a6df3d..dc252cc0ec 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -417,15 +417,19 @@ helper_hs_request_on_circ(or_circuit_t *circ, bool post)
@@ -325,7 +329,7 @@ index 8ac1a6df3d..a0f7c29c7f 100644
    get_options_mutable()->ORPort_set = 1;
    get_options_mutable()->RefuseUnknownExits = 0; /* Independent of HS rule. */
    dos_opts = get_dos_options(get_options_mutable());
-@@ -590,14 +609,41 @@ test_hsdir_refuse_unknown_prev_hop(void *arg)
+@@ -590,14 +609,42 @@ test_hsdir_refuse_unknown_prev_hop(void *arg)
    tt_u64_op(dos_get_num_hsdir_unknown_prev_hop(), OP_EQ, 1);
  
    /* Force enforcement on via torrc: an unknown previous hop now gets our own
@@ -364,11 +368,12 @@ index 8ac1a6df3d..a0f7c29c7f 100644
 +  }
 +  tt_u64_op(dos_get_num_hsdir_circ_reused(), OP_EQ, circ_reused_before + 3);
 +  tt_u64_op(dos_get_num_hsdir_req_reused(), OP_EQ, req_reused_before + 3);
++  tt_u64_op(dos_get_num_hsdir_unknown_prev_hop(), OP_EQ, 7);
 +  dos_opts->HSDirOneRequestPerCircuit = -1;
  
    /* A known relay as previous hop is served even while enforcing. The mock
     * consensus has a single routerstatus with the zeroed prev-hop identity, so
-@@ -627,6 +673,7 @@ test_hsdir_refuse_unknown_prev_hop(void *arg)
+@@ -627,6 +674,7 @@ test_hsdir_refuse_unknown_prev_hop(void *arg)
  
   done:
    UNMOCK(networkstatus_get_latest_consensus);
