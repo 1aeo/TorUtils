@@ -14,8 +14,9 @@
 ## Packages (`../../packages/`)
 
 - `tor_0.4.9.14-1~noble+1+tor41339.3_amd64.deb` — the patched daemon
-  (`/usr/bin/tor` + the systemd units). **Install this one alone; it contains
-  all 7 patches.**
+  (`/usr/bin/tor` + the systemd units); **it alone contains all 7 patches.**
+  For a canary, unpack it to `/opt` and switch one instance
+  (`../../operator/DEPLOY-AND-MEASURE.md` §1 Path A + §1.1).
 - `tor-geoipdb_0.4.9.14-1~noble+1+tor41339.3_all.deb` — optional,
   arch-independent GeoIP *data* (no code), unchanged from stock; it is only a
   `Recommends` of `tor`, and relays already have it from the stock package.
@@ -26,6 +27,15 @@
 On a host running several `tor@NAME` instances, do **not** install the package
 host-wide: its postinst restarts every instance. Use
 `../../operator/DEPLOY-AND-MEASURE.md` §1.1 to switch one instance only.
+
+That §1.1 switch and the §6 rollback were dry-run as written on a booted
+systemd `ubuntu:24.04` container with no network interface (a loopback-only
+`tor-instance-create` relay pointed at a fake loopback authority). The drop-in
+took effect; the stock `ExecStartPre` verify passed; the patched binary ran as
+`_tor-NAME` under `Sandbox 1` (`Seccomp: 2`) with all four counters; `SETCONF
+…=0` and the reload revert worked; an `HSDir*` torrc line failed the stock
+verify, as §1.1 warns; and the rollback restored `/usr/bin/tor`. Stock tor under
+`Sandbox 1` took the full 60 s `TimeoutStopSec` to stop (tor#41060).
 
 ## How it was built (`build-reordered/`)
 

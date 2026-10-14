@@ -22,7 +22,7 @@ consult the bandwidth `write_low` check; a request only has to arrive on an
 validly-signed descriptor without a hash-ring responsibility or flag check. The
 field data (public operator reports, and the de-identified capture in `data/`)
 show the flood is **fetch** traffic (write:read ~11:1 on the attacked relay,
-~170× its baseline request rate) that reuses one circuit for many descriptor
+~180× its baseline request rate) that reuses one circuit for many descriptor
 requests.
 
 ## The series (`patches/`)

@@ -106,11 +106,11 @@ HSDirOneRequestPerCircuit auto
 HSDirRefuseUnknownPrevHop auto
 
 # Expose the counters on loopback only:
-MetricsPort 127.0.0.1:9035
+MetricsPort 127.0.0.1:9035          # example port; keep your relay's own
 MetricsPortPolicy accept 127.0.0.1
 
 # Tighten log resolution during the incident (6h default is too coarse):
-HeartbeatPeriod 5 minutes     # a hard minimum MIN_HEARTBEAT_PERIOD is enforced
+HeartbeatPeriod 30 minutes    # tor's minimum; smaller values are raised to it
 ```
 
 **Precedence (for both options):** an explicit torrc value (anything other than
@@ -187,13 +187,14 @@ regexes for all the keys above. Minimal loop (loopback only):
 
 ```sh
 # Run on the relay host. Appends timestamp + raw counters every 10 s.
+sudo install -d -m 0700 /var/operator-private
 while true; do
   printf '%s ' "$(date -u +%s)"
   curl -s http://127.0.0.1:9035/metrics | \
     grep -E 'tor_relay_(streams_total\{type="BEGIN(_DIR)?"|traffic_bytes|load_onionskins_total\{type="ntor_v3"|congestion_control_total\{state="cc_circuits"|circuits_total\{state="opened"|dos_total)'
   echo
   sleep 10
-done >> /var/operator-private/41339-capture.log
+done | sudo tee -a /var/operator-private/41339-capture.log >/dev/null
 ```
 
 Post-process by **differencing adjacent samples** to get req/s, bytes/s,
@@ -285,20 +286,21 @@ the matching simulator knob. The simulator lives in
 
 | Field feature | Captured counter(s) | Derived quantity | Sim knob | Grounded or assumed? |
 |---|---|---|---|---|
-| Requests-per-circuit multiplier | `hsdir_circ_reused` (patch); `BEGIN_DIR`, `circs_created` (stock) | ρ = BEGIN_DIR / HS-dir-circuits | `reuse-N` → `load_reuse()` (`EVIL_ISO_SESSIONGRP`, ctl **8020**); set `n ≈ round(ρ)`, bracketed to {1,5,22} | **Assumed** set; endpoints 5/22 semi-grounded from field ratios |
+| Requests-per-circuit multiplier | `hsdir_request_total`, `hsdir_req_reused`, `hsdir_circ_reused` (patch); `BEGIN_DIR`, `circs_created` (stock) | ρ_hs = T / (T − R) (HS requests per HS circuit); r_hs = R / T | `reuse-N` → `load_reuse()` (`EVIL_ISO_SESSIONGRP`, ctl **8020**); set `n ≈ round(ρ)`, bracketed to {1,5,22} | **Assumed** set; endpoints 5/22 semi-grounded from field ratios |
 | BEGIN_DIR absolute rate | `tor_relay_streams_total{type="BEGIN_DIR"}` (`begin_dir_recv`) | req/s over window | **No knob** — sim is open-loop serial (~0.5–5 req/s). Match the per-circuit **ratio**, not absolute rate | Rate **not reproduced** |
 | write:read byte ratio | `tor_relay_traffic_bytes{direction=...}`; for dir-only use `dirreq-write-history` | writes/reads | No direct knob (emerges from ~16 KB response size). Use only as a **sanity direction** (writes ≫ reads) | Grounded shape; weak lab mapping (sim scrapes *total* bytes) |
-| One-hop / unknown-prev-hop fraction | `hsdir_unknown_prev_hop` (patch); `BEGIN_DIR` | φ = unknown_prev_hop / BEGIN_DIR | `onehop` → `EVIL_ONEHOP` unpublished relay-client (`PublishServerDescriptor 0`, `AssumeReachable 1`, ctl **8022**) | Vector grounded; sim is **binary** on/off, not a tunable fraction |
+| One-hop / unknown-prev-hop fraction | `hsdir_unknown_prev_hop`, `hsdir_request_total` (patch) | φ = U / T (exact HS-only denominator) | `onehop` → `EVIL_ONEHOP` unpublished relay-client (`PublishServerDescriptor 0`, `AssumeReachable 1`, ctl **8022**) | Vector grounded; sim is **binary** on/off, not a tunable fraction |
 | Onionskin / CREATE-cell rate | `onionskins_ntor_v3`, `circs_created` (stock); network-wide `net_onionskins`/`nontgt_*` via `scrape_network()` | onionskins per BEGIN_DIR | `adapted` / `fetch` (one well-formed req per fresh circuit, ctl **8021**) — the post-adaptation cost | Grounded as the "after adaptation" cost |
 | Target / descriptor concentration | §4(c) spread stat; your own relay fpr + targeted onion(s) | top-bucket share / entropy | `choose_target()` / `probe_hsdirs.py` (single-target) | **Not reproduced** at population scale (field: 310–433 rotating HSDirs/day) |
 
 **How to retune:** over a fixed window W on the flooded relay, diff
-`B=ΔBEGIN_DIR`, `R=Δhsdir_circ_reused`, `U=Δhsdir_unknown_prev_hop`,
-`C=Δcircs_created`, `O=Δonionskins_ntor_v3`. Derive ρ, φ=U/B, and O/B. Pick the
-`reuse-N` nearest ρ; add the `onehop` load if φ is non-trivial. Then run the sim
-in observe mode and recompute the **same** ratios from its
-`hsdir_circ_reused` / `hsdir_unknown_prev_hop` / `begin_dir_recv` /
-`onionskins_ntor_v3`.
+`B=ΔBEGIN_DIR`, `T=Δhsdir_request_total`, `R=Δhsdir_req_reused`,
+`K=Δhsdir_circ_reused`, `U=Δhsdir_unknown_prev_hop`, `C=Δcircs_created`,
+`O=Δonionskins_ntor_v3`. Derive ρ_hs = T/(T−R), r_hs = R/T, φ = U/T, and O/B.
+Pick the `reuse-N` nearest ρ_hs; add the `onehop` load if φ is non-trivial. Then
+run the sim in observe mode and recompute the **same** ratios from its
+`hsdir_request_total` / `hsdir_req_reused` / `hsdir_unknown_prev_hop` /
+`begin_dir_recv` / `onionskins_ntor_v3`.
 
 ---
 
@@ -309,8 +311,8 @@ in observe mode and recompute the **same** ratios from its
 The sim is faithful for **this** operator iff its observe-mode ratios land inside
 tolerance of the captured ratios:
 
-- **ρ (requests-per-circuit)** and **φ (unknown-prev-hop fraction)** within
-  **±20%** (or `n` chosen to the {1,5,22} bracket around ρ).
+- **ρ_hs (HS requests per HS circuit)** and **φ (unknown-prev-hop fraction)**
+  within **±20%** (or `n` chosen to the {1,5,22} bracket around ρ_hs).
 - **O/B (onionskins-per-request)** within a factor of **~2** (loose, because of
   the total-vs-dir bytes and open-loop-rate caveats).
 
@@ -322,13 +324,13 @@ takes medians); `hsdir_circ_reused` is noisy per-run for the reuse load.
 
 **Honesty gates (decide which patch, if any, helps you):**
 
-- **Gate A — reuse ≈ 1.** If `R` stays ≈0 and ρ≈1 (each circuit makes one
-  request), **0002 has nothing to remove and will not help you.** Report that
+- **Gate A — reuse ≈ 1.** If `R` stays ≈0 (r_hs ≈ 0, ρ_hs ≈ 1: each circuit
+  makes one HS request), **0002 has nothing to remove and will not help you.** Report that
   rather than shipping 0002 — the "served ≤ number of circuits" bound collapses to
   ≈0 benefit at ρ=1.
 - **Gate B — unknown_prev_hop is high.** If φ is large, the vector is
   one-hop / self-generated-relay and **0001 is the right lever** (expected refusals
-  under enforcement ≈ φ·B as 503s; false-positive risk ≈1.2e-6 per request,
+  under enforcement ≈ φ·T = U as 503s; false-positive risk ≈1.2e-6 per request,
   worst-hour upper bound ≈4.2e-3, during the brief window before a fresh consensus
   is seen).
 - **Neither (R≈0 and φ≈0):** pure high-rate one-per-circuit from known relays —
@@ -359,8 +361,8 @@ presence of an `HS_DESC RECEIVED` event). Compare to the observe window.
 **Rollback is one command, instant, reversible:**
 
 ```
-SETCONF HSDirOneRequestPerCircuit=auto   # (or =0)
-SETCONF HSDirRefuseUnknownPrevHop=auto
+SETCONF HSDirOneRequestPerCircuit=0     # 0 = never enforce; auto would follow the consensus
+SETCONF HSDirRefuseUnknownPrevHop=0
 ```
 
 Network-wide consensus params stay off, so no other relay is affected. Because
@@ -393,4 +395,3 @@ instantly-reversible window is the first real-network evidence** — keep it sho
 - **Observe mode is invisible and harmless.** With both AUTOBOOLs at `auto` and no
   consensus opinion, real users see no change and no external party can detect that
   logging is on.
-```
