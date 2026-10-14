@@ -52,11 +52,13 @@ The two tor#41339 patches add exactly the logging you asked for. By default they
 so you can run them on a production HSDir and read the attack's two defining
 features off the real traffic.
 
-### 2.1 The two counters (patch-only)
+### 2.1 The count-only counters (patch-only)
 
 | Feature | MetricsPort key | Heartbeat line | Patch |
 |---|---|---|---|
 | Per-circuit request **reuse** (circuits carrying ≥2 HS-dir requests) | `tor_relay_dos_total{type="hsdir_circ_reused"}` | `"<N> circuits with repeated HSDir requests"` | 0002 |
+| **Repeat** HS requests (every request on a circuit that already made one) | `tor_relay_dos_total{type="hsdir_req_reused"}` | — | 0002 |
+| **Total** anonymous HS directory requests (the exact denominator) | `tor_relay_dos_total{type="hsdir_request_total"}` | — | 0002 |
 | HS requests whose **previous hop is not a known relay** (one-hop / self-gen) | `tor_relay_dos_total{type="hsdir_unknown_prev_hop"}` | `"<N> HSDir requests with an unknown previous hop"` | 0001 |
 
 - `hsdir_circ_reused` counts **circuits**, incremented **once** per circuit the
@@ -70,8 +72,13 @@ features off the real traffic.
   `connection_dir_prev_hop_is_known_relay()` (which tests
   `connection_or_digest_is_known_relay(p_chan->identity_digest)` against the
   consensus / held descriptors) → `dos_note_hsdir_unknown_prev_hop()`.
+- `hsdir_req_reused` counts **requests** — every repeat HS request on a circuit
+  that already made one (a circuit carrying 22 requests adds 21). MetricsPort only.
+- `hsdir_request_total` counts **every** anonymous HS directory request — the
+  exact HS-only denominator for the reuse fraction (`req_reused / request_total`)
+  and for φ (`unknown_prev_hop / request_total`).
 
-Both are monotonic process-wide uint64 totals since relay start — **take deltas
+All are monotonic process-wide uint64 totals since relay start — **take deltas
 across a window**, and expect a reset only on restart. Counting is
 **unconditional**: both notes run *before* any enforce check, so they count even
 with enforcement off.
@@ -204,11 +211,11 @@ report cites 5–22 req/circuit). A legitimate stock Tor / Arti / Onionbalance
 client always lands in bucket **1**, so this cannot deanonymize a normal user.
 
 **(b) prev-hop-known FRACTION over time.** Patch 0001 gives the numerator
-(`hsdir_unknown_prev_hop`) but **no denominator**. Add a count-only
-`num_hsdir_request_total` incremented once per HS request in
-`connection_dir_check_prev_hop()`, exposed as
-`tor_relay_dos_total{type="hsdir_request_total"}`. Then the fraction is
-`unknown / total`, with its trend via `rate()` at the MetricsPort.
+(`hsdir_unknown_prev_hop`); patch 0002 now ships the exact denominator
+`hsdir_request_total` (every anonymous HS request) plus `hsdir_req_reused`
+(every repeat request). So both exact fractions are read directly at the
+MetricsPort — φ = `unknown_prev_hop / request_total` and the HS-only reuse
+fraction `r_hs = req_reused / request_total` — each with its trend via `rate()`.
 
 **(c) descriptor / ring concentration — bucketed, never the address.** The
 requested id is the **blinded ed25519 key** in the GET URL
