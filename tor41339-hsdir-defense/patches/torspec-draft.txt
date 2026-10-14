@@ -1,0 +1,52 @@
+Companion torspec changes for patches 0001, 0002 and 0004 (draft, not filed).
+These reflect the v2 design: counting is unconditional, enforcement defaults
+off, each HSDir rule has its own consensus parameter and its own torrc
+AUTOBOOL override, and neither reuses "refuseunknownexits".
+
+=== param-spec.md, "Relay behavior parameters" (or a new HSDir section) ===
+
+New entry:
+
+  "hsdir_one_request_per_circ" -- If 1, an HSDir closes, with reason
+  RESOURCELIMIT, any circuit on which it receives a second onion service
+  descriptor fetch or upload. If 0, it only counts them. Tor and Arti make
+  each such request on its own circuit. Whatever the value, the reuse is
+  counted (DoS heartbeat, and tor_relay_dos_total{type="hsdir_circ_reused"}
+  on the MetricsPort). An HSDir with no consensus and no torrc opinion only
+  counts (does not close): the torrc option HSDirOneRequestPerCircuit (0/1/
+  auto) overrides this parameter, which overrides a default of count-only.
+  Min: 0. Max: 1. Default: 0.
+  First appeared: <release>.
+
+New entry:
+
+  "hsdir_refuse_unknown_prev_hop" -- If 1, an HSDir refuses (HTTP 503) an
+  onion service descriptor fetch or upload whose previous hop is not a relay
+  in the HSDir's consensus or for which it has a descriptor; if 0, it only
+  counts such requests. This is independent of "refuseunknownexits" and of
+  the exit path. The count appears in the DoS heartbeat and as
+  tor_relay_dos_total{type="hsdir_unknown_prev_hop"}. The torrc option
+  HSDirRefuseUnknownPrevHop (0/1/auto) overrides this parameter, which
+  overrides a default of count-only.
+  Min: 0. Max: 1. Default: 0.
+  First appeared: <release>.
+
+Note: "refuseunknownexits" is unchanged. The HSDir known-previous-hop rule
+deliberately does NOT reuse it, so an operator who also runs an exit can turn
+the HSDir rule on or off without affecting exit-stream protection, and vice
+versa.
+
+=== param-spec.md, existing "HSV3MaxDescriptorSize" entry, append ===
+
+  On relays that are not directory authorities, this also bounds the HTTP
+  request body that the directory server will buffer: a POST whose declared
+  or actual body exceeds min(HSV3MaxDescriptorSize, 16 MB) is rejected
+  without being fully buffered. Authorities keep the 16 MB limit.
+
+=== rend-spec-v3 (HSDir behaviour, descriptor upload and fetch sections) ===
+
+  Clients and services MUST make each descriptor fetch and each descriptor
+  upload on its own circuit. An HSDir MAY close a circuit that carries more
+  than one such request (see "hsdir_one_request_per_circ"), and MAY refuse a
+  request whose previous hop it does not recognize as a relay (see
+  "hsdir_refuse_unknown_prev_hop").
