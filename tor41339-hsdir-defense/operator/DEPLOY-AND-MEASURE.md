@@ -157,6 +157,46 @@ done
 keys sampled over time.) The counters are cumulative; rates are deltas between
 samples. A tor restart resets them to 0 — watch for a decrease and segment.
 
+### 4.1 Prometheus (preferred if you already run it)
+
+tor's `MetricsPort` already serves Prometheus exposition format at
+`/metrics`, so Prometheus scrapes it directly — no exporter needed. The one
+catch is that the port is **loopback-only** (`accept 127.0.0.1`), so decide how
+Prometheus reaches it, cheapest-and-safest first:
+
+1. **Prometheus on the relay host** (simplest for a single canary): scrape
+   `127.0.0.1:9035`, nothing else to open.
+2. **Prometheus on another host:** do **not** expose 9035 to the internet.
+   Either tunnel it (`ssh -N -L 9035:127.0.0.1:9035 relay-host`, scrape
+   `127.0.0.1:9035` on the Prometheus side), or bind the MetricsPort to a
+   private/VPN interface (`MetricsPort <priv-ip>:9035` +
+   `MetricsPortPolicy accept <prometheus-ip>` + a host firewall rule limiting
+   9035 to that IP). Never `accept *`.
+
+Scrape config (counters are monotonic — rate them in PromQL, don't log per
+request):
+```yaml
+scrape_configs:
+  - job_name: tor-hsdir-canary
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['127.0.0.1:9035']
+        labels: { role: hsdir-canary }   # no fingerprint / IP / nickname in labels
+```
+Useful queries (all `tor_relay_dos_total` series are counters):
+```promql
+rate(tor_relay_streams_total{type="BEGIN_DIR"}[1m])          # flood rate
+rate(tor_relay_dos_total{type="hsdir_request_total"}[5m])     # total HS requests/s
+# HS-only repeat-request fraction r_hs (needs the current-series build):
+  rate(tor_relay_dos_total{type="hsdir_req_reused"}[5m])
+/ rate(tor_relay_dos_total{type="hsdir_request_total"}[5m])
+# unknown-prev-hop fraction phi (exact HS-only denominator):
+  rate(tor_relay_dos_total{type="hsdir_unknown_prev_hop"}[5m])
+/ rate(tor_relay_dos_total{type="hsdir_request_total"}[5m])
+```
+Confidentiality: keep relay fingerprint/IP/nickname out of Prometheus labels and
+out of any dashboard you share — role labels only.
+
 ---
 
 ## 5. Produce the two decisive ratios + shape
