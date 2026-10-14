@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Closed-lab ticket-41339 HSDir-flood measurement harness.
+"""Closed-lab ticket-41339 HSDir-flood measurement harness (x86, extended).
 
 All activity is loopback-only inside the private chutney net.  "Load" is a
 high rate of ordinary, well-formed HSDir descriptor requests (HSFETCH) issued
@@ -7,11 +7,15 @@ through the control ports of nodes we own.  No exploit, no malformed cells, no
 targeting of the real network.
 
 Measures, at one target HSDir, per cell:
-  - requests received (BEGIN_DIR), reused-circuit counter, dir bytes,
-    circuits created/closed, onionskins, target CPU% and RSS;
-  - the attacking load client's own success rate + latency;
-  - a stock (legitimate) client's HS-descriptor success rate + latency,
-    sampled throughout, to show the defense preserves legitimate access.
+  - requests received (BEGIN_DIR), reused-circuit counter, 0002 refusal
+    counter, dir bytes, circuits created/closed, onionskins, CPU% and RSS;
+  - the load client's own success rate; a stock (legitimate) client's
+    HS-descriptor success rate + latency throughout;
+  - network-wide onionskins processed and circuits created across ALL relays
+    (to show where cost moves when the attacker adapts to one-per-circuit).
+
+Node identities are DISCOVERED from the nodes dir (robust to flavor size):
+metrics port = 19100 + nodenum ; control port = 8000 + nodenum.
 """
 import glob
 import json
@@ -25,10 +29,36 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ctl_lib import Ctl
 from metrics import scrape
 
-RELAYS = ["004r", "005r", "006r", "007r", "008r"]
-HS = ["011h", "012h", "013h"]
-# nodenum -> metrics port is 19100 + nodenum ; control port is 8000 + nodenum
-RELAY_NODENUM = {"004r": 4, "005r": 5, "006r": 6, "007r": 7, "008r": 8}
+
+def discover(nodes_dir):
+    """Return (relays, hs, stock_client) nicks discovered from the nodes dir.
+    relays = plain relays (tag 'r'); hs = onion services (tag 'h');
+    stock_client = first client (tag 'c')."""
+    def nicks(tag):
+        out = []
+        for p in sorted(glob.glob("%s/[0-9]*%s" % (nodes_dir, tag))):
+            b = os.path.basename(p)
+            if re.fullmatch(r"\d+%s" % tag, b):
+                out.append(b)
+        return out
+    relays = nicks("r")
+    hs = nicks("h")
+    clients = nicks("c")
+    if not relays or not hs or not clients:
+        raise SystemExit("discover: relays=%s hs=%s clients=%s" % (relays, hs, clients))
+    return relays, hs, clients[0]
+
+
+def nodenum(nick):
+    return int(re.match(r"(\d+)", nick).group(1))
+
+
+def ctlport(nick):
+    return 8000 + nodenum(nick)
+
+
+def mport(nick):
+    return 19100 + nodenum(nick)
 
 
 def fpr(nodes_dir, nick):
@@ -41,14 +71,12 @@ def onion(nodes_dir, nick):
 
 
 def pid_of(nodes_dir, nick):
-    p = "%s/%s/pid" % (nodes_dir, nick)
-    return int(open(p).read().strip())
+    return int(open("%s/%s/pid" % (nodes_dir, nick)).read().strip())
 
 
 def proc_cpu_ticks(pid):
     f = open("/proc/%d/stat" % pid).read().split()
-    # fields 14 (utime) and 15 (stime), 1-indexed after comm
-    return int(f[13]) + int(f[14])
+    return int(f[13]) + int(f[14])  # utime + stime
 
 
 def proc_rss_kb(pid):
@@ -61,14 +89,16 @@ def proc_rss_kb(pid):
 HZ = os.sysconf("SC_CLK_TCK")
 
 
-def choose_target(nodes_dir, stock_ctl_port, stock_cookie):
+def choose_target(nodes_dir, stock_ctl_port, stock_cookie, relays=None, hs=None):
     """Return (nick, fpr, onion) for a relay that currently serves an onion
-    (is a responsible HSDir this time period).  Re-probed per cell because the
-    HSDir hashring rotates with the consensus."""
-    onions = {n: onion(nodes_dir, n) for n in HS}
-    for rn in RELAYS:
+    (is a responsible HSDir this period). Re-probed per cell because the HSDir
+    hashring rotates with the consensus."""
+    if relays is None or hs is None:
+        relays, hs, _ = discover(nodes_dir)
+    onions = {n: onion(nodes_dir, n) for n in hs}
+    for rn in relays:
         f = fpr(nodes_dir, rn)
-        for hs, oaddr in onions.items():
+        for h, oaddr in onions.items():
             c = Ctl(stock_ctl_port, stock_cookie)
             c.setevents("HS_DESC")
             c.cmd("HSFETCH %s SERVER=$%s" % (oaddr, f))
@@ -82,17 +112,15 @@ def choose_target(nodes_dir, stock_ctl_port, stock_cookie):
 
 class LegitProber(threading.Thread):
     """Stock client (one request per circuit) repeatedly fetches a descriptor
-    from the SAME flooded target HSDir, to show a legitimate user's access to
-    the flooded HSDir is preserved.  HSFETCH ... SERVER=<fpr> always does a
-    real network fetch (no client-cache short-circuit), so every probe is a
-    genuine request.  Records success rate + latency."""
+    from the SAME flooded target HSDir, to show legitimate access is preserved.
+    HSFETCH ... SERVER=<fpr> always does a real network fetch (no client-cache
+    short-circuit). Records success rate + latency."""
     def __init__(self, ctl_port, cookie, legit_onion, tgt_fpr, interval=1.0):
         super().__init__(daemon=True)
         self.ctl_port, self.cookie = ctl_port, cookie
         self.onion, self.tgt_fpr, self.interval = legit_onion, tgt_fpr, interval
         self.stop_flag = False
-        self.attempts = 0
-        self.ok = 0
+        self.attempts = self.ok = 0
         self.latencies = []
 
     def run(self):
@@ -129,7 +157,8 @@ class LegitProber(threading.Thread):
 
 
 def load_fetch(ctl_port, cookie, tgt_fpr, oaddr, duration, result):
-    """Fetch load: one HSFETCH per fresh circuit (stock isolation)."""
+    """Fetch load: one HSFETCH per fresh circuit (stock isolation). Also the
+    'adapted' and 'one-hop' pattern (differ only in the load-client binary)."""
     c = Ctl(ctl_port, cookie, timeout=20)
     c.setevents("HS_DESC")
     issued = recv = fail = 0
@@ -149,11 +178,9 @@ def load_fetch(ctl_port, cookie, tgt_fpr, oaddr, duration, result):
 
 
 def load_reuse(ctl_port, cookie, tgt_fpr, oaddr, duration, n, result):
-    """Reuse load: groups of n descriptor fetches that share one circuit
-    (EVIL_ISO_SESSIONGRP client).  Per group: one establishing fetch (waited,
-    so its circuit is open), then n-1 fetches fired back-to-back that reuse
-    that open circuit.  This is the 41339 pattern -- several HSDir requests on
-    one circuit.  Then rotate to a fresh circuit for the next group."""
+    """Reuse load: groups of n descriptor fetches sharing one circuit
+    (EVIL_ISO_SESSIONGRP client). The 41339 pattern -- several HSDir requests
+    on one circuit. Then rotate to a fresh circuit for the next group."""
     c = Ctl(ctl_port, cookie, timeout=20)
     c.setevents("HS_DESC")
     issued = recv = fail = groups = 0
@@ -170,9 +197,6 @@ def load_reuse(ctl_port, cookie, tgt_fpr, oaddr, duration, n, result):
 
     while time.time() < end:
         groups += 1
-        # Fire n fetches back-to-back (wait only for each 250 OK, no event
-        # drain between) so they pile onto one in-flight circuit; the EVIL_ISO
-        # client lets the anonymized dir requests share that circuit.
         fired = 0
         for _ in range(n):
             if time.time() >= end:
@@ -180,52 +204,79 @@ def load_reuse(ctl_port, cookie, tgt_fpr, oaddr, duration, n, result):
             c.cmd(cmdstr)
             issued += 1
             fired += 1
-        # drain all responses for the group (RESOURCELIMIT-closed -> FAILED)
         tally(c.collect_events(max(2.0, fired * 0.2)))
     tally(c.collect_events(2))
     c.close()
     result.update(load_issued=issued, load_recv=recv, load_fail=fail, load_groups=groups)
 
 
+def scrape_network(nodes_dir, relays, tgt_nick):
+    """Sum onionskins processed and circuits created across all relays, and
+    separately for the non-target relays (where an adapted attacker's CREATE
+    load lands). Returns dict of raw counters."""
+    net_onion = net_circs = 0
+    nontgt_onion = nontgt_circs = 0
+    seen = 0
+    for rn in relays:
+        try:
+            m = scrape(mport(rn))
+        except Exception:
+            continue
+        o = m.get("onionskins_ntor_v3") or 0
+        cc = m.get("circs_created") or 0
+        net_onion += o
+        net_circs += cc
+        if rn != tgt_nick:
+            nontgt_onion += o
+            nontgt_circs += cc
+        seen += 1
+    return dict(net_onionskins=net_onion, net_circs_created=net_circs,
+                nontgt_onionskins=nontgt_onion, nontgt_circs_created=nontgt_circs,
+                relays_scraped=seen)
+
+
 def run_cell(cfg):
-    """cfg: dict with mode, load, rep, nodes_dir, target(nick,fpr,onion),
-    legit params, load client ctl/cookie, duration."""
+    """cfg: mode, load, rep, nodes_dir, target(nick,fpr,onion), legit params,
+    load client ctl/cookie, duration, [relays]."""
     nodes_dir = cfg["nodes_dir"]
     tgt_nick, tgt_fpr, tgt_onion = cfg["target"]
-    mp = 19100 + RELAY_NODENUM[tgt_nick]
+    relays = cfg.get("relays")
+    if relays is None:
+        relays, _, _ = discover(nodes_dir)
+    mp = mport(tgt_nick)
     tgt_pid = pid_of(nodes_dir, tgt_nick)
 
     result = dict(mode=cfg["mode"], load=cfg["load"], rep=cfg["rep"],
                   target_nick=tgt_nick, target_fpr=tgt_fpr,
                   flood_onion=tgt_onion, duration_s=cfg["duration"])
 
-    # start legit prober (stock client, different onion if possible)
     legit = None
     if cfg.get("legit_ctl"):
         legit = LegitProber(cfg["legit_ctl"], cfg["legit_cookie"],
                             cfg["legit_onion"], tgt_fpr)
         legit.start()
 
-    # snapshot
+    # snapshot (target + network)
     m0 = scrape(mp)
+    net0 = scrape_network(nodes_dir, relays, tgt_nick)
     cpu0 = proc_cpu_ticks(tgt_pid)
     t0 = time.time()
 
-    # run the load
     if cfg["load"] == "none":
         time.sleep(cfg["duration"])
-    elif cfg["load"] == "fetch":
-        load_fetch(cfg["load_ctl"], cfg["load_cookie"], tgt_fpr, tgt_onion,
-                  cfg["duration"], result)
     elif cfg["load"].startswith("reuse"):
         n = int(cfg["load"].split("-")[1])
         load_reuse(cfg["load_ctl"], cfg["load_cookie"], tgt_fpr, tgt_onion,
                   cfg["duration"], n, result)
+    else:  # fetch / onehop / adapted -> one request per fresh circuit
+        load_fetch(cfg["load_ctl"], cfg["load_cookie"], tgt_fpr, tgt_onion,
+                  cfg["duration"], result)
 
     wall = time.time() - t0
     cpu1 = proc_cpu_ticks(tgt_pid)
     rss = proc_rss_kb(tgt_pid)
     m1 = scrape(mp)
+    net1 = scrape_network(nodes_dir, relays, tgt_nick)
 
     if legit:
         legit.stop_flag = True
@@ -237,6 +288,9 @@ def run_cell(cfg):
             return None
         return m1[k] - m0[k]
 
+    def dn(k):
+        return net1.get(k, 0) - net0.get(k, 0)
+
     result.update(
         begin_dir_recv=d("begin_dir"),
         hsdir_circ_reused=d("hsdir_circ_reused"),
@@ -246,6 +300,10 @@ def run_cell(cfg):
         circs_created=d("circs_created"),
         circs_closed=d("circs_closed"),
         onionskins_ntor_v3=d("onionskins_ntor_v3"),
+        net_onionskins=dn("net_onionskins"),
+        net_circs_created=dn("net_circs_created"),
+        nontgt_onionskins=dn("nontgt_onionskins"),
+        nontgt_circs_created=dn("nontgt_circs_created"),
         target_cpu_pct=round(100.0 * (cpu1 - cpu0) / HZ / wall, 2),
         target_rss_mb=round(rss / 1024.0, 1) if rss else None,
         wall_s=round(wall, 1),

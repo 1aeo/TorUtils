@@ -23,8 +23,8 @@ for r in rows:
         continue
     groups.setdefault((r["mode"], r["load"]), []).append(r)
 
-MODE_ORDER = ["unpatched", "patched-observe", "patched-0001-enforce"]
-LOAD_ORDER = ["none", "fetch", "reuse-5", "reuse-22"]
+MODE_ORDER = ["unpatched", "patched-observe", "patched-0001", "patched-0002", "patched-both"]
+LOAD_ORDER = ["none", "fetch", "reuse-5", "reuse-22", "onehop", "adapted"]
 
 
 def agg(rs, key):
@@ -32,12 +32,12 @@ def agg(rs, key):
     vals = [v for v in vals if v is not None]
     if not vals:
         return None
-    return statistics.mean(vals)
+    return statistics.median(vals)
 
 
 hdr = ["mode", "load", "reps", "load_issued", "load_recv", "load_served_frac",
-       "reused", "begin_dir", "bytes_written", "circs_closed", "cpu%", "rss_mb",
-       "legit_ok/att", "legit_rate", "legit_lat_s"]
+       "reused", "unk_hop", "begin_dir", "bytes_written", "net_onion", "nontgt_onion",
+       "circs_closed", "cpu%", "rss_mb", "legit_ok/att", "legit_rate", "legit_lat_s"]
 print("\t".join(hdr))
 for mode in MODE_ORDER:
     for load in LOAD_ORDER:
@@ -55,8 +55,11 @@ for mode in MODE_ORDER:
             "%.0f" % rcv if rcv is not None else "-",
             "%.2f" % served if served is not None else "-",
             "%.1f" % agg(rs, "hsdir_circ_reused") if agg(rs, "hsdir_circ_reused") is not None else "NA",
+            "%.1f" % agg(rs, "hsdir_unknown_prev_hop") if agg(rs, "hsdir_unknown_prev_hop") is not None else "NA",
             "%.0f" % agg(rs, "begin_dir_recv") if agg(rs, "begin_dir_recv") is not None else "-",
             "%.0f" % agg(rs, "bytes_written") if agg(rs, "bytes_written") is not None else "-",
+            "%.0f" % agg(rs, "net_onionskins") if agg(rs, "net_onionskins") is not None else "-",
+            "%.0f" % agg(rs, "nontgt_onionskins") if agg(rs, "nontgt_onionskins") is not None else "-",
             "%.0f" % agg(rs, "circs_closed") if agg(rs, "circs_closed") is not None else "-",
             "%.2f" % agg(rs, "target_cpu_pct") if agg(rs, "target_cpu_pct") is not None else "-",
             "%.0f" % agg(rs, "target_rss_mb") if agg(rs, "target_rss_mb") is not None else "-",
