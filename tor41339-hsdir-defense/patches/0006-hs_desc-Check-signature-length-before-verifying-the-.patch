@@ -1,4 +1,4 @@
-From 3f59cc2e9c2b777f22c4e5dc99e936cdc7d9a19e Mon Sep 17 00:00:00 2001
+From 0ff3717ef1656b8ee64580548e0e5561fdda3ae1 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
 Subject: [PATCH 6/7] hs_desc: Check signature length before verifying the
@@ -23,11 +23,10 @@ flood in 41339 is unaffected because it never decodes.
 
 Related to 41339.
 ---
- changes/ticket41339_sigcheck             |  9 +++++++
- scripts/maint/practracker/exceptions.txt |  2 ++
- src/feature/hs/hs_descriptor.c           | 33 ++++++++++++------------
- src/test/test_hs_descriptor.c            | 10 +++++++
- 4 files changed, 38 insertions(+), 16 deletions(-)
+ changes/ticket41339_sigcheck   |  9 +++++++
+ src/feature/hs/hs_descriptor.c | 44 +++++++++++++++++++++-------------
+ src/test/test_hs_descriptor.c  | 10 ++++++++
+ 3 files changed, 47 insertions(+), 16 deletions(-)
  create mode 100644 changes/ticket41339_sigcheck
 
 diff --git a/changes/ticket41339_sigcheck b/changes/ticket41339_sigcheck
@@ -45,28 +44,35 @@ index 0000000000..3a6e762f5b
 +      only makes a flood of wrong-length uploads, such as the 88-character
 +      padded signatures seen in August 2026, slightly cheaper to reject; an
 +      attacker can still send a valid-length signature. Part of ticket 41339.
-diff --git a/scripts/maint/practracker/exceptions.txt b/scripts/maint/practracker/exceptions.txt
-index ba4055ff6a..850255469d 100644
---- a/scripts/maint/practracker/exceptions.txt
-+++ b/scripts/maint/practracker/exceptions.txt
-@@ -243,10 +243,12 @@ problem function-size /src/feature/hs/hs_cell.c:hs_cell_build_establish_intro()
- problem function-size /src/feature/hs/hs_cell.c:hs_cell_parse_introduce2() 134
- problem function-size /src/feature/hs/hs_client.c:send_introduce1() 108
- problem function-size /src/feature/hs/hs_common.c:hs_get_responsible_hsdirs() 102
-+problem file-size /src/feature/hs/hs_descriptor.c 3153
- problem function-size /src/feature/hs/hs_descriptor.c:decrypt_desc_layer() 111
- problem function-size /src/feature/hs/hs_descriptor.c:decode_introduction_point() 122
- problem function-size /src/feature/hs/hs_descriptor.c:desc_decode_superencrypted_v3() 107
- problem function-size /src/feature/hs/hs_descriptor.c:desc_decode_encrypted_v3() 109
-+problem function-size /src/feature/hs/hs_descriptor.c:desc_decode_plaintext_v3() 102
- problem file-size /src/feature/hs/hs_service.c 4300
- problem function-size /src/feature/keymgt/loadkey.c:ed_key_init_from_file() 326
- problem function-size /src/feature/nodelist/authcert.c:trusted_dirs_load_certs_from_string() 123
 diff --git a/src/feature/hs/hs_descriptor.c b/src/feature/hs/hs_descriptor.c
-index 0f1cdef71c..8106f2fd03 100644
+index 87baf40efd..3f47b0003e 100644
 --- a/src/feature/hs/hs_descriptor.c
 +++ b/src/feature/hs/hs_descriptor.c
-@@ -2055,17 +2055,6 @@ desc_sig_is_valid(const char *b64_sig,
+@@ -2039,6 +2039,23 @@ decode_intro_points(const hs_descriptor_t *desc,
+   smartlist_free(intro_points);
+ }
+ 
++/** Return 1 iff the base64-encoded signature <b>b64_sig</b> has the expected
++ * Ed25519 signature length, or log a rate-limited warning and return 0. */
++static int
++desc_sig_len_is_valid(const char *b64_sig)
++{
++  if (strlen(b64_sig) != ED25519_SIG_BASE64_LEN) {
++    static ratelim_t warning_limit = RATELIM_INIT(600);
++    log_fn_ratelim(&warning_limit, LOG_WARN, LD_REND,
++                   "Service descriptor has an invalid signature length. "
++                   "Expected %d but got %lu",
++                   ED25519_SIG_BASE64_LEN,
++                   (unsigned long) strlen(b64_sig));
++    return 0;
++  }
++  return 1;
++}
++
+ /** Return 1 iff the given base64 encoded signature in b64_sig from the encoded
+  * descriptor in encoded_desc validates the descriptor content. */
+ STATIC int
+@@ -2056,17 +2073,6 @@ desc_sig_is_valid(const char *b64_sig,
    /* Verifying nothing won't end well :). */
    tor_assert(encoded_len > 0);
  
@@ -84,7 +90,7 @@ index 0f1cdef71c..8106f2fd03 100644
    /* First, convert base64 blob to an ed25519 signature. */
    if (ed25519_signature_from_base64(&sig, b64_sig) != 0) {
      log_warn(LD_REND, "Service descriptor does not contain a valid "
-@@ -2224,6 +2213,21 @@ desc_decode_plaintext_v3(smartlist_t *tokens,
+@@ -2225,6 +2231,15 @@ desc_decode_plaintext_v3(smartlist_t *tokens,
      goto err;
    }
  
@@ -93,20 +99,14 @@ index 0f1cdef71c..8106f2fd03 100644
 +  tok = find_by_keyword(tokens, R3_SIGNATURE);
 +  tor_assert(tok->n_args == 1);
 +  const char *b64_sig = tok->args[0];
-+  if (strlen(b64_sig) != ED25519_SIG_BASE64_LEN) {
-+    static ratelim_t warning_limit = RATELIM_INIT(600);
-+    log_fn_ratelim(&warning_limit, LOG_WARN, LD_REND,
-+                   "Service descriptor has an invalid signature length. "
-+                   "Expected %d but got %lu",
-+                   ED25519_SIG_BASE64_LEN,
-+                   (unsigned long) strlen(b64_sig));
++  if (!desc_sig_len_is_valid(b64_sig)) {
 +    goto err;
 +  }
 +
    /* Descriptor signing certificate. */
    tok = find_by_keyword(tokens, R3_DESC_SIGNING_CERT);
    tor_assert(tok->object_body);
-@@ -2273,11 +2277,8 @@ desc_decode_plaintext_v3(smartlist_t *tokens,
+@@ -2274,11 +2289,8 @@ desc_decode_plaintext_v3(smartlist_t *tokens,
    desc->superencrypted_blob = tor_memdup(tok->object_body, tok->object_size);
    desc->superencrypted_blob_size = tok->object_size;
  
@@ -156,5 +156,5 @@ index 89815f4858..716e53f128 100644
  }
  
 -- 
-2.43.0
+2.39.5 (Apple Git-154)
 
