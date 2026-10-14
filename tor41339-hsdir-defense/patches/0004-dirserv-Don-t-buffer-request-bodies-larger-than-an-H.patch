@@ -1,4 +1,4 @@
-From 34498e6b1c7400898fe6ab986e819eaaabd883a3 Mon Sep 17 00:00:00 2001
+From c5cb9f80c1c24a3bc38693544b65b109ce86b823 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
 Subject: [PATCH 4/7] dirserv: Don't buffer request bodies larger than an HS
@@ -93,10 +93,10 @@ index d5d1f60ca9..4f66a5dee0 100644
          return 0; /* not all there yet */
        }
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 627247db6e..8b960e1ff4 100644
+index f8e098c59c..ad13181812 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
-@@ -1637,8 +1637,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+@@ -1627,8 +1627,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
    }
  
    if (!authdir_mode(options)) {
@@ -107,7 +107,7 @@ index 627247db6e..8b960e1ff4 100644
      write_short_http_response(conn, 400, "Nonauthoritative directory does not "
                             "accept posted server descriptors");
      goto done;
-@@ -1756,13 +1756,17 @@ directory_handle_command(dir_connection_t *conn)
+@@ -1746,13 +1746,17 @@ directory_handle_command(dir_connection_t *conn)
    char *headers=NULL, *body=NULL;
    size_t body_len=0;
    int r;
@@ -197,5 +197,5 @@ index a529ed7afb..a2d6cd4619 100644
    END_OF_TESTCASES
  };
 -- 
-2.43.0
+2.39.5 (Apple Git-154)
 
