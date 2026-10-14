@@ -95,10 +95,15 @@ MetricsPortPolicy accept 127.0.0.1
 # Finer heartbeat during the incident (default 6h is too coarse to see a wave):
 HeartbeatPeriod 60 seconds
 ```
-Reload (not restart, to avoid dropping circuits) onto the patched binary:
-`systemctl reload tor@<instance>` or send `SIGHUP`. If you swapped the binary,
-a `reload` after the swap is enough for most setups; a brief `restart` is also
-fine on a single canary.
+**Activate the patched binary with a restart.** A `reload`/`SIGHUP` only
+re-reads `torrc` — it does **not** load a new on-disk binary, so the process must
+re-exec to run patched code: `systemctl restart tor@<instance>`. This is the one
+restart that incurs the 96 h HSDir-flag reset (§0); do it once, on the canary.
+(Installing the `.deb` does this for you — its postinst restarts tor.) Dropping a
+few circuits on a single restart is expected. **After** the patched binary is
+running, the two enforcement torrc options are read per request, so flipping
+enforcement on/off later is a live `reload`/`SETCONF` with **no** further restart
+(§8).
 
 **`auto` is the safe default:** with the consensus silent on
 `hsdir_one_request_per_circ` / `hsdir_refuse_unknown_prev_hop` (it is, upstream),
