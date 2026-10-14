@@ -1,0 +1,13 @@
+EPERM audit: strace -f -e status=failed on every thread of every sandboxed relay+authority
+during: 3x chutney verify, 18 single HSFETCH (SERVER= round-robin), DirPort probes, verify.
+
+== strace-patched-default
+     25 setsockopt(FD, SOL_TCP, TCP_ULP, [7564404], 4) = -1 EPERM (Operation not permitted)
+   (whole-run OR connection open/negotiated log lines, relays+auths: 189)
+== strace-patched-enforce
+     12 setsockopt(FD, SOL_TCP, TCP_ULP, [7564404], 4) = -1 EPERM (Operation not permitted)
+   (whole-run OR connection open/negotiated log lines, relays+auths: 170)
+== strace-unpatched-control
+      1 setsockopt(FD, SOL_TCP, TCP_ULP, [7564404], 4) = -1 EPERM (Operation not permitted)
+      1 openat(AT_FDCWD, "/proc/sys/vm/overcommit_memory", O_RDONLY|O_CLOEXEC) = -1 EPERM (Operation not permitted)
+   (whole-run OR connection open/negotiated log lines, relays+auths: 157)

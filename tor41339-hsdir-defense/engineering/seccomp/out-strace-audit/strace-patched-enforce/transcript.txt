@@ -1,0 +1,447 @@
+### label=strace-patched-enforce relay_tor=/work/src/tor-patched/src/app/tor (Tor version 0.5.0.0-alpha-dev (git-741132a249eaa387).) stock=Tor version 0.5.0.0-alpha-dev (git-8dbbbe6e86a6ca0d).
+### relay extra torrc: HSDirOneRequestPerCircuit 1\nHSDirRefuseUnknownPrevHop 1
+Wed Oct 14 02:59:15 UTC 2026
+INFO:chutney.TorNet:Loading network config from chutney network script path: '/work/eng/seccomp/hs-v3-sandbox'
+INFO:chutney.TorNet:creating '/work/chutney-net/seccomp-strace-patched-enforce/nodes.1791946755', linking to '/work/chutney-net/seccomp-strace-patched-enforce/nodes'
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-strace-patched-enforce/nodes'->'/work/chutney-net/seccomp-strace-patched-enforce/nodes.1791946755
+Creating identity key for test000a     with /work/src/tor-patched/src/app/../tools/tor-gencert
+Creating identity key for test001a     with /work/src/tor-patched/src/app/../tools/tor-gencert
+Creating identity key for test002a     with /work/src/tor-patched/src/app/../tools/tor-gencert
+Creating identity key for test003a     with /work/src/tor-patched/src/app/../tools/tor-gencert
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-strace-patched-enforce/nodes'->'/work/chutney-net/seccomp-strace-patched-enforce/nodes.1791946755
+Starting nodes
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-strace-patched-enforce/nodes'->'/work/chutney-net/seccomp-strace-patched-enforce/nodes.1791946755
+Waiting for nodes to bootstrap...
+
+Bootstrap in progress: 10 seconds
+Node status:
+test000a     :                   0, starting                 , Starting
+test001a     :                   0, starting                 , Starting
+test002a     :                   0, starting                 , Starting
+test003a     :                   0, starting                 , Starting
+test004r     :                   0, starting                 , Starting
+test005r     :                   0, starting                 , Starting
+test006r     :                   0, starting                 , Starting
+test007r     :                   0, starting                 , Starting
+test008r     :                   0, starting                 , Starting
+Published dir info:
+test000a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test001a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test002a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test003a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test004r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test005r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test006r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test007r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test008r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+
+Bootstrap in progress: 21 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     :                   0, starting                 , Starting
+test005r     :                   0, starting                 , Starting
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     :                   0, starting                 , Starting
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test003a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test006r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test007r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test008r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+
+Bootstrap in progress: 32 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test003a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test006r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test007r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test008r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+
+Bootstrap in progress: 43 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test001a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test002a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test003a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test004r     : 0 (NO_PROGRESS)    , caches and clients       , DESC MD MD_CONS NS_CONS       
+test005r     : 0 (NO_PROGRESS)    , caches and clients       , DESC MD MD_CONS NS_CONS       
+test006r     : 0 (NO_PROGRESS)    , caches and clients       , DESC MD MD_CONS NS_CONS       
+test007r     : 0 (NO_PROGRESS)    , caches and clients       , DESC MD MD_CONS NS_CONS       
+test008r     : 0 (NO_PROGRESS)    , caches and clients       , DESC MD MD_CONS NS_CONS       
+
+Everything bootstrapped after 54 sec
+Bootstrap finished: 54 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test001a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test002a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test003a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test004r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test005r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test006r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test007r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test008r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+
+Waiting 0 seconds for the network to be ready...
+
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-strace-patched-enforce/nodes'->'/work/chutney-net/seccomp-strace-patched-enforce/nodes.1791946755
+Starting nodes
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-strace-patched-enforce/nodes'->'/work/chutney-net/seccomp-strace-patched-enforce/nodes.1791946755
+Waiting for nodes to bootstrap...
+
+Everything bootstrapped after 3 sec
+Bootstrap finished: 3 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+test009c     : 100 (SUCCESS)      , done                     , Done
+test010h     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test001a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test002a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test003a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test004r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test005r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test006r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test007r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test008r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+
+Waiting 30 seconds for the network to be ready...
+
+### bootstrap rc=0
+     11 Sandbox 1
+### STRACE=1: attaching strace (failed syscalls only) to every thread of every relay/authority
+strace: attach: ptrace(PTRACE_SEIZE, 11843): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11844): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11845): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11846): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11847): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11848): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11849): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11850): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11835): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11836): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11837): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11838): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11851): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11852): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11853): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11854): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11839): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11840): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11841): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11842): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11859): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11860): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11861): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11862): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11831): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11832): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11833): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11834): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11855): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11856): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11857): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11858): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11863): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11864): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11865): Operation not permitted
+strace: attach: ptrace(PTRACE_SEIZE, 11866): Operation not permitted
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-strace-patched-enforce/nodes'->'/work/chutney-net/seccomp-strace-patched-enforce/nodes.1791946755
+Verifying data transmission: (retrying for up to 60 seconds)
+Connecting:
+  Exit to 127.0.0.1:4747 via client localhost:9009
+  HS to p33ynsiybuubctsuggvnukcdtb2vav3wfcokv7imajcgduxq4ycqrnqd.onion:5858 (127.0.0.1:4747) via client localhost:9009
+Transmitting Data:
+INFO:chutney.Traffic:Registering exit via test009c send-data-1
+INFO:chutney.Traffic:Registering exit via test009c check-2
+INFO:chutney.Traffic:Registering test010h via test009c send-data-3
+INFO:chutney.Traffic:Registering test010h via test009c check-4
+INFO:chutney.Traffic:Success for exit via test009c send-data-1
+INFO:chutney.Traffic:Success for test010h via test009c send-data-3
+INFO:chutney.Traffic:Success for exit via test009c check-2
+INFO:chutney.Traffic:Success for test010h via test009c check-4
+INFO:chutney.Traffic:Status:
+  exit via test009c send-data-1: success (Flushed)
+  exit via test009c check-2: success (successful verification)
+  test010h via test009c send-data-3: success (Flushed)
+  test010h via test009c check-4: success (successful verification)
+  not-done:0 successes:4 failures:0
+Single Stream Bandwidth: 0.88 MBytes/s
+Overall tor Bandwidth: 10.54 MBytes/s
+Transmission: Success
+### verify 1 rc=0
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-strace-patched-enforce/nodes'->'/work/chutney-net/seccomp-strace-patched-enforce/nodes.1791946755
+Verifying data transmission: (retrying for up to 60 seconds)
+Connecting:
+  Exit to 127.0.0.1:4747 via client localhost:9009
+  HS to p33ynsiybuubctsuggvnukcdtb2vav3wfcokv7imajcgduxq4ycqrnqd.onion:5858 (127.0.0.1:4747) via client localhost:9009
+Transmitting Data:
+INFO:chutney.Traffic:Registering exit via test009c send-data-1
+INFO:chutney.Traffic:Registering exit via test009c check-2
+INFO:chutney.Traffic:Registering test010h via test009c send-data-3
+INFO:chutney.Traffic:Registering test010h via test009c check-4
+INFO:chutney.Traffic:Success for test010h via test009c send-data-3
+INFO:chutney.Traffic:Success for exit via test009c send-data-1
+INFO:chutney.Traffic:Success for exit via test009c check-2
+INFO:chutney.Traffic:Success for test010h via test009c check-4
+INFO:chutney.Traffic:Status:
+  exit via test009c send-data-1: success (Flushed)
+  exit via test009c check-2: success (successful verification)
+  test010h via test009c send-data-3: success (Flushed)
+  test010h via test009c check-4: success (successful verification)
+  not-done:0 successes:4 failures:0
+Single Stream Bandwidth: 0.82 MBytes/s
+Overall tor Bandwidth: 9.88 MBytes/s
+Transmission: Success
+### verify 2 rc=0
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-strace-patched-enforce/nodes'->'/work/chutney-net/seccomp-strace-patched-enforce/nodes.1791946755
+Verifying data transmission: (retrying for up to 60 seconds)
+Connecting:
+  Exit to 127.0.0.1:4747 via client localhost:9009
+  HS to p33ynsiybuubctsuggvnukcdtb2vav3wfcokv7imajcgduxq4ycqrnqd.onion:5858 (127.0.0.1:4747) via client localhost:9009
+Transmitting Data:
+INFO:chutney.Traffic:Registering exit via test009c send-data-1
+INFO:chutney.Traffic:Registering exit via test009c check-2
+INFO:chutney.Traffic:Registering test010h via test009c send-data-3
+INFO:chutney.Traffic:Registering test010h via test009c check-4
+INFO:chutney.Traffic:Success for test010h via test009c send-data-3
+INFO:chutney.Traffic:Success for exit via test009c send-data-1
+INFO:chutney.Traffic:Success for exit via test009c check-2
+INFO:chutney.Traffic:Success for test010h via test009c check-4
+INFO:chutney.Traffic:Status:
+  exit via test009c send-data-1: success (Flushed)
+  exit via test009c check-2: success (successful verification)
+  test010h via test009c send-data-3: success (Flushed)
+  test010h via test009c check-4: success (successful verification)
+  not-done:0 successes:4 failures:0
+Single Stream Bandwidth: 0.84 MBytes/s
+Overall tor Bandwidth: 10.12 MBytes/s
+Transmission: Success
+### verify 3 rc=0
+### seccomp status of every running tor process (Seccomp: 2 == filter mode)
+pid=11796 nodes.1791946755/000a/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=11799 nodes.1791946755/001a/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=11802 nodes.1791946755/002a/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=11805 nodes.1791946755/003a/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=11808 nodes.1791946755/004r/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=11811 nodes.1791946755/005r/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=11814 nodes.1791946755/006r/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=11817 nodes.1791946755/007r/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=11820 nodes.1791946755/008r/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=17215 nodes.1791946755/009c/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=17223 nodes.1791946755/010h/torrc Seccomp:	2 Seccomp_filters:	1 
+### 18 ordinary single HSFETCHes, SERVER= round-robin over all 9 HSDirs, from the stock client (one at a time)
+0 RECEIVED $59CD9EEDB43CF797C1F083D646F862492E1B7542~test000a  0.06
+1 RECEIVED $32AE008CC989942BF3564B94BCDA215695FBD656~test001a  0.06
+2 RECEIVED $095D5E99FE7CD441483BC0125C05BA150FFCD61A~test002a  0.09
+3 RECEIVED $6C16010E59EEC23883941532C777F9F27A7D65FB~test003a  0.08
+4 RECEIVED $F8FF8310D324693471B1AC34E5BB1842673A6B72~test004r  0.12
+5 FAILED $02AAAFD87E6DED548AB39121DB9C220609C680B3~test005r REASON=NOT_FOUND 0.11
+6 RECEIVED $FFE0418D5E9113EC1C6C481E98EB2C00F7102B53~test006r  0.06
+7 RECEIVED $618E8D042103EC3D2A63BD949F9EA03C8A2353DB~test007r  0.11
+8 RECEIVED $EF33396CD43886BF6E4FDA61CE84821ED859E472~test008r  0.07
+9 RECEIVED $59CD9EEDB43CF797C1F083D646F862492E1B7542~test000a  0.14
+10 RECEIVED $32AE008CC989942BF3564B94BCDA215695FBD656~test001a  0.06
+11 RECEIVED $095D5E99FE7CD441483BC0125C05BA150FFCD61A~test002a  0.09
+12 RECEIVED $6C16010E59EEC23883941532C777F9F27A7D65FB~test003a  0.09
+13 RECEIVED $F8FF8310D324693471B1AC34E5BB1842673A6B72~test004r  0.06
+14 FAILED $02AAAFD87E6DED548AB39121DB9C220609C680B3~test005r REASON=NOT_FOUND 0.06
+15 RECEIVED $FFE0418D5E9113EC1C6C481E98EB2C00F7102B53~test006r  0.09
+16 RECEIVED $618E8D042103EC3D2A63BD949F9EA03C8A2353DB~test007r  0.06
+17 RECEIVED $EF33396CD43886BF6E4FDA61CE84821ED859E472~test008r  0.07
+### DirPort probes against relay 004r (DirPort 7104) and authority 000a (7100)
+[post-oversized-declared] sent=58 got=0 first_line=b''
+[post-oversized-actual] sent=60058 got=22 first_line=b'<ConnectionResetError>'
+[get-with-trailing] sent=54 got=2393 first_line=b'HTTP/1.0 200 OK'
+[bogus-content-length] sent=55 got=0 first_line=b''
+[oversized-headers] sent=70018 got=22 first_line=b'<ConnectionResetError>'
+[get-hs-desc-dirport] sent=70 got=99 first_line=b'HTTP/1.0 503 Rejecting single hop HS v3 descriptor request'
+[post-oversized-declared] sent=58 got=9 first_line=b'<timeout>'
+[post-oversized-actual] sent=60058 got=93 first_line=b'HTTP/1.0 503 Rejecting single hop HS descriptor post'
+[get-with-trailing] sent=54 got=2437 first_line=b'HTTP/1.0 200 OK'
+[bogus-content-length] sent=55 got=0 first_line=b''
+[oversized-headers] sent=70018 got=22 first_line=b'<ConnectionResetError>'
+[get-hs-desc-dirport] sent=70 got=99 first_line=b'HTTP/1.0 503 Rejecting single hop HS v3 descriptor request'
+### metrics 127.0.0.1:9100
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9101
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9102
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9103
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9104
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9105
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9106
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9107
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9108
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-strace-patched-enforce/nodes'->'/work/chutney-net/seccomp-strace-patched-enforce/nodes.1791946755
+Verifying data transmission: (retrying for up to 60 seconds)
+Connecting:
+  Exit to 127.0.0.1:4747 via client localhost:9009
+  HS to p33ynsiybuubctsuggvnukcdtb2vav3wfcokv7imajcgduxq4ycqrnqd.onion:5858 (127.0.0.1:4747) via client localhost:9009
+Transmitting Data:
+INFO:chutney.Traffic:Registering exit via test009c send-data-1
+INFO:chutney.Traffic:Registering exit via test009c check-2
+INFO:chutney.Traffic:Registering test010h via test009c send-data-3
+INFO:chutney.Traffic:Registering test010h via test009c check-4
+INFO:chutney.Traffic:Success for test010h via test009c send-data-3
+INFO:chutney.Traffic:Success for exit via test009c send-data-1
+INFO:chutney.Traffic:Success for exit via test009c check-2
+INFO:chutney.Traffic:Success for test010h via test009c check-4
+INFO:chutney.Traffic:Status:
+  exit via test009c send-data-1: success (Flushed)
+  exit via test009c check-2: success (successful verification)
+  test010h via test009c send-data-3: success (Flushed)
+  test010h via test009c check-4: success (successful verification)
+  not-done:0 successes:4 failures:0
+Single Stream Bandwidth: 0.93 MBytes/s
+Overall tor Bandwidth: 11.20 MBytes/s
+Transmission: Success
+### verify 4 rc=0
+### EPERM-returning syscalls per node (syscall + first argument), counts
+== 000a
+      1 setsockopt(27, ...)
+== 001a
+      1 setsockopt(29, ...)
+== 002a
+      1 setsockopt(37, ...)
+      1 setsockopt(35, ...)
+      1 setsockopt(34, ...)
+== 003a
+      1 setsockopt(30, ...)
+== 004r
+      1 setsockopt(34, ...)
+== 005r
+      1 setsockopt(24, ...)
+== 006r
+      1 setsockopt(34, ...)
+      1 setsockopt(33, ...)
+== 007r
+      1 setsockopt(25, ...)
+      1 setsockopt(24, ...)
+== 008r
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-strace-patched-enforce/nodes'->'/work/chutney-net/seccomp-strace-patched-enforce/nodes.1791946755
+Sending SIGINT to nodes
+Waiting for nodes to finish.
+...............test004r is running
+test005r is running
+test006r is running
+test007r is running
+test008r is running
+test009c is running
+test010h is running
+
+Sending another SIGINT to nodes
+Waiting for nodes to finish.
+...............test004r is running
+test005r is running
+test006r is running
+test007r is running
+test008r is running
+test009c is running
+test010h is running
+
+Sending SIGKILL to nodes
+Waiting for nodes to finish.
+.
+Waiting for nodes to cleanup and exit.
+### stop rc=0
+### shutdown check: nodes that logged a shutdown signal, and any survivors
+000a: 
+001a: 
+002a: 
+003a: 
+004r: 
+005r: 
+006r: 
+007r: 
+008r: 
+009c: 
+010h: 
+### sandbox / bug scan over all node logs
+000a: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+001a: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+002a: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+003a: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+004r: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+005r: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+006r: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+007r: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+008r: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+009c: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+010h: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0

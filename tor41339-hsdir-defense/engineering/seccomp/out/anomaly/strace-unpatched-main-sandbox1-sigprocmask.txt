@@ -1,0 +1,44 @@
+3703  prctl(PR_CAPBSET_READ, CAP_MAC_OVERRIDE) = 1
+3703  prctl(PR_CAPBSET_READ, 0x30 /* CAP_??? */) = -1 EINVAL (Invalid argument)
+3703  prctl(PR_CAPBSET_READ, CAP_CHECKPOINT_RESTORE) = 1
+3703  prctl(PR_CAPBSET_READ, 0x2c /* CAP_??? */) = -1 EINVAL (Invalid argument)
+3703  prctl(PR_CAPBSET_READ, 0x2a /* CAP_??? */) = -1 EINVAL (Invalid argument)
+3703  prctl(PR_CAPBSET_READ, 0x29 /* CAP_??? */) = -1 EINVAL (Invalid argument)
+3703  rt_sigprocmask(SIG_UNBLOCK, [SYS], NULL, 8) = 0
+3703  seccomp(SECCOMP_SET_MODE_STRICT, 0x1, NULL) = -1 EINVAL (Invalid argument)
+3703  seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, NULL) = -1 EFAULT (Bad address)
+3703  seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_LOG, NULL) = -1 EFAULT (Bad address)
+3703  seccomp(SECCOMP_GET_ACTION_AVAIL, 0, [SECCOMP_RET_LOG]) = 0
+3703  seccomp(SECCOMP_GET_ACTION_AVAIL, 0, [SECCOMP_RET_KILL_PROCESS]) = 0
+3703  seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_SPEC_ALLOW, NULL) = -1 EFAULT (Bad address)
+3703  seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER, NULL) = -1 EFAULT (Bad address)
+3703  seccomp(SECCOMP_GET_NOTIF_SIZES, 0, {seccomp_notif=80, seccomp_notif_resp=24, seccomp_data=64}) = 0
+3703  seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC_ESRCH, NULL) = -1 EFAULT (Bad address)
+3703  prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) = 0
+3703  seccomp(SECCOMP_SET_MODE_FILTER, 0, {len=514, filter=0x56327de7c010}) = 0
+3703  rt_sigprocmask(SIG_UNBLOCK, [RTMIN RT_1], NULL, 8) = 0
+3703  rt_sigprocmask(SIG_BLOCK, ~[], 0x7ffd58f97b98, 8) = -1 EPERM (Operation not permitted)
+3703  clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7faddfe60990, parent_tid=0x7faddfe60990, exit_signal=0, stack=0x7faddf660000, stack_size=0x7ffec0, tls=0x7faddfe606c0} => {parent_tid=[3704]}, 88) = 3704
+3703  rt_sigprocmask(SIG_SETMASK, [INT QUIT ILL ABRT KILL SEGV TERM STKFLT CONT TSTP URG XFSZ PWR SYS RTMIN RT_1 RT_3 RT_4 RT_6 RT_8 RT_9 RT_10 RT_11 RT_12 RT_13 RT_14 RT_15], NULL, 8) = 0
+3704  rt_sigprocmask(SIG_SETMASK, [INT QUIT ILL ABRT KILL SEGV TERM STKFLT CONT TSTP URG XFSZ PWR SYS RT_1 RT_3 RT_4 RT_6 RT_8 RT_9 RT_10 RT_11 RT_12 RT_13 RT_14 RT_15],  <unfinished ...>
+3703  rt_sigprocmask(SIG_BLOCK, ~[], 0x7ffd58f97b98, 8) = -1 EPERM (Operation not permitted)
+3704  <... rt_sigprocmask resumed>NULL, 8) = 0
+3703  clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7faddf65f990, parent_tid=0x7faddf65f990, exit_signal=0, stack=0x7faddee5f000, stack_size=0x7ffec0, tls=0x7faddf65f6c0} <unfinished ...>
+3704  rt_sigprocmask(SIG_SETMASK, ~[RTMIN RT_1], NULL, 8) = 0
+3703  <... clone3 resumed> => {parent_tid=[3705]}, 88) = 3705
+3703  rt_sigprocmask(SIG_SETMASK, [INT QUIT ILL ABRT KILL SEGV TERM STKFLT CONT TSTP URG XFSZ PWR SYS RTMIN RT_1 RT_3 RT_4 RT_6 RT_8 RT_9 RT_10 RT_11 RT_12 RT_13 RT_14 RT_15], NULL, 8) = 0
+3703  rt_sigprocmask(SIG_BLOCK, ~[], 0x7ffd58f97b98, 8) = -1 EPERM (Operation not permitted)
+3705  rt_sigprocmask(SIG_SETMASK, [INT QUIT ILL ABRT KILL SEGV TERM STKFLT CONT TSTP URG XFSZ PWR SYS RT_1 RT_3 RT_4 RT_6 RT_8 RT_9 RT_10 RT_11 RT_12 RT_13 RT_14 RT_15],  <unfinished ...>
+3703  clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7fadd6dff990, parent_tid=0x7fadd6dff990, exit_signal=0, stack=0x7fadd65ff000, stack_size=0x7ffec0, tls=0x7fadd6dff6c0} <unfinished ...>
+3705  <... rt_sigprocmask resumed>NULL, 8) = 0
+3705  rt_sigprocmask(SIG_SETMASK, ~[RTMIN RT_1],  <unfinished ...>
+3703  <... clone3 resumed> => {parent_tid=[3706]}, 88) = 3706
+3705  <... rt_sigprocmask resumed>NULL, 8) = 0
+3703  rt_sigprocmask(SIG_SETMASK, [INT QUIT ILL ABRT KILL SEGV TERM STKFLT CONT TSTP URG XFSZ PWR SYS RTMIN RT_1 RT_3 RT_4 RT_6 RT_8 RT_9 RT_10 RT_11 RT_12 RT_13 RT_14 RT_15], NULL, 8) = 0
+3706  rt_sigprocmask(SIG_SETMASK, [INT QUIT ILL ABRT KILL SEGV TERM STKFLT CONT TSTP URG XFSZ PWR SYS RT_1 RT_3 RT_4 RT_6 RT_8 RT_9 RT_10 RT_11 RT_12 RT_13 RT_14 RT_15], NULL, 8) = 0
+3706  rt_sigprocmask(SIG_SETMASK, ~[RTMIN RT_1], NULL, 8) = 0
+3703  rt_sigprocmask(SIG_BLOCK, ~[], 0x7ffd58f97b98, 8) = -1 EPERM (Operation not permitted)
+3703  clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7faddee5e990, parent_tid=0x7faddee5e990, exit_signal=0, stack=0x7fadde65e000, stack_size=0x7ffec0, tls=0x7faddee5e6c0} => {parent_tid=[3707]}, 88) = 3707
+3703  rt_sigprocmask(SIG_SETMASK, [INT QUIT ILL ABRT KILL SEGV TERM STKFLT CONT TSTP URG XFSZ PWR SYS RTMIN RT_1 RT_3 RT_4 RT_6 RT_8 RT_9 RT_10 RT_11 RT_12 RT_13 RT_14 RT_15], NULL, 8) = 0
+3707  rt_sigprocmask(SIG_SETMASK, [INT QUIT ILL ABRT KILL SEGV TERM STKFLT CONT TSTP URG XFSZ PWR SYS RT_1 RT_3 RT_4 RT_6 RT_8 RT_9 RT_10 RT_11 RT_12 RT_13 RT_14 RT_15], NULL, 8) = 0
+3707  rt_sigprocmask(SIG_SETMASK, ~[RTMIN RT_1], NULL, 8) = 0

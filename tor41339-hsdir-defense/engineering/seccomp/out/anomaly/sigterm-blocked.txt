@@ -1,0 +1,28 @@
+== pid 32254 /work/src/tor-patched/src/app/tor -f /work/chutney-net/seccomp-patched-default/nodes.1791940261/004r/torrc 
+SigQ:	9/64299
+SigPnd:	0000000000000000
+ShdPnd:	0000000000004000
+SigBlk:	00007f6cfa8ac42e
+SigIgn:	0000000000000000
+SigCgt:	0000000051015ecb
+Seccomp:	2
+Seccomp_filters:	1
+task 32254 SigBlk:	00007f6cfa8ac42e
+task 32352 SigBlk:	fffffffe7ffbfeff
+task 32353 SigBlk:	fffffffe7ffbfeff
+task 32354 SigBlk:	fffffffe7ffbfeff
+task 32355 SigBlk:	fffffffe7ffbfeff
+== pid 5108 /work/src/tor-unpatched/src/app/tor -f /work/chutney-net/seccomp-patched-default/nodes.1791940261/009c/torrc 
+SigQ:	9/64299
+SigPnd:	0000000000000000
+ShdPnd:	0000000000004000
+SigBlk:	00007f49484ac42e
+SigIgn:	0000000000000000
+SigCgt:	0000000051015ecb
+Seccomp:	2
+Seccomp_filters:	1
+task 5108 SigBlk:	00007f49484ac42e
+task 5119 SigBlk:	fffffffe7ffbfeff
+task 5120 SigBlk:	fffffffe7ffbfeff
+task 5121 SigBlk:	fffffffe7ffbfeff
+task 5122 SigBlk:	fffffffe7ffbfeff

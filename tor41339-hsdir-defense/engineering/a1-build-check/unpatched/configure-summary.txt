@@ -1,0 +1,60 @@
+checking for tput... /usr/bin/tput
+
+Tor Version: Tor 0.5.0.0-alpha-dev 
+
+Build Features
+  Compiler:                                                      gcc
+  Host OS:                                                       linux-gnu
+  License Option:                                                BSD
+
+  Warnings are fatal (--enable-fatal-warnings):                  yes
+  Android support (--enable-android):                            no
+
+Static Build
+  tor (--enable-static-tor):                                     no
+  libevent (--enable-static-libevent):                           no
+  libssl (--enable-static-openssl):                              no
+  zlib1g (--enable-static-zlib):                                 no
+
+Optional Libraries
+  libnss (--enable-nss):                                         no
+  libseccomp (--disable-seccomp):                                yes
+  libscrypt (--disable-libscrypt):                               yes
+  Systemd support (--enable-systemd):                            no
+  liblzma (--enable-lzma):                                       yes
+  libzstd (--enable-zstd):                                       yes
+
+Hardening
+  Compiler Hardening (--disable-gcc-hardening):                  yes
+  Linker Hardening (--disable-linker-hardening):                 yes
+  Fragile Hardening (--enable-fragile-hardening, dev only):      no
+
+Modules
+  relay (--disable-module-relay):                                yes
+  dirauth (--disable-module-dirauth):                            yes
+  dircache:                                                      yes
+  pow (requires --enable-gpl):                                   no
+
+Documentation
+  AsciiDoc (--disable-asciidoc):                                 yes
+  Man Pages (--disable-manpage):                                 yes
+  HTML Manual (--disable-html-manual):                           yes
+
+Tests
+  Unit tests (--disable-unittests):                              yes
+  assert()s enabled (--enable-asserts-in-tests, dev only):       no
+  Code Coverage (--enable-coverage):                             no
+  libFuzzer support (--enable-libfuzzer):                        no
+  OSS-Fuzz support (--enable-oss-fuzz):                          no
+
+Tracing (--enable-tracing-instrumentation-<type>)
+  Tracepoints to log_debug() (log-debug):                        no
+  USDT Instrumentation (usdt):                                   no
+  LTTng Instrumentation (lttng):                                 no
+
+Install Directories
+  Binaries:                                                      /usr/local/bin
+  Configuration:                                                 /usr/local/etc/tor
+  Man Pages:                                                     /usr/local/share/man
+
+Configure Line: ./configure --enable-fatal-warnings
