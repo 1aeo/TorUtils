@@ -7,6 +7,45 @@ being trusted; the default disposition was REJECTED unless a concrete reachable
 path could be constructed. Scope: remote-reachable crash / abort / UAF /
 overflow / unbounded-memory under high concurrency and hostile input.
 
+## Addendum — after the call-order fix and the upstream-polish refactor
+
+This review was done on the series before two later changes. Both were
+re-verified and the verdict below stands. When reading the body, map the names:
+
+- **Call-order + telemetry fix.** The per-circuit count/close now runs before the
+  unknown-previous-hop 503, so reuse is counted (and, under enforcement, the
+  circuit closed) whatever the previous-hop decision. Two count-only MetricsPort
+  counters were added (`hsdir_req_reused`, `hsdir_request_total`). No new
+  allocation or unbounded state.
+- **Upstream-polish refactor (behavior-preserving):**
+  - `connection_dir_check_prev_hop()`, `connection_dir_prev_hop_is_known_relay()`
+    and `connection_dir_note_hs_request()` → one
+    `connection_dir_allow_hs_request()` (`directory.c`), called once per HS
+    descriptor GET/POST.
+  - `or_circuit_t` bits `already_received_hsdir_request` /
+    `hsdir_request_reuse_counted` → one 2-bit saturating `n_hsdir_requests`
+    (stops at 2; cannot wrap).
+  - `dos_note_hsdir_circ_reused()` and the two newer counters →
+    `dos_note_hsdir_request(prev_count)`.
+  - The per-request `networkstatus_get_param(NULL, …)` lookups of the two
+    `hsdir_*` consensus parameters → values cached in `set_dos_parameters()` and
+    refreshed on consensus change (done for public relays, which every HSDir
+    is); a torrc `0`/`1` still overrides per request. This removes the
+    per-request `net_params` scan noted in the performance observations below.
+    The known-relay lookup remains.
+  - New: rate-limited (one per 10 minutes) `LOG_PROTOCOL_WARN` lines using
+    `safe_str(channel_describe_peer())` on the enforced 503 and the enforced
+    close. Info-level unless `ProtocolWarnings 1`, so silent at `notice`; never
+    per request.
+  - 0005's two `buf_clear()` blocks became one switch fall-through; 0006's length
+    check moved into `desc_sig_len_is_valid()`.
+- **Re-verification:** targeted unit tests 113/113 (including
+  `hs_cache/hsdir_one_request_per_circ` and
+  `hs_cache/hsdir_refuse_unknown_prev_hop`), `checkSpace.pl` clean, zero
+  practracker exceptions, an independent security review of the refactor with
+  no findings, and the `+tor41339.3` `.deb` build ran the full `dh_auto_test`
+  suite (`../engineering/deb/`).
+
 ## Verdict
 
 Safe to run on a production HSDir under flood. **Zero CRITICAL/HIGH crash,

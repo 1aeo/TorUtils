@@ -1,4 +1,11 @@
-# Reordered series (0002 before 0001)
+# Reordered series (known-previous-hop rule first)
+
+> **Historical record of the reorder step.** The per-commit build/test results
+> here describe the series at the time of the reorder. The series has since
+> gained the 0002 call-order/telemetry fix and a behavior-preserving
+> upstream-polish refactor (which also removed the practracker exceptions
+> mentioned below); `../../patches/` is the current series, validated by the
+> `+tor41339.3` `.deb` build (`../deb/`).
 
 These are the 7 v3 patches, reordered so that the known-previous-hop rule
 comes **before** the one-request-per-circuit rule. Apply them with `git am`.
@@ -18,9 +25,9 @@ says so.
 
 ## What changed versus `patches/` (v3), mechanically
 
-- **Identity.** All 7 commits are `From: 1aeo <github@1aeo.com>` and carry one
-  identical `Co-Authored-By` trailer. That was already true of v3, so nothing
-  was re-authored.
+- **Identity.** All 7 commits are `From: 1aeo <github@1aeo.com>`; nothing was
+  re-authored. (A `Co-Authored-By` trailer they carried at the time was later
+  dropped from the shipped patches.)
 - **Hunks split by hand.** The 0002 hunks that overlap 0001 in dos.c/h,
   dos_options.inc, dircache.c, directory.c/h, relay_metrics.c, tor.1.txt,
   test_status.c and test_hs_cache.c were split. The known-previous-hop commit

@@ -24,11 +24,12 @@ newly-available numbers change the headline: the flood is **concentrated on one
 relay**, and a **valid directional reuse proxy** is now computable (§2).
 
 **Binary provenance.** `inventory_reported_version = 0.4.9.14`,
-`patched_counters_present = false`, and the two HSDir counters read `null`. The
+`patched_counters_present = false`, and the patch-only HSDir counters read `null`. The
 operator binary was **stock** — not our count-only build. That one fact still
 drives the "what it can't tell us" half of this note: the *clean* HS-scoped
 counters do not exist here. (The source tree on this branch *does* contain those
-two counters; their absence here is a cohort fact, not a measurement failure.)
+counters — now four of them; their absence here is a cohort fact, not a
+measurement failure.)
 
 ---
 
@@ -271,7 +272,7 @@ Deploy the **count-only (observe) build** on **1–2 of the operator's own HSDir
 (operator kit: `operator/DEPLOY-AND-MEASURE.md` with
 `operator/capture-and-validate-playbook.md`). Observe mode **never closes a
 circuit and never refuses a request** (`hsdir_one_request_per_circ` stays at 0) —
-it only increments the two counters, is metadata-only, and rolls back in seconds.
+it only increments count-only counters, is metadata-only, and rolls back in seconds.
 The crash-at-scale review has green-lit it for a production HSDir under flood.
 
 Then, over a flood window on relay A (or the operator's equivalent target), read

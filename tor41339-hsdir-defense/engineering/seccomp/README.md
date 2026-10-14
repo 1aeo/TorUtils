@@ -57,9 +57,8 @@ The onion service and the client are stock (unpatched) tor.
   traffic cannot reach these branches. The closed-lab benchmark ran
   `sandbox-check.sh` with `STRACE_SECS=60` on target `004r` under
   `Sandbox 1`, with 0001 + 0002 enforcing, while reuse-22 and then one-hop
-  load ran. Evidence: branch `tor41339-hsdir-defense` at 275ae51, in
-  `simulator/results/seccomp-newbranches-validation.md` and
-  `seccomp-evidence/`.
+  load ran. Evidence: `../../simulator/results/seccomp-newbranches-validation.md`
+  and `../../simulator/results/seccomp-evidence/`.
   - The branches did fire: `hsdir_circ_reused` went 2 → 19 and
     `hsdir_unknown_prev_hop` 0 → 40. Reuse served 1/418; one-hop served
     1/40.

@@ -61,22 +61,33 @@ features off the real traffic.
 | **Total** anonymous HS directory requests (the exact denominator) | `tor_relay_dos_total{type="hsdir_request_total"}` | — | 0002 |
 | HS requests whose **previous hop is not a known relay** (one-hop / self-gen) | `tor_relay_dos_total{type="hsdir_unknown_prev_hop"}` | `"<N> HSDir requests with an unknown previous hop"` | 0001 |
 
+All four are counted in one place, `connection_dir_allow_hs_request()`
+(`src/feature/dircommon/directory.c`), which both HS call sites (descriptor GET
+and POST) run **before** any enforcement decision — so the counters mean the
+same thing in observe and enforce mode:
+
 - `hsdir_circ_reused` counts **circuits**, incremented **once** per circuit the
   first time a 2nd HS request arrives on it (a circuit carrying 22 requests adds
-  **1**, not 21). Source: `connection_dir_note_hs_request()` →
-  `dos_note_hsdir_circ_reused()` → `num_hsdir_circ_reused`, using the
-  `or_circuit_t` bits `already_received_hsdir_request` /
-  `hsdir_request_reuse_counted`.
-- `hsdir_unknown_prev_hop` counts **requests** (every unknown-prev-hop request,
-  not per circuit), via `connection_dir_check_prev_hop()` →
-  `connection_dir_prev_hop_is_known_relay()` (which tests
-  `connection_or_digest_is_known_relay(p_chan->identity_digest)` against the
-  consensus / held descriptors) → `dos_note_hsdir_unknown_prev_hop()`.
+  **1**, not 21). Per-circuit state is a 2-bit saturating counter
+  `or_circuit_t.n_hsdir_requests` (0 → 1 → 2); the helper passes its previous
+  value to `dos_note_hsdir_request(prev_count)` (`src/core/or/dos.c`), which
+  bumps `num_hsdir_circ_reused` only when `prev_count == 1`.
 - `hsdir_req_reused` counts **requests** — every repeat HS request on a circuit
-  that already made one (a circuit carrying 22 requests adds 21). MetricsPort only.
-- `hsdir_request_total` counts **every** anonymous HS directory request — the
-  exact HS-only denominator for the reuse fraction (`req_reused / request_total`)
-  and for φ (`unknown_prev_hop / request_total`).
+  that already made one (`prev_count >= 1`; a circuit carrying 22 requests adds
+  21). MetricsPort only.
+- `hsdir_request_total` counts **every** anonymous HS directory request (same
+  `dos_note_hsdir_request()` call) — the exact HS-only denominator for the reuse
+  fraction (`req_reused / request_total`) and for φ
+  (`unknown_prev_hop / request_total`).
+- `hsdir_unknown_prev_hop` counts **requests** (every unknown-prev-hop request,
+  not per circuit): the helper tests
+  `connection_or_digest_is_known_relay(p_chan->identity_digest)` against the
+  consensus / held descriptors and calls `dos_note_hsdir_unknown_prev_hop()`.
+
+The two heartbeat substrings above are emitted together on the one DoS
+heartbeat line (`dos_log_heartbeat()`). Enforcement reads the torrc AUTOBOOL
+first and otherwise a consensus value cached in `set_dos_parameters()`, so the
+per-request check is O(1).
 
 All are monotonic process-wide uint64 totals since relay start — **take deltas
 across a window**, and expect a reset only on restart. Counting is
@@ -188,7 +199,7 @@ done >> /var/operator-private/41339-capture.log
 Post-process by **differencing adjacent samples** to get req/s, bytes/s,
 onionskins/s, and circuit churn; the per-sample deltas give you **burstiness**
 (peak vs p95 vs mean) over the window. Or just call `metrics.py` directly:
-`python3 metrics.py 9035` returns the parsed dict (and reads the two `hsdir_*`
+`python3 metrics.py 9035` returns the parsed dict (and reads the four `hsdir_*`
 keys as `None`/absent on a stock relay — correctly).
 
 ---
@@ -201,10 +212,10 @@ simulator needs), add these **count-only, observe-only** instrumentation hooks o
 top of patches 0001/0002. All are small, O(1)-memory, scraped via the existing
 MetricsPort `fill_dos_values()` path — **no per-request I/O**.
 
-**(a) requests-per-circuit DISTRIBUTION (not just the one-reuse flag).** Add one
-small field (e.g. `uint16_t hsdir_requests`, capped at ~64) to `or_circuit_t`
-beside `already_received_hsdir_request`, and `circ->hsdir_requests++` inside
-`connection_dir_note_hs_request()` where reuse is already detected. At teardown in
+**(a) requests-per-circuit DISTRIBUTION (not just the one-reuse flag).** Widen the
+2-bit `or_circuit_t.n_hsdir_requests` (or add a small `uint16_t` beside it,
+capped at ~64) and increment it in `connection_dir_allow_hs_request()`, where
+reuse is already detected. At teardown in
 `circuit_about_to_free()` (the `if (! CIRCUIT_IS_ORIGIN(circ))` branch), fold the
 count into a fixed-bucket histogram — **{1, 2, 3–5, 6–10, 11–22, 23+}** (the
 report cites 5–22 req/circuit). A legitimate stock Tor / Arti / Onionbalance
@@ -232,7 +243,7 @@ log raw blinded keys.** Prefer GET-side bucketing; the upload/POST path (inside
 
 **(d) inter-arrival / burstiness — derived rates, not per-request timestamps.**
 Keep a fixed-resolution in-memory ring of per-second counts (e.g. 60 slots)
-updated by one increment in `connection_dir_note_hs_request()` using monotonic
+updated by one increment in `connection_dir_allow_hs_request()` using monotonic
 time, and publish **peak req/s, p95 req/s, and coefficient of variation** as
 gauges. Zero-code crude signal: the delta of `num_hsdir_circ_reused` between
 heartbeats (`dos_log_heartbeat()` already logs it at `log_notice(LD_HEARTBEAT)`).

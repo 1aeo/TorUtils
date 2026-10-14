@@ -43,13 +43,21 @@ the companion consensus-parameter and rend-spec-v3 text.
 | 0007 | Credit an HSDir "download" only once the response is fully written out. | — |
 
 Both behavioral defenses (0001, 0002) ship **observe-only**: a binary with no
-consensus or torrc opinion only *counts* (heartbeat + `tor_relay_dos_total`
-MetricsPort metric) and never closes a circuit or refuses a request. Each has
+consensus or torrc opinion only *counts* (the DoS heartbeat line plus four
+`tor_relay_dos_total{type="hsdir_*"}` MetricsPort counters: `hsdir_circ_reused`,
+`hsdir_req_reused`, `hsdir_request_total`, `hsdir_unknown_prev_hop`) and never
+closes a circuit or refuses a request. Each has
 independent controls — a torrc `AUTOBOOL` option overriding a consensus
 parameter overriding the count-only default — so operators and the directory
 authorities can measure before enabling enforcement, and the enforcement toggle
 is a live `SIGHUP`/`SETCONF` with **no restart** (proven in `analysis/prevhop-false-positive.md`).
 `connection_edge.c` is untouched.
+
+The series is written to upstream conventions: one single-pass HS-request guard
+(`connection_dir_allow_hs_request()`) for GET and POST, consensus parameters
+cached in `set_dos_parameters()` (O(1) per-request check), table-driven
+MetricsPort registration, rate-limited `LOG_PROTOCOL_WARN` diagnostics on
+enforced rejections, and **zero** `practracker` exceptions.
 
 ## Measured results
 
@@ -86,7 +94,8 @@ pre-existing tor#41060 SIGTERM bug.
 
 **Crash-at-scale review (`operator/patch-crash-at-scale-critique.md`):**
 **0 critical / 0 high** findings; the series is cleared for the count-only
-canary.
+canary. Re-verified after the call-order fix and the upstream-polish refactor
+(addendum at the top of the critique).
 
 See `analysis/claims-ledger.md` for the adjudicated claim ledger and its
 corrections.
@@ -110,7 +119,7 @@ For running a **count-only** canary on a live relay and measuring the real
 flood: `DEPLOY-AND-MEASURE.md` (end-to-end), `capture-and-validate-playbook.md`
 (MetricsPort → Prometheus capture, efficient under a flood), and
 `operator-agent-prompt.md`. The patched binary defaults to observe-only, so the
-canary only adds the two counters; enforcement is a separate live toggle.
+canary only adds the four counters; enforcement is a separate live toggle.
 
 ## Live capture (`data/`)
 

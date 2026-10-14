@@ -3,7 +3,7 @@
 **Goal:** run the patched Tor in **count-only (observe) mode** on one of your own
 HSDirs so it *measures* the flood it is already receiving — with **zero
 behaviour change for users** and **instant rollback**. Count-only mode never
-closes a circuit and never refuses a request; it only increments two counters
+closes a circuit and never refuses a request; it only increments count-only counters
 you can read on a loopback MetricsPort. Pair this with the public-field-grounded
 `capture-and-validate-playbook.md` (same branch) for the full rationale.
 
@@ -13,7 +13,11 @@ you can read on a loopback MetricsPort. Pair this with the public-field-grounded
 > traced and rejected, and the **count-only observe build is green-lit for a
 > production HSDir under flood**. Keep `MaxMemInQueues` at its normal value (the
 > memory backstop for the 0005 change). Count-only mode does not execute the
-> enforcement (circuit-close / 503) code paths at all. Still read the critique
+> enforcement (circuit-close / 503) code paths at all. The later upstream-polish
+> refactor (single-pass HS-request guard, cached consensus params) is
+> behavior-preserving and was re-verified: targeted unit tests 113/113, full
+> `dh_auto_test` in the `.deb` build, and an independent security review with no
+> findings — see the addendum at the top of the critique. Still read the critique
 > before deploying, and deploy to one canary first.
 
 
@@ -38,7 +42,9 @@ a brief restart); only the HSDir uptime gate re-arms.
 **So deploy on a CANARY:** pick ONE HSDir (ideally one not currently in the
 flood's rotating hit-set), keep its `DataDirectory`, and accept ~96 h (+ up to
 one hashring time-period cycle) before the flood returns and the counters read
-real data. Your other HSDirs are untouched. The 96 h is paid once per relay for
+real data. Your other HSDirs are untouched **provided only the canary's binary
+changes** — on a multi-instance host use §1.1, because installing the package
+restarts every instance on that host. The 96 h is paid once per relay for
 ANY binary change, so decide up front whether the canary runs count-only (to
 measure first) or enforcing (to act directly) — the lab already cleared both.
 
@@ -50,9 +56,11 @@ it is `git am`-clean on the `tor-0.4.9.14` tag, upstream `main`, and
 
 ### Path A — the Debian/Ubuntu package (preferred, Ubuntu 24.04 / noble)
 An amd64 `.deb` built from the `deb.torproject.org` noble source with the 7
-patches applied (version `0.4.9.14-1~noble+1+tor41339.2`) is the clean install.
-*(The built `.deb` is attached in `../packages/`.)* Install it over the stock
-`deb.torproject.org` package, keep the stock `.deb` for rollback.
+patches applied (version `0.4.9.14-1~noble+1+tor41339.3`, built from the
+current series and exposing all four `hsdir_*` counters) is the clean install.
+*(The built `.deb` is attached in `../packages/`.)* Install just the `tor`
+package over the stock `deb.torproject.org` one (`tor-geoipdb` is optional,
+unchanged data) and keep the stock `.deb` for rollback.
 
 ### Path B — build from source (always available)
 On a build host matching the relay (Ubuntu 24.04):
@@ -74,6 +82,57 @@ make -j"$(nproc)" src/app/tor
 Keep the **stock binary backed up** (`cp $(command -v tor) /root/tor.stock`) so
 rollback is a single copy-back + reload.
 
+### 1.1 Multi-instance hosts (`tor-instance-create`, `tor@NAME`) — switch ONE instance
+
+Every `tor@NAME` instance on a host runs `/usr/bin/tor` and is
+`PartOf=tor.service`. Installing the `.deb` replaces `/usr/bin/tor`, and its
+postinst restarts `tor.service`, which restarts **every** instance — each one
+then loses its HSDir flag for ~96 h. To canary a single relay, leave the stock
+package in place and point only that instance at the patched binary:
+
+```bash
+# 1. Unpack the patched binary beside stock (nothing else changes).
+sudo mkdir -p /opt/tor41339
+sudo dpkg-deb -x tor_0.4.9.14-1~noble+1+tor41339.3_amd64.deb /opt/tor41339
+/opt/tor41339/usr/bin/tor --version
+
+# 2. Freeze the stock package for the whole measurement: a stock tor upgrade
+#    restarts tor.service, and with it every instance (the canary included).
+sudo apt-mark hold tor tor-geoipdb
+
+# 3. Point ONLY the canary at the patched binary. Copy the ExecStart line from
+#    your existing /etc/systemd/system/tor@CANARY.service.d/override.conf and
+#    change only the binary path (the line below is what
+#    relay-setup/create-relays.sh writes). The new file sorts after
+#    override.conf, so it wins.
+sudo tee /etc/systemd/system/tor@CANARY.service.d/zz-tor41339.conf >/dev/null <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/opt/tor41339/usr/bin/tor --defaults-torrc /usr/share/tor/tor-service-defaults-torrc -f /etc/tor/instances/CANARY/torrc
+EOF
+sudo systemctl daemon-reload
+systemctl cat tor@CANARY | grep '^ExecStart='   # last line must be /opt/tor41339/...
+
+# 4. Validate with the patched binary, then restart ONLY the canary.
+#    This is the one restart that costs the ~96 h HSDir gate.
+sudo -u _tor-CANARY /opt/tor41339/usr/bin/tor --defaults-torrc /usr/share/tor/tor-service-defaults-torrc -f /etc/tor/instances/CANARY/torrc --verify-config
+sudo systemctl restart tor@CANARY
+sudo readlink /proc/$(systemctl show -p MainPID --value tor@CANARY)/exe   # -> /opt/tor41339/usr/bin/tor
+```
+
+- Leave the two `HSDir*` options **out** of this instance's torrc. They already
+  default to `auto` (count-only) in the patched binary, and the stock
+  `ExecStartPre=… --verify-config` still runs `/usr/bin/tor`, which would reject
+  options it does not know.
+- If your units set `AppArmorProfile=system_tor` (the stock `tor@.service` does
+  not), add `/opt/tor41339/usr/bin/tor mr,` to `/etc/apparmor.d/local/system_tor`
+  and reload that profile first.
+- Rollback: `sudo rm /etc/systemd/system/tor@CANARY.service.d/zz-tor41339.conf &&
+  sudo systemctl daemon-reload && sudo systemctl restart tor@CANARY`, then
+  `sudo apt-mark unhold tor tor-geoipdb`.
+- Single-instance host: install the `tor` package (Path A) and
+  `sudo apt-mark hold tor` for the measurement period.
+
 **Validate the binary before production:** `tor --verify-config -f <your torrc>`,
 then run it on a **canary** (one relay, or a throwaway instance) first — not the
 whole fleet.
@@ -89,12 +148,15 @@ Add to the relay's `torrc` (these are the only additions):
 # = count-only. Stated explicitly here so there is no ambiguity:
 HSDirOneRequestPerCircuit auto
 HSDirRefuseUnknownPrevHop auto
-# Expose the two counters on loopback only:
+# Expose the counters on loopback only:
 MetricsPort 127.0.0.1:9035
 MetricsPortPolicy accept 127.0.0.1
 # Finer heartbeat during the incident (default 6h is too coarse to see a wave):
 HeartbeatPeriod 60 seconds
 ```
+On a §1.1 per-instance canary, drop the two `HSDir*` lines (they already
+default to `auto`) and keep whatever `MetricsPort` your instance already
+exposes to Prometheus.
 **Activate the patched binary with a restart.** A `reload`/`SIGHUP` only
 re-reads `torrc` — it does **not** load a new on-disk binary, so the process must
 re-exec to run patched code: `systemctl restart tor@<instance>`. This is the one
@@ -121,13 +183,6 @@ curl -s http://127.0.0.1:9035/metrics | grep 'tor_relay_dos_total{type="hsdir'
 #   tor_relay_dos_total{type="hsdir_request_total"} N
 #   tor_relay_dos_total{type="hsdir_unknown_prev_hop"} N
 ```
-> **Counters vs. the attached `.deb`.** All four lines appear on a binary built
-> from the current patch series. The pre-telemetry `.deb` in `../packages/`
-> predates the `hsdir_req_reused` / `hsdir_request_total` counters and shows only
-> `hsdir_circ_reused` and `hsdir_unknown_prev_hop`; to measure the HS-only
-> repeat-request fraction `r_hs`, build from the current `patches/` (step 1
-> offers this) or install a refreshed package once one is attached.
-
 Confirm **no enforcement**: the relay log shows **no** `RESOURCELIMIT` circuit
 closes attributable to these options and **no** new HS-dir 503s; legitimate
 fetches/uploads succeed exactly as before. If you see either, an override is set
@@ -235,7 +290,8 @@ the lever; both ≈0 → neither patch addresses this flood.** Report them hones
 ---
 
 ## 6. Rollback (instant)
-Remove the two `HSDir*` torrc lines (or set them to `0`) and reload — you are
+On a §1.1 per-instance canary, remove the `zz-tor41339.conf` drop-in as shown
+there. Otherwise: remove the two `HSDir*` torrc lines (or set them to `0`) and reload — you are
 back to stock behaviour immediately. To revert the binary, copy the stock binary
 back and reload. Nothing persistent was changed.
 
@@ -270,11 +326,16 @@ duration, then **off** when it subsides. (Verified: a SETCONF toggle flips the
 
 **Logging volume does NOT scale with the flood** — the patch measures with
 counters, not per-request logs. Read the MetricsPort counters + the one-line
-DoS heartbeat; do NOT enable per-request logging. CPU per event is a uint64++
-(plus, only on the reuse/unknown-hop branch, one lockless param/bsearch
-lookup); RAM is O(1) (two globals + two bits on the existing or_circuit_t);
-storage is just your scrape samples (<1 MB/day/relay at 10 s). Keep the log
-level at `notice` (info/debug WOULD explode under a flood) and `SafeLogging`
-on; patch 0003 rate-limits the malformed-HTTP warnings so the flood cannot
-flood the log, and neither the 503s nor the circuit closes log per-request at
-notice level. A 1 req/s relay and a 1000 req/s relay log the same volume.
+DoS heartbeat; do NOT enable per-request logging. CPU per HS request is at
+most four uint64 increments plus one known-relay lookup; the enforcement
+check reads the torrc option or a consensus value cached in
+`set_dos_parameters()`, so it is O(1). RAM is O(1): four global counters and a
+2-bit field on the existing `or_circuit_t`. Storage is just your scrape samples
+(<1 MB/day/relay at 10 s). Keep the log level at `notice` (info/debug WOULD
+explode under a flood) and `SafeLogging` on. Patch 0003 rate-limits the
+malformed-HTTP warnings, and the only new log lines — "Refusing HS directory
+request from unknown previous hop …" and "Closing circuit after repeated HS
+directory request …" — fire only when enforcing, are `LOG_PROTOCOL_WARN`
+(info-level unless you set `ProtocolWarnings 1`, so silent at `notice`), and
+are rate-limited to one per 10 minutes each. A 1 req/s relay and a 1000 req/s
+relay log the same volume.

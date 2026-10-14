@@ -11,10 +11,13 @@ KEYS = {
     "bytes_written": r'tor_relay_traffic_bytes\{direction="written"\}\s+(\d+)',
     "hsdir_circ_reused": r'tor_relay_dos_total\{type="hsdir_circ_reused"\}\s+(\d+)',
     "hsdir_unknown_prev_hop": r'tor_relay_dos_total\{type="hsdir_unknown_prev_hop"\}\s+(\d+)',
+    "hsdir_req_reused": r'tor_relay_dos_total\{type="hsdir_req_reused"\}\s+(\d+)',
+    "hsdir_request_total": r'tor_relay_dos_total\{type="hsdir_request_total"\}\s+(\d+)',
     "circs_created": r'tor_relay_congestion_control_total\{state="cc_circuits",action="circs_created"\}\s+(\d+)',
     "circs_closed": r'tor_relay_congestion_control_total\{state="cc_circuits",action="circs_closed"\}\s+(\d+)',
     "circuits_opened_gauge": r'tor_relay_circuits_total\{state="opened"\}\s+(\d+)',
     "onionskins_ntor_v3": r'tor_relay_load_onionskins_total\{type="ntor_v3",action="processed"\}\s+(\d+)',
+    "onionskins_ntor_v3_dropped": r'tor_relay_load_onionskins_total\{type="ntor_v3",action="dropped"\}\s+(\d+)',
 }
 
 
