@@ -186,3 +186,26 @@ add nothing to this behaviour.
 Keep the raw capture (and anything with fingerprints/IPs) operator-private.
 Share back only the derived aggregates — the ratios and the shape — with no
 relay fingerprints, IPs, hostnames, or onion addresses.
+
+## 8. Enforcement is a LIVE toggle; logging is counter-based (constant volume)
+**The 96 h is paid once, for the binary swap only.** Turning enforcement on/off
+afterward is a torrc AUTOBOOL read at request time, so it flips on the *running*
+process with no restart, no uptime reset, and no HSDir-flag loss:
+- live, non-persistent (reactive): `SETCONF HSDirOneRequestPerCircuit=1` /
+  `HSDirRefuseUnknownPrevHop=1` over the control port (and `=0` to flip back);
+- persistent: edit the torrc values and `systemctl reload tor` (SIGHUP).
+This enables the reactive model: run **count-only** as the baseline, let the
+counters/heartbeat detect an active flood, flip enforcement **on** for its
+duration, then **off** when it subsides. (Verified: a SETCONF toggle flips the
+0002 503 live.)
+
+**Logging volume does NOT scale with the flood** — the patch measures with
+counters, not per-request logs. Read the MetricsPort counters + the one-line
+DoS heartbeat; do NOT enable per-request logging. CPU per event is a uint64++
+(plus, only on the reuse/unknown-hop branch, one lockless param/bsearch
+lookup); RAM is O(1) (two globals + two bits on the existing or_circuit_t);
+storage is just your scrape samples (<1 MB/day/relay at 10 s). Keep the log
+level at `notice` (info/debug WOULD explode under a flood) and `SafeLogging`
+on; patch 0003 rate-limits the malformed-HTTP warnings so the flood cannot
+flood the log, and neither the 503s nor the circuit closes log per-request at
+notice level. A 1 req/s relay and a 1000 req/s relay log the same volume.
