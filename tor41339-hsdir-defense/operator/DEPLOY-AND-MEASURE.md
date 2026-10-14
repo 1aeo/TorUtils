@@ -116,6 +116,13 @@ curl -s http://127.0.0.1:9035/metrics | grep 'tor_relay_dos_total{type="hsdir'
 #   tor_relay_dos_total{type="hsdir_request_total"} N
 #   tor_relay_dos_total{type="hsdir_unknown_prev_hop"} N
 ```
+> **Counters vs. the attached `.deb`.** All four lines appear on a binary built
+> from the current patch series. The pre-telemetry `.deb` in `../packages/`
+> predates the `hsdir_req_reused` / `hsdir_request_total` counters and shows only
+> `hsdir_circ_reused` and `hsdir_unknown_prev_hop`; to measure the HS-only
+> repeat-request fraction `r_hs`, build from the current `patches/` (step 1
+> offers this) or install a refreshed package once one is attached.
+
 Confirm **no enforcement**: the relay log shows **no** `RESOURCELIMIT` circuit
 closes attributable to these options and **no** new HS-dir 503s; legitimate
 fetches/uploads succeed exactly as before. If you see either, an override is set

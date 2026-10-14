@@ -4,7 +4,10 @@
 > ships the two behavioral defenses **observe-only** (enforcement off until a
 > consensus parameter or torrc `AUTOBOOL` flips it live), so installing it on a
 > relay only adds the `hsdir_circ_reused` / `hsdir_unknown_prev_hop` counters and
-> changes no behavior. The crash-at-scale review
+> changes no behavior. (`patches/0002` has since added two more count-only
+> MetricsPort counters — `hsdir_req_reused` and `hsdir_request_total` — so this
+> build exposes two of the four; a refreshed build from the current series is
+> pending.) The crash-at-scale review
 > (`../../operator/patch-crash-at-scale-critique.md`) returned 0 critical / 0
 > high, which is why it is cleared for the count-only canary in
 > `../../operator/`. It has **not** completed upstream series review; do not
