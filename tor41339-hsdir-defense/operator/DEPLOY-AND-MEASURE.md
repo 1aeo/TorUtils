@@ -23,6 +23,25 @@ circuits), and is **reversible in seconds**.
 
 ---
 
+## 0. Before you swap: the HSDir-flag / 96-hour cost (read first)
+A binary swap is a process restart, and the HSDir flag's uptime gate uses the
+relay's **self-reported** uptime (`voteflags.c` `dirserv_thinks_router_is_hs_dir`
+-> `real_uptime`), which resets to ~0 on any restart. The dirauth default
+`MinUptimeHidServDirectoryV2` is **96 hours**, so a swapped relay **loses the
+HSDir flag for ~96 h** until it re-accumulates continuous uptime — and the flood
+follows the flag, so it goes quiet on that relay meanwhile. This is unavoidable:
+a fast restart doesn't help (it's the uptime reset, not the downtime), `SIGHUP`
+reloads config not the binary, and the counters only exist in the new binary.
+The relay KEEPS its identity/keys and long-term reputation (Stable/MTBF survive
+a brief restart); only the HSDir uptime gate re-arms.
+
+**So deploy on a CANARY:** pick ONE HSDir (ideally one not currently in the
+flood's rotating hit-set), keep its `DataDirectory`, and accept ~96 h (+ up to
+one hashring time-period cycle) before the flood returns and the counters read
+real data. Your other HSDirs are untouched. The 96 h is paid once per relay for
+ANY binary change, so decide up front whether the canary runs count-only (to
+measure first) or enforcing (to act directly) — the lab already cleared both.
+
 ## 1. Get the patched Tor
 
 The patch series is in `../patches/0001-*.patch … 0007-*.patch` on this branch;
