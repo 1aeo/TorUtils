@@ -1,4 +1,4 @@
-From 69578717acf2e2b72fd25721747ecdbdeef654e5 Mon Sep 17 00:00:00 2001
+From ee4d696abcd97714a4b3541d722099c1e1517fd2 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
 Subject: [PATCH 1/7] hsdir: Refuse HS dir requests whose previous hop is not a
@@ -18,15 +18,14 @@ closes the one-hop escape that the next commit (one onion service
 request per circuit) would otherwise push attackers into, so it comes
 first in this series.
 
-This is a separate predicate, connection_dir_prev_hop_is_known_relay(),
-reached through connection_dir_check_prev_hop() at the two HS call sites
-with its own 503 reason -- not a second condition inside
-connection_dir_is_anonymous(), whose client-channel check (and the exit
-path's RefuseUnknownExits) are left untouched. Counting always happens;
-refusing is off by default and is its own HSDirRefuseUnknownPrevHop
-torrc option and hsdir_refuse_unknown_prev_hop consensus parameter,
-independent of RefuseUnknownExits, so an Exit+HSDir operator can roll
-back the HSDir behavior alone.
+This is a separate guard, connection_dir_allow_hs_request(), called at
+the two HS call sites with its own 503 reason -- not a second condition
+inside connection_dir_is_anonymous(), whose client-channel check (and
+the exit path's RefuseUnknownExits) are left untouched. Counting always
+happens; refusing is off by default and is its own
+HSDirRefuseUnknownPrevHop torrc option and hsdir_refuse_unknown_prev_hop
+consensus parameter, independent of RefuseUnknownExits, so an Exit+HSDir
+operator can roll back the HSDir behavior alone.
 
 Stock C tor, Arti and Onionbalance always have a consensus relay as the
 previous hop. The only false positives are in the roughly 1e-6
@@ -35,21 +34,21 @@ fresh consensus.
 
 Part of 41339.
 ---
- changes/ticket41339_hsdir_known_relay    |  13 +++
- doc/man/tor.1.txt                        |  16 ++++
- scripts/maint/practracker/exceptions.txt |   2 +-
- src/core/or/dos.c                        |  44 +++++++++
- src/core/or/dos.h                        |   3 +
- src/core/or/dos_options.inc              |   7 ++
- src/feature/dircache/dircache.c          |  10 +++
- src/feature/dircommon/directory.c        |  50 +++++++++++
- src/feature/dircommon/directory.h        |   1 +
- src/feature/relay/relay_metrics.c        |   6 ++
- src/test/opts_test_helpers.c             |   9 ++
- src/test/opts_test_helpers.h             |   1 +
- src/test/test_hs_cache.c                 | 109 +++++++++++++++++++++++
- src/test/test_status.c                   |   3 +-
- 14 files changed, 272 insertions(+), 2 deletions(-)
+ changes/ticket41339_hsdir_known_relay |  13 +++
+ doc/man/tor.1.txt                     |  16 ++++
+ src/core/or/dos.c                     |  56 +++++++++++++
+ src/core/or/dos.h                     |   3 +
+ src/core/or/dos_options.inc           |   7 ++
+ src/feature/dircache/dircache.c       |   6 +-
+ src/feature/dircache/dircache.h       |   2 +
+ src/feature/dircommon/directory.c     |  52 ++++++++++++
+ src/feature/dircommon/directory.h     |   1 +
+ src/feature/relay/relay_metrics.c     |  82 ++++++-------------
+ src/test/opts_test_helpers.c          |   9 +++
+ src/test/opts_test_helpers.h          |   1 +
+ src/test/test_hs_cache.c              | 109 ++++++++++++++++++++++++++
+ src/test/test_status.c                |   3 +-
+ 14 files changed, 299 insertions(+), 61 deletions(-)
  create mode 100644 changes/ticket41339_hsdir_known_relay
 
 diff --git a/changes/ticket41339_hsdir_known_relay b/changes/ticket41339_hsdir_known_relay
@@ -72,10 +71,10 @@ index 0000000000..a4e87e0f88
 +      roughly 1e-6 per-request window when a relay has not yet seen the
 +      previous hop in a fresh consensus. Part of ticket 41339.
 diff --git a/doc/man/tor.1.txt b/doc/man/tor.1.txt
-index 88e09e3f40..c5e7c71632 100644
+index a865ebd4bb..64da71a10e 100644
 --- a/doc/man/tor.1.txt
 +++ b/doc/man/tor.1.txt
-@@ -3161,6 +3161,22 @@ The following options are useful only for a exit relay.
+@@ -3148,6 +3148,22 @@ The following options are useful only for a exit relay.
      not defined or set to 0, it is controlled by a consensus parameter. If not
      defined in the consensus, the value is 300. (Default: 0)
  
@@ -98,36 +97,42 @@ index 88e09e3f40..c5e7c71632 100644
  
  For onion services, mitigations are a work in progress and multiple options
  are currently available.
-diff --git a/scripts/maint/practracker/exceptions.txt b/scripts/maint/practracker/exceptions.txt
-index 3d033c568f..e832f084f3 100644
---- a/scripts/maint/practracker/exceptions.txt
-+++ b/scripts/maint/practracker/exceptions.txt
-@@ -219,7 +219,7 @@ problem function-size /src/feature/dircache/consdiffmgr.c:consdiffmgr_cleanup()
- problem function-size /src/feature/dircache/consdiffmgr.c:consdiffmgr_rescan_flavor_() 111
- problem function-size /src/feature/dircache/consdiffmgr.c:consensus_diff_worker_threadfn() 132
- problem function-size /src/feature/dircache/dircache.c:handle_get_current_consensus() 165
--problem function-size /src/feature/dircache/dircache.c:directory_handle_command_post() 124
-+problem function-size /src/feature/dircache/dircache.c:directory_handle_command_post() 130
- problem file-size /src/feature/dirclient/dirclient.c 3204
- problem include-count /src/feature/dirclient/dirclient.c 54
- problem function-size /src/feature/dirclient/dirclient.c:directory_get_from_dirserver() 126
 diff --git a/src/core/or/dos.c b/src/core/or/dos.c
-index b789f87aae..d6d752f426 100644
+index b789f87aae..2f3005cc70 100644
 --- a/src/core/or/dos.c
 +++ b/src/core/or/dos.c
-@@ -103,6 +103,11 @@ static uint64_t stream_num_rejected;
+@@ -103,6 +103,17 @@ static uint64_t stream_num_rejected;
  /* Keep stats for the heartbeat. */
  static uint64_t num_single_hop_client_refused;
  
 +/* Number of onion service directory requests whose previous hop was not a
 + * known relay. Counted whether or not we enforce; see
-+ * connection_dir_check_prev_hop(). */
++ * connection_dir_allow_hs_request(). */
 +static uint64_t num_hsdir_unknown_prev_hop;
++
++/* HSDirRefuseUnknownPrevHop default: enforcement is OFF, so a relay with no
++ * torrc or consensus opinion only counts. */
++#define DOS_HSDIR_REFUSE_UNKNOWN_PREV_HOP_DEFAULT 0
++static unsigned int dos_hsdir_refuse_unknown_prev_hop =
++  DOS_HSDIR_REFUSE_UNKNOWN_PREV_HOP_DEFAULT;
 +
  /** Return the consensus parameter for the outbound circ_max_cell_queue_size
   * limit. */
  static uint32_t
-@@ -702,6 +707,14 @@ dos_get_num_single_hop_refused(void)
+@@ -360,6 +371,12 @@ set_dos_parameters(const networkstatus_t *ns)
+   dos_stream_defense_type = get_param_stream_defense_type(ns);
+   dos_stream_rate = get_param_stream_rate(ns);
+   dos_stream_burst = get_param_stream_burst(ns);
++
++  /* HSDir. */
++  dos_hsdir_refuse_unknown_prev_hop =
++    !!networkstatus_get_param(ns, "hsdir_refuse_unknown_prev_hop",
++                              DOS_HSDIR_REFUSE_UNKNOWN_PREV_HOP_DEFAULT,
++                              0, 1);
+ }
+ 
+ /* Free everything for the circuit creation DoS mitigation subsystem. */
+@@ -702,6 +719,14 @@ dos_get_num_single_hop_refused(void)
    return num_single_hop_client_refused;
  }
  
@@ -142,13 +147,17 @@ index b789f87aae..d6d752f426 100644
  /* Called when a CREATE cell is received from the given channel. */
  void
  dos_cc_new_create_cell(channel_t *chan)
-@@ -1022,6 +1035,34 @@ dos_should_refuse_single_hop_client(void)
+@@ -1022,6 +1047,34 @@ dos_should_refuse_single_hop_client(void)
                                         0 /* default */, 0, 1);
  }
  
-+/* HSDirRefuseUnknownPrevHop default: enforcement is OFF, so a relay with no
-+ * torrc or consensus opinion only counts. */
-+#define DOS_HSDIR_REFUSE_UNKNOWN_PREV_HOP_DEFAULT 0
++/* Return the effective value of an AUTOBOOL torrc option <b>opt</b> (-1 for
++ * "auto") that overrides the cached consensus parameter <b>param</b>. */
++static int
++dos_autobool_or_param(int opt, unsigned int param)
++{
++  return (opt != -1) ? opt : (int)param;
++}
 +
 +/* Return true iff an HSDir should refuse ("enforce"), rather than only count,
 + * an onion service directory request whose previous hop is not a known relay.
@@ -158,12 +167,8 @@ index b789f87aae..d6d752f426 100644
 +int
 +dos_should_refuse_unknown_hsdir_prev_hop(void)
 +{
-+  if (dos_get_options()->HSDirRefuseUnknownPrevHop != -1) {
-+    return dos_get_options()->HSDirRefuseUnknownPrevHop;
-+  }
-+  return !!networkstatus_get_param(NULL, "hsdir_refuse_unknown_prev_hop",
-+                                 DOS_HSDIR_REFUSE_UNKNOWN_PREV_HOP_DEFAULT,
-+                                 0, 1);
++  return dos_autobool_or_param(dos_get_options()->HSDirRefuseUnknownPrevHop,
++                               dos_hsdir_refuse_unknown_prev_hop);
 +}
 +
 +/* Note down that we've just seen an onion service directory request whose
@@ -177,7 +182,7 @@ index b789f87aae..d6d752f426 100644
  /* Log a heartbeat message with some statistics. */
  void
  dos_log_heartbeat(void)
-@@ -1076,6 +1117,9 @@ dos_log_heartbeat(void)
+@@ -1076,6 +1129,9 @@ dos_log_heartbeat(void)
    smartlist_add_asprintf(elems,
                           "%" PRIu64 " INTRODUCE2 rejected",
                           hs_dos_get_intro2_rejected_count());
@@ -188,7 +193,7 @@ index b789f87aae..d6d752f426 100644
    char *msg = smartlist_join_strings(elems, ", ", 0, NULL);
  
 diff --git a/src/core/or/dos.h b/src/core/or/dos.h
-index ee966d0ca7..ce1bac4853 100644
+index 03606287d1..81754f0936 100644
 --- a/src/core/or/dos.h
 +++ b/src/core/or/dos.h
 @@ -82,6 +82,8 @@ void dos_close_client_conn(const or_connection_t *or_conn);
@@ -225,75 +230,80 @@ index 4d15c33f3d..237a96814d 100644
 +
  END_CONF_STRUCT(dos_options_t)
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index aee047c105..5b3b787b93 100644
+index aee047c105..af0882dd5e 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
-@@ -1366,6 +1366,11 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+@@ -90,7 +90,7 @@ parse_http_url(const char *headers, char **url)
+ /** Create an http response for the client <b>conn</b> out of
+  * <b>status</b> and <b>reason_phrase</b>. Write it to <b>conn</b>.
+  */
+-static void
++void
+ write_short_http_response(dir_connection_t *conn, int status,
+                        const char *reason_phrase)
+ {
+@@ -1366,6 +1366,8 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
                                "Rejecting single hop HS v3 descriptor request");
      goto done;
    }
-+  if (!connection_dir_check_prev_hop(conn)) {
-+    write_short_http_response(conn, 503, "Rejecting HS request: previous hop "
-+                              "is not a known relay");
++  if (!connection_dir_allow_hs_request(conn))
 +    goto done;
-+  }
  
    /* After the path prefix follows the base64 encoded blinded pubkey which we
     * use to get the descriptor from the cache. Skip the prefix and get the
-@@ -1611,6 +1616,11 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+@@ -1611,6 +1613,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
                                  "Rejecting single hop HS descriptor post");
        goto done;
      }
-+    if (!connection_dir_check_prev_hop(conn)) {
-+      write_short_http_response(conn, 503, "Rejecting HS request: previous "
-+                                "hop is not a known relay");
++    if (!connection_dir_allow_hs_request(conn))
 +      goto done;
-+    }
      const char *msg = "HS descriptor stored successfully.";
  
      /* We most probably have a publish request for an HS descriptor. */
+diff --git a/src/feature/dircache/dircache.h b/src/feature/dircache/dircache.h
+index 2c90a77ae2..e3daed53b6 100644
+--- a/src/feature/dircache/dircache.h
++++ b/src/feature/dircache/dircache.h
+@@ -13,6 +13,8 @@
+ #define TOR_DIRCACHE_H
+ 
+ int directory_handle_command(dir_connection_t *conn);
++void write_short_http_response(dir_connection_t *conn, int status,
++                               const char *reason_phrase);
+ 
+ #ifdef DIRCACHE_PRIVATE
+ MOCK_DECL(STATIC int, directory_handle_command_get,(dir_connection_t *conn,
 diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
-index 6b5c38c7c1..d81247f104 100644
+index 6b5c38c7c1..50487d4ea7 100644
 --- a/src/feature/dircommon/directory.c
 +++ b/src/feature/dircommon/directory.c
-@@ -264,6 +264,56 @@ connection_dir_is_anonymous(const dir_connection_t *dir_conn)
+@@ -11,6 +11,7 @@
+ #include "core/or/connection_edge.h"
+ #include "core/or/connection_or.h"
+ #include "core/or/channeltls.h"
++#include "core/or/dos.h"
+ #include "feature/dircache/dircache.h"
+ #include "feature/dircache/dirserv.h"
+ #include "feature/dirclient/dirclient.h"
+@@ -264,6 +265,57 @@ connection_dir_is_anonymous(const dir_connection_t *dir_conn)
    return !channel_is_client(CONST_TO_OR_CIRCUIT(circ)->p_chan);
  }
  
-+/** Return true iff the previous hop of the anonymous directory connection
-+ * <b>conn</b> is a relay we recognize: one in our consensus or with a
-+ * descriptor. Anyone can authenticate an OR connection with a self-generated
-+ * relay identity, so an authenticated (non-client) previous hop is not by
-+ * itself a known relay. */
-+static bool
-+connection_dir_prev_hop_is_known_relay(const dir_connection_t *conn)
-+{
-+  const circuit_t *circ;
-+  const channel_t *p_chan;
-+
-+  /* This guarantees a linked edge connection on an open OR circuit. */
-+  if (BUG(!connection_dir_is_anonymous(conn)))
-+    return true;
-+  circ = CONST_TO_EDGE_CONN(TO_CONN(conn)->linked_conn)->on_circuit;
-+  p_chan = CONST_TO_OR_CIRCUIT(circ)->p_chan;
-+  return connection_or_digest_is_known_relay(p_chan->identity_digest);
-+}
-+
 +/** Note that the anonymous directory connection <b>conn</b> is making an onion
-+ * service directory request, and return true iff an HSDir should serve it with
-+ * respect to the known-previous-hop rule.
++ * service directory request, and return true iff an HSDir should serve it.
 + *
 + * HSDirs have refused onion service requests from client channels since
 + * 0.4.2.1-alpha (24964), so they can't be made over one-hop circuits. But a
 + * peer that authenticates with any self-generated relay identity is not a
 + * client channel, so it can still make one-hop HS requests. As exits do for
-+ * RefuseUnknownExits (1751), require the previous hop to be a known relay.
-+ * This rejects arbitrary unknown prev-hop identities; an attacker can still
-+ * add one hop through any consensus relay, so it is not a rate limit.
++ * RefuseUnknownExits (1751), require the previous hop to be a known relay: one
++ * in our consensus or with a descriptor. This rejects arbitrary unknown
++ * prev-hop identities; an attacker can still add one hop through any consensus
++ * relay, so it is not a rate limit.
 + *
 + * We count every unknown-prev-hop request, whether or not we enforce, so the
-+ * effect can be measured first. We refuse (and the caller returns a 503) only
-+ * when enforcement is enabled. Enforcement is off by default and is its own
++ * effect can be measured first. When enforcement is enabled, we send a 503 and
++ * return false. Enforcement is off by default and is its own
 + * HSDirRefuseUnknownPrevHop torrc option and hsdir_refuse_unknown_prev_hop
 + * consensus parameter, independent of RefuseUnknownExits, so turning the HSDir
 + * rule off does not weaken exit protection (and vice versa).
@@ -302,46 +312,143 @@ index 6b5c38c7c1..d81247f104 100644
 + * previous hop; the only false positives are during the ~1e-6/request window
 + * when the relay has not yet seen the previous hop in a fresh consensus. */
 +bool
-+connection_dir_check_prev_hop(dir_connection_t *conn)
++connection_dir_allow_hs_request(dir_connection_t *conn)
 +{
-+  if (connection_dir_prev_hop_is_known_relay(conn))
++  const circuit_t *circ;
++  channel_t *p_chan;
++
++  /* This guarantees a linked edge connection on an open OR circuit. */
++  if (BUG(!connection_dir_is_anonymous(conn)))
 +    return true;
-+  dos_note_hsdir_unknown_prev_hop();
-+  return !dos_should_refuse_unknown_hsdir_prev_hop();
++  circ = CONST_TO_EDGE_CONN(TO_CONN(conn)->linked_conn)->on_circuit;
++  p_chan = CONST_TO_OR_CIRCUIT(circ)->p_chan;
++
++  if (!connection_or_digest_is_known_relay(p_chan->identity_digest)) {
++    dos_note_hsdir_unknown_prev_hop();
++    if (dos_should_refuse_unknown_hsdir_prev_hop()) {
++      static ratelim_t prev_hop_lim = RATELIM_INIT(600);
++      log_fn_ratelim(&prev_hop_lim, LOG_PROTOCOL_WARN, LD_REND,
++                     "Refusing HS directory request from unknown previous "
++                     "hop %s.",
++                     p_chan->describe_peer ?
++                     safe_str(channel_describe_peer(p_chan)) : "(unknown)");
++      write_short_http_response(conn, 503, "Rejecting HS request: previous "
++                                "hop is not a known relay");
++      return false;
++    }
++  }
++  return true;
 +}
 +
  /** Did <b>conn</b> ever send us a version 0 sendme cell and we allowed
   * it? Used to decide whether to count consensus fetches from it in our
   * geoip stats.
 diff --git a/src/feature/dircommon/directory.h b/src/feature/dircommon/directory.h
-index ffb2a87257..999ce129f9 100644
+index ffb2a87257..fbbb6d931f 100644
 --- a/src/feature/dircommon/directory.h
 +++ b/src/feature/dircommon/directory.h
 @@ -95,6 +95,7 @@ char *http_get_header(const char *headers, const char *which);
  
  int connection_dir_is_encrypted(const dir_connection_t *conn);
  bool connection_dir_is_anonymous(const dir_connection_t *conn);
-+bool connection_dir_check_prev_hop(dir_connection_t *conn);
++bool connection_dir_allow_hs_request(dir_connection_t *conn);
  bool connection_dir_used_obsolete_sendme(const dir_connection_t *conn);
  int connection_dir_reached_eof(dir_connection_t *conn);
  int connection_dir_process_inbuf(dir_connection_t *conn);
 diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
-index 492a5945b8..c4e205bae8 100644
+index 492a5945b8..2609770c94 100644
 --- a/src/feature/relay/relay_metrics.c
 +++ b/src/feature/relay/relay_metrics.c
-@@ -459,6 +459,12 @@ fill_dos_values(void)
-           metrics_format_label("type", "introduce2_rejected"));
-   metrics_store_entry_update(sentry, hs_dos_get_intro2_rejected_count());
+@@ -404,66 +404,30 @@ static void
+ fill_dos_values(void)
+ {
+   const relay_metrics_entry_t *rentry = &base_metrics[RELAY_METRICS_NUM_DOS];
+-  metrics_store_entry_t *sentry = metrics_store_add(
+-      the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
+-
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "circuit_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_cc_rejected());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "circuit_killed_max_cell"));
+-  metrics_store_entry_update(sentry, stats_n_circ_max_cell_reached);
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "circuit_killed_max_cell_outq"));
+-  metrics_store_entry_update(sentry, stats_n_circ_max_cell_outq_reached);
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "marked_address"));
+-  metrics_store_entry_update(sentry, dos_get_num_cc_marked_addr());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "marked_address_maxq"));
+-  metrics_store_entry_update(sentry, dos_get_num_cc_marked_addr_maxq());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "conn_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_conn_addr_connect_rejected());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "concurrent_conn_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_conn_addr_rejected());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "single_hop_refused"));
+-  metrics_store_entry_update(sentry, dos_get_num_single_hop_refused());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "introduce2_rejected"));
+-  metrics_store_entry_update(sentry, hs_dos_get_intro2_rejected_count());
++  const struct {
++    const char *type;
++    uint64_t val;
++  } entries[] = {
++    { "circuit_rejected",          dos_get_num_cc_rejected() },
++    { "circuit_killed_max_cell",   stats_n_circ_max_cell_reached },
++    { "circuit_killed_max_cell_outq", stats_n_circ_max_cell_outq_reached },
++    { "marked_address",            dos_get_num_cc_marked_addr() },
++    { "marked_address_maxq",       dos_get_num_cc_marked_addr_maxq() },
++    { "conn_rejected",             dos_get_num_conn_addr_connect_rejected() },
++    { "concurrent_conn_rejected",  dos_get_num_conn_addr_rejected() },
++    { "single_hop_refused",        dos_get_num_single_hop_refused() },
++    { "introduce2_rejected",       hs_dos_get_intro2_rejected_count() },
++    { "hsdir_unknown_prev_hop",    dos_get_num_hsdir_unknown_prev_hop() },
++    { "stream_rejected",           dos_get_num_stream_rejected() },
++  };
  
-+  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
-+                             rentry->help, 0, NULL);
-+  metrics_store_entry_add_label(sentry,
-+          metrics_format_label("type", "hsdir_unknown_prev_hop"));
-+  metrics_store_entry_update(sentry, dos_get_num_hsdir_unknown_prev_hop());
-+
-   sentry = metrics_store_add(the_store, rentry->type, rentry->name,
-                              rentry->help, 0, NULL);
-   metrics_store_entry_add_label(sentry,
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "stream_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_stream_rejected());
++  for (size_t i = 0; i < ARRAY_LENGTH(entries); i++) {
++    metrics_store_entry_t *sentry = metrics_store_add(
++        the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
++    metrics_store_entry_add_label(sentry,
++            metrics_format_label("type", entries[i].type));
++    metrics_store_entry_update(sentry, entries[i].val);
++  }
+ }
+ 
+ /** Fill function for the RELAY_METRICS_CC_COUNTERS metric. */
 diff --git a/src/test/opts_test_helpers.c b/src/test/opts_test_helpers.c
 index 2c0f8dbd82..ed1cee1f3b 100644
 --- a/src/test/opts_test_helpers.c
@@ -534,5 +641,5 @@ index 4ceb81f3a5..bef9a2ff8b 100644
  
   done:
 -- 
-2.43.0
+2.39.5 (Apple Git-154)
 

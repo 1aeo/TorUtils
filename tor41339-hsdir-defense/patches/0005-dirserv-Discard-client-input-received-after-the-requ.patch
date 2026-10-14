@@ -1,4 +1,4 @@
-From 2e4da2d9d9bd458b5e92c6344cc64463f0031997 Mon Sep 17 00:00:00 2001
+From eacbb055a693ad3bc56b0b1b740b24fade39edd9 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
 Subject: [PATCH 5/7] dirserv: Discard client input received after the request
@@ -30,9 +30,9 @@ total. Hardening related to bug 41339; it does not affect the HSDir
 fetch flood in that ticket.
 ---
  changes/dirserv_extra_input       |   7 ++
- src/feature/dircommon/directory.c |  21 ++++++
+ src/feature/dircommon/directory.c |  17 +++++
  src/test/test_dir_handle_get.c    | 116 ++++++++++++++++++++++++++++++
- 3 files changed, 144 insertions(+)
+ 3 files changed, 140 insertions(+)
  create mode 100644 changes/dirserv_extra_input
 
 diff --git a/changes/dirserv_extra_input b/changes/dirserv_extra_input
@@ -49,7 +49,7 @@ index 0000000000..fdde98d2fe
 +      sending without reading its answer is closed by the directory
 +      connection stall timeout. Part of ticket 41339.
 diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
-index 5b0a6490f0..3f410fc67c 100644
+index e0d8197e5d..ec2c348f02 100644
 --- a/src/feature/dircommon/directory.c
 +++ b/src/feature/dircommon/directory.c
 @@ -19,6 +19,7 @@
@@ -60,30 +60,26 @@ index 5b0a6490f0..3f410fc67c 100644
  #include "lib/compress/compress.h"
  
  #include "core/or/circuit_st.h"
-@@ -584,6 +585,26 @@ connection_dir_process_inbuf(dir_connection_t *conn)
+@@ -562,6 +563,22 @@ connection_dir_process_inbuf(dir_connection_t *conn)
        connection_mark_for_close(TO_CONN(conn));
        return -1;
      }
-+    /* If the request was fully read -- we are now writing the response --
-+     * discard anything the client sent after it in this same read, since a
-+     * dirserver handles one request per connection. A still-incomplete
-+     * request stays in COMMAND_WAIT, so leave it for the next read. */
-+    if (conn->base_.state == DIR_CONN_STATE_SERVER_WRITING)
-+      buf_clear(TO_CONN(conn)->inbuf);
-+    return 0;
++    /* Fall through to discard any trailing bytes once in SERVER_WRITING. */
 +  }
 +
-+  /* On the server side we are now only writing the response, so discard
-+   * anything else the client sends (e.g. in a later read) instead of
-+   * buffering it. We don't close the connection, so a client that sends a
-+   * stray CRLF after its request still gets its answer, and we don't stop
-+   * reading, since linked connections only notice EOF while reading. Memory
-+   * stays bounded because each read is discarded at once; a client that keeps
-+   * sending without reading its answer is closed by the
-+   * TestingDirConnectionMaxStall timeout, and the OOM handler still covers
-+   * these connections. */
++  /* On the server side, once the request is read and we are writing the
++   * response, discard anything else the client sends (whether in the same read
++   * or a later one) instead of buffering it. A still-incomplete request stays
++   * in COMMAND_WAIT and is kept for the next read. We don't close the
++   * connection, so a client that sends a stray CRLF after its request still
++   * gets its answer, and we don't stop reading, since linked connections only
++   * notice EOF while reading. Memory stays bounded because each read is
++   * discarded at once; a client that keeps sending without reading its answer
++   * is closed by the TestingDirConnectionMaxStall timeout, and the OOM handler
++   * still covers these connections. */
 +  if (DIR_CONN_IS_SERVER(TO_CONN(conn))) {
-+    buf_clear(TO_CONN(conn)->inbuf);
++    if (conn->base_.state == DIR_CONN_STATE_SERVER_WRITING)
++      buf_clear(TO_CONN(conn)->inbuf);
      return 0;
    }
  
@@ -221,5 +217,5 @@ index a2d6cd4619..edea626d49 100644
    END_OF_TESTCASES
  };
 -- 
-2.43.0
+2.39.5 (Apple Git-154)
 
