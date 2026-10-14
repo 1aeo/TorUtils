@@ -55,3 +55,18 @@ The log is `per-commit-SUMMARY.txt`. Each commit was built with
 `make check-spaces` and `make check-changes`. The `PYTHONUNBUFFERED`
 variable is unset so practracker's self-test is not perturbed. See
 `../README.md` for why that matters.
+
+### Result
+
+All 7 commits pass, in order. Each one builds with 0 warnings under
+`--enable-fatal-warnings`, `make check` returns 0 with no failures, and
+`make check-spaces` and `make check-changes` both return 0. Unit tests ok per
+commit: 1603, 1604, 1605, 1606, 1611, 1611, 1613. Details are in
+`per-commit-SUMMARY.txt` and `per-commit-logs/`.
+
+The first attempt at the reorder had a broken first commit: its test used the
+`get_dos_options()` helper and dos/config includes that only arrived with the
+next commit. It failed with `-Werror` implicit-declaration; the log is
+`per-commit-logs/attempt1-commit1-BUILD-FAILURE.log.gz`. The fix moved that
+helper and those includes into the first commit. The final tree was
+unchanged.
