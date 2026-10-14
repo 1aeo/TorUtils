@@ -107,8 +107,9 @@ would pin it; flagged as a follow-up.
   enforcing on the *same* net), which controls for net state; the
   served-fraction headline is a within-cell ratio and is immune either way. A
   single-net interleaved unpatched-vs-count-only `fetch` run would pin the ~30%
-  shift — noted as a follow-up (not trivially one-net, since chutney runs every
-  node on one binary).
+  shift — feasible via chutney's per-node `tor=` field (give the target its own
+  unpatched binary while the rest run patched); low priority, since the
+  within-build A/B already controls net state.
 - **5% lab-transient flake rate**, handled by the net-health gate above.
 
 ## Verdict
