@@ -22,6 +22,16 @@ chutney start && chutney wait_for_bootstrap && CHUTNEY_LAUNCH_PHASE=2 chutney st
 echo "### bootstrap rc=$?"
 grep -h "^Sandbox" $CHUTNEY_DATA_DIR/nodes/*/torrc | sort | uniq -c
 # Ordinary HS traffic: stock HS uploads (POST), stock client fetches (GET) + connects.
+if [ "${STRACE:-0}" = 1 ]; then
+  echo "### STRACE=1: attaching strace (failed syscalls only) to every thread of every relay/authority"
+  STPIDS=""
+  for d in $CHUTNEY_DATA_DIR/nodes/0*[ar]; do
+    n=$(basename $d); pid=$(pgrep -f "$(readlink -f $d)/torrc" | head -n1)
+    tids=$(ls /proc/$pid/task | sed 's/^/-p /' | tr '\n' ' ')
+    strace -f -qq -e status=failed -o $OUT/strace-$n.txt $tids & STPIDS="$STPIDS $!"
+  done
+  sleep 3
+fi
 for i in 1 2 3; do chutney verify; echo "### verify $i rc=$?"; done
 } > $OUT/transcript.txt 2>&1
 echo $CHUTNEY_DATA_DIR > $OUT/datadir
@@ -39,6 +49,11 @@ for p in $(grep -h "^MetricsPort" $CHUTNEY_DATA_DIR/nodes/*/torrc | awk '{print 
   echo "### metrics $p"; curl -s http://$p/metrics | grep -E 'tor_relay_dos_total\{type="hsdir' ; done
 sleep 5
 for i in 4; do chutney verify; echo "### verify $i rc=$?"; done
+if [ "${STRACE:-0}" = 1 ]; then
+  kill -INT $STPIDS; sleep 3
+  echo "### EPERM-returning syscalls per node (syscall + first argument), counts"
+  for f in $OUT/strace-*.txt; do echo "== $(basename $f .txt | sed s/strace-//)"; grep "EPERM" $f | sed -E 's/^[0-9]+ +//; s/^([a-z0-9_]+)\(([^,)]*).*/\1(\2, ...)/' | sort | uniq -c | sort -rn; done
+fi
 chutney stop; echo "### stop rc=$?"; sleep 15
 echo "### shutdown check: nodes that logged a shutdown signal, and any survivors"
 for d in $CHUTNEY_DATA_DIR/nodes/[0-9]*; do echo "$(basename $d): $(grep -ho 'Catching signal [A-Z]*' $d/notice.log | tail -n1)"; done

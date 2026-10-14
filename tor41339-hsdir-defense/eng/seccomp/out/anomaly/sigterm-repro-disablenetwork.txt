@@ -1,0 +1,68 @@
+  trial 1 STUCK main_SigBlk=00007fd1e82ac42e Seccomp=2 ShdPnd=0000000000004000
+  trial 1 main_SigBlk=00007fd1e82ac42e Seccomp=2
+/work/scripts/sigterm-repro.sh: line 5: 21394 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 2 STUCK main_SigBlk=00007f45ea8ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 22560 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 3 STUCK main_SigBlk=00007f5a638ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 24151 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 4 STUCK main_SigBlk=00007f3ec1aac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 25992 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 5 STUCK main_SigBlk=00007f1d142ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 27564 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 6 STUCK main_SigBlk=00007f48368ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 27894 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 7 STUCK main_SigBlk=00007f52fd8ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 28250 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 8 STUCK main_SigBlk=00007f1a3e8ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 28587 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 9 STUCK main_SigBlk=00007fa40dcac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 29368 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 10 STUCK main_SigBlk=00007f19d7aac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 29828 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 11 STUCK main_SigBlk=00007f7ed76ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 30416 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 12 STUCK main_SigBlk=00007fe4a0eac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 30971 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 13 STUCK main_SigBlk=00007fdd7a2ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 31570 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 14 STUCK main_SigBlk=00007f37000ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5: 32631 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 15 STUCK main_SigBlk=00007f1a3baac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:   374 Killed                  $B -f $D/torrc > /dev/null 2>&1
+tor-patched Sandbox=1: exited=0 stuck=15 of 15
+  trial 1 main_SigBlk=0000000000000000 Seccomp=0
+tor-patched Sandbox=0: exited=15 stuck=0 of 15
+  trial 1 STUCK main_SigBlk=00007f2a10eac42e Seccomp=2 ShdPnd=0000000000004000
+  trial 1 main_SigBlk=00007f2a10eac42e Seccomp=2
+/work/scripts/sigterm-repro.sh: line 5:  2474 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 2 STUCK main_SigBlk=00007f460d6ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  2627 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 3 STUCK main_SigBlk=00007f44e22ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  2671 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 4 STUCK main_SigBlk=00007ff87feac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  2705 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 5 STUCK main_SigBlk=00007f0fe64ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  2748 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 6 STUCK main_SigBlk=00007fb8706ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  2789 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 7 STUCK main_SigBlk=00007f2cd42ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  2832 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 8 STUCK main_SigBlk=00007f1c04cac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  2866 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 9 STUCK main_SigBlk=00007fd19d4ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  2909 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 10 STUCK main_SigBlk=00007fef710ac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  2953 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 11 STUCK main_SigBlk=00007f5865eac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  2993 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 12 STUCK main_SigBlk=00007fdbc6aac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  3035 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 13 STUCK main_SigBlk=00007f9932eac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  3122 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 14 STUCK main_SigBlk=00007f20d0aac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  3245 Killed                  $B -f $D/torrc > /dev/null 2>&1
+  trial 15 STUCK main_SigBlk=00007f3b48cac42e Seccomp=2 ShdPnd=0000000000004000
+/work/scripts/sigterm-repro.sh: line 5:  3350 Killed                  $B -f $D/torrc > /dev/null 2>&1
+tor-unpatched Sandbox=1: exited=0 stuck=15 of 15
+  trial 1 main_SigBlk=0000000000000000 Seccomp=0
+tor-unpatched Sandbox=0: exited=15 stuck=0 of 15
