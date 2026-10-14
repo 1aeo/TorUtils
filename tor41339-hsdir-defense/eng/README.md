@@ -26,10 +26,10 @@ host, so toolchain or host noise cancels out.
 | A.1 build, `--enable-fatal-warnings` | patched: 0 warnings |
 | A.1 unit tests | patched **1613 ok / 0 fail**; unpatched 1602 (the series adds 11) |
 | A.1 `make check` scripts | equal on both sides (see the note on `test_practracker.sh` below) |
-| CI matrix (ci-driver.sh) | see `ci-matrix/` (*pending final table*) |
+| CI matrix (ci-driver.sh) | **No regressions** (nothing passes unpatched and fails patched). Green on both sides: minimal, distcheck, disable-dirauth, gpl, nss, docs, tracing. disable-relay: green patched; the unpatched run failed `test_cbt_mvp` (tor#41148). Environmental failures identical on both sides: hardened LSan in `sandbox/*`; integration IPv6 flavours and stem (no IPv6 in the container). See `ci-matrix/` |
 | Seccomp (`Sandbox 1`, amd64) | 33/33 processes in seccomp filter mode (`Seccomp: 2`); 0 "Caught a bad syscall". Stock HS GET/POST and DirPort parser paths behave identically to unpatched (0004 visible). **EPERM audit** (the filter's default action is EPERM, not SIGSYS; strace on every thread of every sandboxed relay/authority): patched-default and patched-enforce return EPERM only for OpenSSL's kTLS probe `setsockopt(SOL_TCP, TCP_ULP, "tls")`. The unpatched control shows the same probe plus glibc's `/proc/sys/vm/overcommit_memory` read. So the patched EPERM set is a subset of stock: **no new denied syscall**. See `seccomp/out-strace-audit/` |
 | `.deb` (deb.torproject.org noble 0.4.9.14-1~noble+1 + series) | built in a fresh 24.04 container (`dh_auto_test`: 1613 ok). Installs in a fresh 24.04 container; `--verify-config` passes; private-net relay reaches Bootstrapped 100%; `hsdir_circ_reused 0`; enforcement `auto` (off). See `deb/` |
-| Reordered series (0002 first) | final tree identical to v3 plus 3 practracker exception lines. Per-commit build and test: see `series-reordered/` (*pending final run*) |
+| Reordered series (0002 first) | final tree identical to v3 plus 3 practracker exception lines. **All 7 commits** build with 0 warnings and pass `make check`, `check-spaces` and `check-changes` (unit ok 1603 → 1613). See `series-reordered/` |
 | torspec | ready-to-apply patch in `torspec/`; placement appended to `../patches/torspec-draft.txt` |
 
 ## Environment notes (not regressions)
@@ -38,8 +38,8 @@ host, so toolchain or host noise cancels out.
   `PYTHONUNBUFFERED=1` is in the environment, which this cloud session
   exports. Unbuffered stdout changes how the self-test's stderr and stdout
   interleave relative to `testdata/ex0-expected.txt`. It fails identically on
-  unpatched `main`, and it passes once the variable is unset. CI cells run
-  after this was found unset it, and the earlier cells are rerun clean.
+  unpatched `main`, and it passes once the variable is unset. All final CI
+  cells and the per-commit runs have it unset.
 - **`debian-hardened` (clang ASan/UBSan, `ALL_BUGS_ARE_FATAL`).** In
   `unittest_part7` the 5 tests `sandbox/is_active`, `chmod_filename`,
   `chown_filename`, `rename_filename` and `crypto_equix` abort with
