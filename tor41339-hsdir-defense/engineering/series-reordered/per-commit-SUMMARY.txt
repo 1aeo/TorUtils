@@ -1,0 +1,8 @@
+69578717ac hsdir: Refuse HS dir requests whose previous hop is not a k | build=0 warnings=0 unit_ok=1603 check_rc=0 fails=[] check-spaces=0 check-changes=0
+2479c9383c hsdir: Serve one onion service directory request per circui | build=0 warnings=0 unit_ok=1604 check_rc=0 fails=[] check-spaces=0 check-changes=0
+8a12e2bf7e dirserv: Stop unthrottled warnings on malformed HTTP reques | build=0 warnings=0 unit_ok=1605 check_rc=0 fails=[] check-spaces=0 check-changes=0
+34498e6b1c dirserv: Don't buffer request bodies larger than an HS desc | build=0 warnings=0 unit_ok=1606 check_rc=0 fails=[] check-spaces=0 check-changes=0
+2e4da2d9d9 dirserv: Discard client input received after the request | build=0 warnings=0 unit_ok=1611 check_rc=0 fails=[] check-spaces=0 check-changes=0
+3f59cc2e9c hs_desc: Check signature length before verifying the signin | build=0 warnings=0 unit_ok=1611 check_rc=0 fails=[] check-spaces=0 check-changes=0
+5dae0e0089 hs_cache: Only credit HSDir downloads once the response is  | build=0 warnings=0 unit_ok=1613 check_rc=0 fails=[] check-spaces=0 check-changes=0
+SERIES-DONE

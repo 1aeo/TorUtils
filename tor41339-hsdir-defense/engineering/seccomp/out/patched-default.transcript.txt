@@ -1,0 +1,492 @@
+### label=patched-default relay_tor=/work/src/tor-patched/src/app/tor (Tor version 0.5.0.0-alpha-dev (git-741132a249eaa387).) stock=Tor version 0.5.0.0-alpha-dev (git-8dbbbe6e86a6ca0d).
+### relay extra torrc: <none>
+Wed Oct 14 01:36:14 UTC 2026
+INFO:chutney.TorNet:Loading network config from chutney network script path: '/work/eng/seccomp/hs-v3-sandbox'
+INFO:chutney.TorNet:creating '/work/chutney-net/seccomp-patched-default/nodes.1791941774', linking to '/work/chutney-net/seccomp-patched-default/nodes'
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-patched-default/nodes'->'/work/chutney-net/seccomp-patched-default/nodes.1791941774
+Creating identity key for test000a     with /work/src/tor-patched/src/app/../tools/tor-gencert
+Creating identity key for test001a     with /work/src/tor-patched/src/app/../tools/tor-gencert
+Creating identity key for test002a     with /work/src/tor-patched/src/app/../tools/tor-gencert
+Creating identity key for test003a     with /work/src/tor-patched/src/app/../tools/tor-gencert
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-patched-default/nodes'->'/work/chutney-net/seccomp-patched-default/nodes.1791941774
+Starting nodes
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-patched-default/nodes'->'/work/chutney-net/seccomp-patched-default/nodes.1791941774
+Waiting for nodes to bootstrap...
+
+Bootstrap in progress: 10 seconds
+Node status:
+test000a     :                   0, starting                 , Starting
+test001a     :                   0, starting                 , Starting
+test002a     :                   0, starting                 , Starting
+test003a     :                   0, starting                 , Starting
+test004r     :                   0, starting                 , Starting
+test005r     :                   0, starting                 , Starting
+test006r     :                   0, starting                 , Starting
+test007r     :                   0, starting                 , Starting
+test008r     :                   0, starting                 , Starting
+Published dir info:
+test000a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test001a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test002a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test003a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test004r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test005r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test006r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test007r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test008r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+
+Bootstrap in progress: 21 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     :                   0, starting                 , Starting
+test005r     :                   0, starting                 , Starting
+test006r     :                   0, starting                 , Starting
+test007r     :                   0, starting                 , Starting
+test008r     :                   0, starting                 , Starting
+Published dir info:
+test000a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test001a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test002a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test003a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test004r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test005r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test006r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test007r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test008r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+
+Bootstrap in progress: 32 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     :                   0, starting                 , Starting
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test003a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test006r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test007r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+test008r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, all formats                   
+
+Bootstrap in progress: 42 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test003a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test006r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test007r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test008r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+
+Bootstrap in progress: 52 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test003a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test006r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test007r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test008r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+
+Bootstrap in progress: 63 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test003a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test006r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test007r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test008r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+
+Bootstrap in progress: 73 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test003a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test006r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test007r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test008r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+
+Bootstrap in progress: 83 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test003a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test006r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test007r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test008r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+
+Bootstrap in progress: 93 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test003a     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test006r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test007r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+test008r     : -400 (MISSING_FILE), 000a 001a 002a 003a 004r 005r 006r 007r 008r, DESC NS_CONS                  
+
+Everything bootstrapped after 103 sec
+Bootstrap finished: 103 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test001a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test002a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test003a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test004r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test005r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test006r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test007r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test008r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+
+Waiting 0 seconds for the network to be ready...
+
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-patched-default/nodes'->'/work/chutney-net/seccomp-patched-default/nodes.1791941774
+Starting nodes
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-patched-default/nodes'->'/work/chutney-net/seccomp-patched-default/nodes.1791941774
+Waiting for nodes to bootstrap...
+
+Everything bootstrapped after 3 sec
+Bootstrap finished: 3 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003a     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+test006r     : 100 (SUCCESS)      , done                     , Done
+test007r     : 100 (SUCCESS)      , done                     , Done
+test008r     : 100 (SUCCESS)      , done                     , Done
+test009c     : 100 (SUCCESS)      , done                     , Done
+test010h     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test001a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test002a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test003a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test004r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test005r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test006r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test007r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test008r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+
+Waiting 30 seconds for the network to be ready...
+
+### bootstrap rc=0
+     11 Sandbox 1
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-patched-default/nodes'->'/work/chutney-net/seccomp-patched-default/nodes.1791941774
+Verifying data transmission: (retrying for up to 60 seconds)
+Connecting:
+  Exit to 127.0.0.1:4747 via client localhost:9009
+  HS to de4odr4z6him43ot2xa76zejy3us55rrlnhlsehqv7xpe7ravvszioyd.onion:5858 (127.0.0.1:4747) via client localhost:9009
+Transmitting Data:
+INFO:chutney.Traffic:Registering exit via test009c send-data-1
+INFO:chutney.Traffic:Registering exit via test009c check-2
+INFO:chutney.Traffic:Registering test010h via test009c send-data-3
+INFO:chutney.Traffic:Registering test010h via test009c check-4
+INFO:chutney.Traffic:Success for exit via test009c send-data-1
+INFO:chutney.Traffic:Success for test010h via test009c send-data-3
+INFO:chutney.Traffic:Success for exit via test009c check-2
+INFO:chutney.Traffic:Success for test010h via test009c check-4
+INFO:chutney.Traffic:Status:
+  exit via test009c send-data-1: success (Flushed)
+  exit via test009c check-2: success (successful verification)
+  test010h via test009c send-data-3: success (Flushed)
+  test010h via test009c check-4: success (successful verification)
+  not-done:0 successes:4 failures:0
+Single Stream Bandwidth: 3.08 MBytes/s
+Overall tor Bandwidth: 36.96 MBytes/s
+Transmission: Success
+### verify 1 rc=0
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-patched-default/nodes'->'/work/chutney-net/seccomp-patched-default/nodes.1791941774
+Verifying data transmission: (retrying for up to 60 seconds)
+Connecting:
+  Exit to 127.0.0.1:4747 via client localhost:9009
+  HS to de4odr4z6him43ot2xa76zejy3us55rrlnhlsehqv7xpe7ravvszioyd.onion:5858 (127.0.0.1:4747) via client localhost:9009
+Transmitting Data:
+INFO:chutney.Traffic:Registering exit via test009c send-data-1
+INFO:chutney.Traffic:Registering exit via test009c check-2
+INFO:chutney.Traffic:Registering test010h via test009c send-data-3
+INFO:chutney.Traffic:Registering test010h via test009c check-4
+INFO:chutney.Traffic:Success for test010h via test009c send-data-3
+INFO:chutney.Traffic:Success for exit via test009c send-data-1
+INFO:chutney.Traffic:Success for exit via test009c check-2
+INFO:chutney.Traffic:Success for test010h via test009c check-4
+INFO:chutney.Traffic:Status:
+  exit via test009c send-data-1: success (Flushed)
+  exit via test009c check-2: success (successful verification)
+  test010h via test009c send-data-3: success (Flushed)
+  test010h via test009c check-4: success (successful verification)
+  not-done:0 successes:4 failures:0
+Single Stream Bandwidth: 2.79 MBytes/s
+Overall tor Bandwidth: 33.51 MBytes/s
+Transmission: Success
+### verify 2 rc=0
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-patched-default/nodes'->'/work/chutney-net/seccomp-patched-default/nodes.1791941774
+Verifying data transmission: (retrying for up to 60 seconds)
+Connecting:
+  Exit to 127.0.0.1:4747 via client localhost:9009
+  HS to de4odr4z6him43ot2xa76zejy3us55rrlnhlsehqv7xpe7ravvszioyd.onion:5858 (127.0.0.1:4747) via client localhost:9009
+Transmitting Data:
+INFO:chutney.Traffic:Registering exit via test009c send-data-1
+INFO:chutney.Traffic:Registering exit via test009c check-2
+INFO:chutney.Traffic:Registering test010h via test009c send-data-3
+INFO:chutney.Traffic:Registering test010h via test009c check-4
+INFO:chutney.Traffic:Success for exit via test009c send-data-1
+INFO:chutney.Traffic:Success for test010h via test009c send-data-3
+INFO:chutney.Traffic:Success for exit via test009c check-2
+INFO:chutney.Traffic:Success for test010h via test009c check-4
+INFO:chutney.Traffic:Status:
+  exit via test009c send-data-1: success (Flushed)
+  exit via test009c check-2: success (successful verification)
+  test010h via test009c send-data-3: success (Flushed)
+  test010h via test009c check-4: success (successful verification)
+  not-done:0 successes:4 failures:0
+Single Stream Bandwidth: 2.77 MBytes/s
+Overall tor Bandwidth: 33.24 MBytes/s
+Transmission: Success
+### verify 3 rc=0
+### seccomp status of every running tor process (Seccomp: 2 == filter mode)
+pid=2389 nodes.1791941774/000a/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=2393 nodes.1791941774/001a/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=2398 nodes.1791941774/002a/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=2405 nodes.1791941774/003a/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=2408 nodes.1791941774/004r/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=2412 nodes.1791941774/005r/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=2415 nodes.1791941774/006r/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=2422 nodes.1791941774/007r/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=2427 nodes.1791941774/008r/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=11514 nodes.1791941774/009c/torrc Seccomp:	2 Seccomp_filters:	1 
+pid=11528 nodes.1791941774/010h/torrc Seccomp:	2 Seccomp_filters:	1 
+### 18 ordinary single HSFETCHes, SERVER= round-robin over all 9 HSDirs, from the stock client (one at a time)
+0 RECEIVED $DC30E289BA719D14AE2076C025A6EC6D4A8F4D26~test000a  0.13
+1 RECEIVED $64C2EFDDBA849D5CC4F8EC2C2FE066645FC5AE4E~test001a  0.06
+2 RECEIVED $2096C034D4644C127E48208C1125FB1CC474C327~test002a  0.06
+3 RECEIVED $538A14D3EE9C08D0D865B5ACCE0B97C459B2A757~test003a  0.06
+4 RECEIVED $28C769C7B557173D9623B7FABC2A83E212C8EA33~test004r  0.06
+5 RECEIVED $925DD51F443984C845873A160AA920C4D2C087A5~test005r  0.09
+6 FAILED $4BBCEB81098C0677F624EFC913E0ABBA66A5A8B6~test006r REASON=NOT_FOUND 0.11
+7 RECEIVED $018A5255AEC68F8723FA462955B0F874C1835F47~test007r  0.08
+8 RECEIVED $484055EF7974C98B8D078A16BF7E0A4814D60777~test008r  0.12
+9 RECEIVED $DC30E289BA719D14AE2076C025A6EC6D4A8F4D26~test000a  0.08
+10 RECEIVED $64C2EFDDBA849D5CC4F8EC2C2FE066645FC5AE4E~test001a  0.06
+11 RECEIVED $2096C034D4644C127E48208C1125FB1CC474C327~test002a  0.06
+12 RECEIVED $538A14D3EE9C08D0D865B5ACCE0B97C459B2A757~test003a  0.06
+13 RECEIVED $28C769C7B557173D9623B7FABC2A83E212C8EA33~test004r  0.10
+14 RECEIVED $925DD51F443984C845873A160AA920C4D2C087A5~test005r  0.11
+15 FAILED $4BBCEB81098C0677F624EFC913E0ABBA66A5A8B6~test006r REASON=NOT_FOUND 0.08
+16 RECEIVED $018A5255AEC68F8723FA462955B0F874C1835F47~test007r  0.08
+17 RECEIVED $484055EF7974C98B8D078A16BF7E0A4814D60777~test008r  0.10
+### DirPort probes against relay 004r (DirPort 7104) and authority 000a (7100)
+[post-oversized-declared] sent=58 got=0 first_line=b''
+[post-oversized-actual] sent=60058 got=22 first_line=b'<ConnectionResetError>'
+[get-with-trailing] sent=54 got=2392 first_line=b'HTTP/1.0 200 OK'
+[bogus-content-length] sent=55 got=0 first_line=b''
+[oversized-headers] sent=70018 got=22 first_line=b'<ConnectionResetError>'
+[get-hs-desc-dirport] sent=70 got=99 first_line=b'HTTP/1.0 503 Rejecting single hop HS v3 descriptor request'
+[post-oversized-declared] sent=58 got=9 first_line=b'<timeout>'
+[post-oversized-actual] sent=60058 got=93 first_line=b'HTTP/1.0 503 Rejecting single hop HS descriptor post'
+[get-with-trailing] sent=54 got=2438 first_line=b'HTTP/1.0 200 OK'
+[bogus-content-length] sent=55 got=0 first_line=b''
+[oversized-headers] sent=70018 got=22 first_line=b'<ConnectionResetError>'
+[get-hs-desc-dirport] sent=70 got=99 first_line=b'HTTP/1.0 503 Rejecting single hop HS v3 descriptor request'
+### metrics 127.0.0.1:9100
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9101
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9102
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9103
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9104
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9105
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9106
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9107
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+### metrics 127.0.0.1:9108
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+### metrics accept
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-patched-default/nodes'->'/work/chutney-net/seccomp-patched-default/nodes.1791941774
+Verifying data transmission: (retrying for up to 60 seconds)
+Connecting:
+  Exit to 127.0.0.1:4747 via client localhost:9009
+  HS to de4odr4z6him43ot2xa76zejy3us55rrlnhlsehqv7xpe7ravvszioyd.onion:5858 (127.0.0.1:4747) via client localhost:9009
+Transmitting Data:
+INFO:chutney.Traffic:Registering exit via test009c send-data-1
+INFO:chutney.Traffic:Registering exit via test009c check-2
+INFO:chutney.Traffic:Registering test010h via test009c send-data-3
+INFO:chutney.Traffic:Registering test010h via test009c check-4
+INFO:chutney.Traffic:Success for exit via test009c send-data-1
+INFO:chutney.Traffic:Success for test010h via test009c send-data-3
+INFO:chutney.Traffic:Success for exit via test009c check-2
+INFO:chutney.Traffic:Success for test010h via test009c check-4
+INFO:chutney.Traffic:Status:
+  exit via test009c send-data-1: success (Flushed)
+  exit via test009c check-2: success (successful verification)
+  test010h via test009c send-data-3: success (Flushed)
+  test010h via test009c check-4: success (successful verification)
+  not-done:0 successes:4 failures:0
+Single Stream Bandwidth: 2.50 MBytes/s
+Overall tor Bandwidth: 30.05 MBytes/s
+Transmission: Success
+### verify 4 rc=0
+INFO:chutney.TorNet:Loading network from nodes dir: '/work/chutney-net/seccomp-patched-default/nodes'->'/work/chutney-net/seccomp-patched-default/nodes.1791941774
+Sending SIGINT to nodes
+Waiting for nodes to finish.
+...............test006r is running
+test008r is running
+test009c is running
+test010h is running
+
+Sending another SIGINT to nodes
+Waiting for nodes to finish.
+...............test006r is running
+test008r is running
+test009c is running
+test010h is running
+
+Sending SIGKILL to nodes
+Waiting for nodes to finish.
+.
+Waiting for nodes to cleanup and exit.
+### stop rc=0
+### shutdown check: nodes that logged a shutdown signal, and any survivors
+000a: 
+001a: 
+002a: 
+003a: 
+004r: 
+005r: 
+006r: 
+007r: 
+008r: 
+009c: 
+010h: 
+### sandbox / bug scan over all node logs
+000a: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+001a: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+002a: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+003a: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+004r: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+005r: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+006r: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+007r: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+008r: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+009c: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0
+010h: Sandbox=Sandbox 1 bad_syscall=0 bug=0 sandbox_enabled_msgs=0 hs_get=0

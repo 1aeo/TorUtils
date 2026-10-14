@@ -1,0 +1,8 @@
+HSDirOneRequestPerCircuit auto
+HSDirRefuseUnknownPrevHop auto
+RefuseUnknownExits auto
+Sandbox 0
+	libsystemd.so.0 => /lib/x86_64-linux-gnu/libsystemd.so.0 (0x00007f5b82380000)
+	liblzma.so.5 => /lib/x86_64-linux-gnu/liblzma.so.5 (0x00007f5b8234e000)
+	libzstd.so.1 => /lib/x86_64-linux-gnu/libzstd.so.1 (0x00007f5b82294000)
+	libseccomp.so.2 => /lib/x86_64-linux-gnu/libseccomp.so.2 (0x00007f5b82274000)
