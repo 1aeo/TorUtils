@@ -7,11 +7,15 @@ closes a circuit and never refuses a request; it only increments two counters
 you can read on a loopback MetricsPort. Pair this with the public-field-grounded
 `capture-and-validate-playbook.md` (same branch) for the full rationale.
 
-> **Safety gate.** Before putting any build on a production relay, read
-> `patch-crash-at-scale-critique.md` (crash-at-scale review). Deploy
-> only if its deploy gate says the count-only observe build is safe. Count-only
-> mode does not exercise the enforcement (circuit-close / 503) code paths at
-> all, so the observe deploy has the smallest possible surface.
+> **Safety gate — CLEARED (2026-10-14).** The crash-at-scale review
+> (`patch-crash-at-scale-critique.md`, this directory) found **zero CRITICAL/HIGH
+> crash, memory-safety, or unbounded-memory risks**; six crash theories were
+> traced and rejected, and the **count-only observe build is green-lit for a
+> production HSDir under flood**. Keep `MaxMemInQueues` at its normal value (the
+> memory backstop for the 0005 change). Count-only mode does not execute the
+> enforcement (circuit-close / 503) code paths at all. Still read the critique
+> before deploying, and deploy to one canary first.
+
 
 Everything here is on **your own relay**, is **metadata only** (no stream
 content, no client IPs — those are structurally invisible on multi-hop
