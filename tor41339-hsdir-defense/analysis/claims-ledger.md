@@ -84,3 +84,37 @@ KEY LIMITATIONS to disclose:
 PATCH DEFECTS being fixed in v2 (wf_f517009f-a7d): authorship/dup-trailers; series order (0002 before 0001);
   overclaiming wording; 0001 default-on + no torrc override; 0002 coupled to RefuseUnknownExits;
   0004 declared-Content-Length early rejection; 0005 immediate-clear + transition test; 6 killer tests (mutation 78%->100%).
+
+---
+# x86 MEASURED UPDATE (2026-10-14, native amd64 + closed-lab matrix)
+Moves the open limitations from estimate to measured. Evidence on this branch
+under simulator/results/ and analysis/.
+
+- LIMITATION #1 (amd64 never built; seccomp unbuilt) — CLOSED. amd64 gcc 13.3
+  --enable-fatal-warnings 0 warnings; unit suite 1613 ok/0 fail; Sandbox 1 clean
+  (Seccomp:2, 0 "bad syscall") across patched-default/enforce/unpatched; the new
+  0001-close and 0002-503 branches add no EPERM-denied syscall (two independent
+  strace EPERM audits; patched set is a subset of stock); amd64 .deb built,
+  installed, count-only-at-default metric confirmed; CI matrix shows no patch
+  regression (practracker = PYTHONUNBUFFERED artifact, hardened LSan aborts
+  identical on unpatched, tor#41148 reproduced on UNPATCHED). Reordered series
+  (0002 first) builds commit-by-commit.
+- P6 (efficacy) — MEASURED (was 95%/80% upper bound w/ 4 unverified premises).
+  Off-vs-on matrix: enforcement collapses the circuit-reuse flood 100%->0%
+  served (within-build written-bytes -81% reuse-22, -67% reuse-5) and the
+  one-hop vector 100%->~3%, stock client ~100% throughout. Lab ratios not
+  absolute rates; 5% lab-transient flake gated + reported.
+- P8 (adaptation cost) — direction confirmed; multiplier analytic (lab onionskin
+  background-dominated). One-per-circuit moves CREATE/onionskin load to middles
+  where DoSCircuitCreation does not apply to relay channels.
+- 0002 FP rate — LAB-BOUNDED (was ~1.2e-6 model estimate). 2,416 legit fetches,
+  0002 enforcing, RefuseUnknownExits=0 -> 0 false 503s; bound < 4.1e-4,
+  consistent with the model; steady-state mechanism confirmed; AUTOBOOL rollback
+  + independence verified. Induced-skew window = follow-up.
+- OPERATOR REAL-FLOOD CAPTURE (stock relays) — flood real & field-scale
+  (~1,119 BEGIN_DIR/s/HSDir x60; DoSStreamCreation disabled on all), but rho
+  (reuse) and phi (unknown-prev-hop) are NULL on stock relays (patch-only
+  counters). Whether 0001/0002 address THIS operator's flood is unconfirmed
+  until the count-only observe deploy; a tentative circuit-rejection reuse
+  inference was checked against dos.c and REJECTED. See
+  analysis/realflood-capture-interpretation.md.
