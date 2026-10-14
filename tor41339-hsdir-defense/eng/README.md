@@ -27,7 +27,7 @@ host, so toolchain or host noise cancels out.
 | A.1 unit tests | patched **1613 ok / 0 fail**; unpatched 1602 (the series adds 11) |
 | A.1 `make check` scripts | equal on both sides (see the note on `test_practracker.sh` below) |
 | CI matrix (ci-driver.sh) | see `ci-matrix/` (*pending final table*) |
-| Seccomp (`Sandbox 1`, amd64) | **0 bad syscalls**. 33/33 processes in seccomp filter mode (`Seccomp: 2`). Stock HS GET/POST and DirPort parser paths exercised. See `seccomp/` |
+| Seccomp (`Sandbox 1`, amd64) | 33/33 processes in seccomp filter mode (`Seccomp: 2`); 0 "Caught a bad syscall"; stock HS GET/POST and DirPort parser paths behave identically to unpatched (0004 visible). The filter's default action is **EPERM, not SIGSYS**, so an strace EPERM audit, patched vs unpatched, is also being run (*pending*). See `seccomp/` |
 | `.deb` (deb.torproject.org noble 0.4.9.14-1~noble+1 + series) | built in a fresh 24.04 container (`dh_auto_test`: 1613 ok). Installs in a fresh 24.04 container; `--verify-config` passes; private-net relay reaches Bootstrapped 100%; `hsdir_circ_reused 0`; enforcement `auto` (off). See `deb/` |
 | Reordered series (0002 first) | final tree identical to v3 plus 3 practracker exception lines. Per-commit build and test: see `series-reordered/` (*pending final run*) |
 | torspec | ready-to-apply patch in `torspec/`; placement appended to `../patches/torspec-draft.txt` |
@@ -49,12 +49,19 @@ host, so toolchain or host noise cancels out.
 - **`test_cbt_mvp.sh` (tor#41148).** It passed in A.1 on both sides. In the
   CI matrix it failed once, in the **unpatched** `disable-relay` cell, which
   confirms it is a pre-existing flake.
-- **Seccomp anomaly.** One harness run was aborted (my harness shell was
-  killed). Afterwards, 6 of 11 tor processes, two of them the **stock**
-  binary, had SIGTERM blocked in the main thread with a pointer-like
-  `SigBlk` mask, and ignored SIGTERM. This did not reproduce in 3 clean runs
-  (33 processes, all exited on `chutney stop`). It is not attributable to the
-  patches. Evidence is in `seccomp/out/anomaly/`.
+- **Sandboxed tor ignores SIGTERM: upstream tor#41060 (open), present on
+  unpatched `main`.**
+  - Controlled repro with `DisableNetwork 1`: under `Sandbox 1`, the tor
+    process did not exit on SIGTERM in 15/15 runs, for both patched and
+    stock. Under `Sandbox 0`, it exited in 15/15 runs for both.
+  - Cause, from strace (`seccomp/out/anomaly/`): once the filter is
+    installed, glibc 2.39 `pthread_create` calls
+    `rt_sigprocmask(SIG_BLOCK, ~[], &old)`. The filter refuses it with EPERM,
+    because it allows SIG_BLOCK only in fragile-hardening and LTTng builds.
+    glibc then restores the uninitialized `old` set with `SIG_SETMASK`.
+  - Result: the main thread blocks INT, QUIT and TERM. This explains the
+    earlier "SIGTERM-blocked" observation, and the reordered `.deb`'s tor
+    not exiting on SIGTERM. Neither is caused by the series.
 
 ## Not covered here
 
