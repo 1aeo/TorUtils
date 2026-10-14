@@ -155,13 +155,20 @@ samples. A tor restart resets them to 0 — watch for a decrease and segment.
 ## 5. Produce the two decisive ratios + shape
 
 From the capture, compute (see the playbook §5–6 for the full mapping):
-- **ρ = requests-per-circuit multiplier** = `Δ BEGIN_DIR / Δ circs_created` on
-  BOTH stock and the count-only build (≥1; relay A measured ≈5.69). On the
-  count-only build, also read the true HS-only repeat-request fraction
-  `Δ hsdir_req_reused / Δ hsdir_request_total` (every repeat HS request on a
-  circuit divided by total anonymous HS requests, which in observe mode equals
-  $1 - 1/\rho_{\text{hs}}$) alongside `Δ hsdir_circ_reused` (circuits that
-  carried ≥2 HS-dir requests, incremented once per reused circuit).
+- **ρ = whole-relay requests-per-circuit multiplier** =
+  `Δ BEGIN_DIR / Δ circs_created` on BOTH stock and the count-only build
+  (relay A measured ≈5.69 during the flood; because `circs_created` includes
+  non-directory circuits, `ρ` need not be ≥1 in general and acts as a proxy
+  when HS-dir flood traffic dominates). On the count-only build, use the exact
+  **HS-only repeat-request fraction**
+  `r_hs = Δ hsdir_req_reused / Δ hsdir_request_total` (every repeat HS request
+  on a circuit divided by total anonymous HS requests) alongside
+  `Δ hsdir_circ_reused` (circuits that carried ≥2 HS-dir requests, incremented
+  once per reused circuit). In observe mode over a steady window where
+  pre-existing circuits are negligible,
+  `Δ hs_circs = Δ hsdir_request_total − Δ hsdir_req_reused` circuits carry at
+  least one HS request and the HS-only multiplier is
+  $\rho_{\text{hs}} = \Delta\text{hsdir\_request\_total} / \Delta\text{hs\_circs} = 1 / (1 - r_{\text{hs}})$.
 - **φ = unknown-prev-hop fraction** = `Δ hsdir_unknown_prev_hop / Δ hsdir_request_total`
   against the exact HS-only denominator `Δ hsdir_request_total` (or
   `Δ hsdir_unknown_prev_hop / Δ BEGIN_DIR` as a lower-bound proxy when comparing
@@ -169,8 +176,9 @@ From the capture, compute (see the playbook §5–6 for the full mapping):
 - Volume/shape: BEGIN_DIR/s (median, p95, peak), write:read byte ratio,
   bytes/BEGIN_DIR, onionskins/s — flood window vs quiet baseline.
 
-These decide everything: **ρ≈1 → patch 0002 can't help; φ high → 0001 is the
-lever; both ≈0 → neither patch addresses this flood.** Report them honestly.
+These decide everything: **`r_hs = Δ hsdir_req_reused / Δ hsdir_request_total ≈ 0`
+(`ρ≈1` when flood traffic dominates) → patch 0002 can't help; φ high → 0001 is
+the lever; both ≈0 → neither patch addresses this flood.** Report them honestly.
 
 ---
 

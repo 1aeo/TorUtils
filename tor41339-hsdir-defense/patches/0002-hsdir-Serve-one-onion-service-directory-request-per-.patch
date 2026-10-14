@@ -1,8 +1,7 @@
-From c7dd6215968d283174e771486aa3a234589d6b0a Mon Sep 17 00:00:00 2001
+From 92aa1e9c2735da55c6e72a4959c0379a96ef7c63 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 2/7] hsdir: Serve one onion service directory request per
- circuit
+Subject: [PATCH] hsdir: Serve one onion service directory request per circuit
 
 C tor never sends two onion service directory requests on one circuit:
 anonymized directory connections use ISO_STREAM (dirclient.c), so every
@@ -47,13 +46,13 @@ Part of 41339.
  src/core/or/dos.h                        |   7 +
  src/core/or/dos_options.inc              |   6 +
  src/core/or/or_circuit_st.h              |   9 +
- src/feature/dircache/dircache.c          |   4 +
+ src/feature/dircache/dircache.c          |  10 +-
  src/feature/dircommon/directory.c        |  47 +++++
  src/feature/dircommon/directory.h        |   1 +
  src/feature/relay/relay_metrics.c        |  18 ++
- src/test/test_hs_cache.c                 | 237 ++++++++++++++++++++++-
+ src/test/test_hs_cache.c                 | 238 ++++++++++++++++++++++-
  src/test/test_status.c                   |   1 +
- 13 files changed, 443 insertions(+), 4 deletions(-)
+ 13 files changed, 448 insertions(+), 6 deletions(-)
  create mode 100644 changes/ticket41339_hsdir_circ_reuse
 
 diff --git a/changes/ticket41339_hsdir_circ_reuse b/changes/ticket41339_hsdir_circ_reuse
@@ -296,27 +295,33 @@ index 348e1463dc..f243872ad2 100644
     *  statistics. */
    unsigned int circuit_carries_hs_traffic_stats : 1;
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 5b3b787b93..74d9484648 100644
+index 5b3b787b93..f038877950 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
-@@ -1366,6 +1366,8 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+@@ -1366,7 +1366,10 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
                                "Rejecting single hop HS v3 descriptor request");
      goto done;
    }
+-  if (!connection_dir_check_prev_hop(conn)) {
++  const bool prev_hop_known = connection_dir_check_prev_hop(conn);
 +  if (!connection_dir_note_hs_request(conn))
 +    goto done;
-   if (!connection_dir_check_prev_hop(conn)) {
++  if (!prev_hop_known) {
      write_short_http_response(conn, 503, "Rejecting HS request: previous hop "
                                "is not a known relay");
-@@ -1616,6 +1618,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+     goto done;
+@@ -1616,7 +1619,10 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
                                  "Rejecting single hop HS descriptor post");
        goto done;
      }
+-    if (!connection_dir_check_prev_hop(conn)) {
++    const bool prev_hop_known = connection_dir_check_prev_hop(conn);
 +    if (!connection_dir_note_hs_request(conn))
 +      goto done;
-     if (!connection_dir_check_prev_hop(conn)) {
++    if (!prev_hop_known) {
        write_short_http_response(conn, 503, "Rejecting HS request: previous "
                                  "hop is not a known relay");
+       goto done;
 diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
 index d81247f104..97f6539a74 100644
 --- a/src/feature/dircommon/directory.c
@@ -424,7 +429,7 @@ index c4e205bae8..8537a3277a 100644
                               rentry->help, 0, NULL);
    metrics_store_entry_add_label(sentry,
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 7694aa2df4..a0f7c29c7f 100644
+index 7694aa2df4..dc252cc0ec 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -22,6 +22,8 @@
@@ -667,7 +672,7 @@ index 7694aa2df4..a0f7c29c7f 100644
    get_options_mutable()->ORPort_set = 1;
    get_options_mutable()->RefuseUnknownExits = 0; /* Independent of HS rule. */
    dos_opts = get_dos_options(get_options_mutable());
-@@ -404,14 +609,41 @@ test_hsdir_refuse_unknown_prev_hop(void *arg)
+@@ -404,14 +609,42 @@ test_hsdir_refuse_unknown_prev_hop(void *arg)
    tt_u64_op(dos_get_num_hsdir_unknown_prev_hop(), OP_EQ, 1);
  
    /* Force enforcement on via torrc: an unknown previous hop now gets our own
@@ -706,11 +711,12 @@ index 7694aa2df4..a0f7c29c7f 100644
 +  }
 +  tt_u64_op(dos_get_num_hsdir_circ_reused(), OP_EQ, circ_reused_before + 3);
 +  tt_u64_op(dos_get_num_hsdir_req_reused(), OP_EQ, req_reused_before + 3);
++  tt_u64_op(dos_get_num_hsdir_unknown_prev_hop(), OP_EQ, 7);
 +  dos_opts->HSDirOneRequestPerCircuit = -1;
  
    /* A known relay as previous hop is served even while enforcing. The mock
     * consensus has a single routerstatus with the zeroed prev-hop identity, so
-@@ -441,6 +673,7 @@ test_hsdir_refuse_unknown_prev_hop(void *arg)
+@@ -441,6 +674,7 @@ test_hsdir_refuse_unknown_prev_hop(void *arg)
  
   done:
    UNMOCK(networkstatus_get_latest_consensus);
@@ -718,7 +724,7 @@ index 7694aa2df4..a0f7c29c7f 100644
    tor_free(reply);
    SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
                      TO_OR_CIRCUIT(c)->p_chan = NULL);
-@@ -873,6 +1106,8 @@ struct testcase_t hs_cache[] = {
+@@ -873,6 +1107,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "upload_and_download_hs_desc", test_upload_and_download_hs_desc, TT_FORK,
      NULL, NULL },
@@ -740,5 +746,5 @@ index bef9a2ff8b..f8ad3e1b5b 100644
    tt_int_op(mock_saved_log_n_entries(), OP_EQ, 6);
  
 -- 
-2.39.5 (Apple Git-154)
+2.43.0
 
