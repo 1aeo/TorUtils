@@ -42,8 +42,10 @@ reps; dropped counts are stated, never hidden.
 reuse-22 go from **100% served** (unpatched and observe) to **0% served** under
 0001 (and both), while the stock client stays **100% successful** (legit 1.000)
 in every reuse cell. Served-response volume at the target drops **~81%** for
-reuse-22 (6.28M → 1.19M written bytes) and **~66%** for reuse-5 (the residual is
-the legit descriptors + 503/RESOURCELIMIT control traffic, not flood payload).
+reuse-22 and **~67%** for reuse-5, measured **within-build** (count-only →
+enforcing on the *same* net: reuse-22 6.28M → 1.19M; reuse-5 3.68M → 1.25M
+written bytes) — the residual is legit descriptors + 503/RESOURCELIMIT control
+traffic, not flood payload (see the cross-build caveat under Limitations).
 The `hsdir_circ_reused` counter rises under enforcement (14 / 30 circuits
 closed). This is the one-request-per-circuit floor, reached with no measured
 false positive against legitimate one-per-circuit traffic.
@@ -96,6 +98,17 @@ would pin it; flagged as a follow-up.
   run. Operators should read it as a rate over a window (distinct reused
   circuits), and derive the reuse *multiplier* from begin_dir ÷ circuits — a
   refinement folded back into the playbook.
+- **Cross-build absolute bytes are confounded — use the within-build A/B.** The
+  unpatched and patched nets were brought up separately, and even count-only
+  (which should be byte-identical to unpatched for one-per-circuit traffic)
+  writes ~30% fewer bytes than unpatched on the `fetch`/`adapted` cells at 100%
+  served — a bring-up / run-order artifact, not a patch effect. So the
+  byte-reduction figures above are the **within-build** comparison (count-only →
+  enforcing on the *same* net), which controls for net state; the
+  served-fraction headline is a within-cell ratio and is immune either way. A
+  single-net interleaved unpatched-vs-count-only `fetch` run would pin the ~30%
+  shift — noted as a follow-up (not trivially one-net, since chutney runs every
+  node on one binary).
 - **5% lab-transient flake rate**, handled by the net-health gate above.
 
 ## Verdict
