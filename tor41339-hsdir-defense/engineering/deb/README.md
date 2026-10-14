@@ -1,72 +1,80 @@
 # amd64 noble `.deb`: build + install evidence
 
-> **Cleared for a count-only canary; not yet upstream-reviewed.** This package
-> ships the two behavioral defenses **observe-only** (enforcement off until a
-> consensus parameter or torrc `AUTOBOOL` flips it live), so installing it on a
-> relay only adds the `hsdir_circ_reused` / `hsdir_unknown_prev_hop` counters and
-> changes no behavior. (`patches/0002` has since added two more count-only
-> MetricsPort counters — `hsdir_req_reused` and `hsdir_request_total` — so this
-> build exposes two of the four; a refreshed build from the current series is
-> pending.) The crash-at-scale review
-> (`../../operator/patch-crash-at-scale-critique.md`) returned 0 critical / 0
-> high, which is why it is cleared for the count-only canary in
-> `../../operator/`. It has **not** completed upstream series review; do not
-> treat it as a released package or enable enforcement fleet-wide before the
-> canary measurement.
+> **Cleared for a count-only canary; not yet upstream-reviewed.**
+> `+tor41339.3` is built from the current series (`../../patches/` at branch
+> commit `2b8ae1a`). It ships both behavioral defenses **observe-only**
+> (enforcement stays off until a torrc `AUTOBOOL` or a consensus parameter turns
+> it on), so installing it on a relay only adds the four count-only
+> `hsdir_*` MetricsPort counters and changes no behavior. The crash-at-scale
+> review (`../../operator/patch-crash-at-scale-critique.md`: 0 critical / 0 high,
+> re-verified after the later fixes — see its addendum) is why it is cleared for
+> the count-only canary in `../../operator/`. It is not a released package; do
+> not enable enforcement fleet-wide before the canary measurement.
 
-The built packages are at the top of this subtree in `../../packages/`:
-`tor_0.4.9.14-1~noble+1+tor41339.2_amd64.deb` and `tor-geoipdb_…_all.deb`, with
-`SHA256SUMS`, `.buildinfo` and `.changes`.
+## Packages (`../../packages/`)
 
-**Install the `tor` package alone — it contains the patched daemon with all 7
-patches** (`/usr/bin/tor` + the systemd units). `tor-geoipdb` is the standard
-upstream split-out: arch-independent GeoIP *data* only (no code), unchanged from
-stock, so install it only if you want the bundled GeoIP DB refreshed — most
-relays already have it from the stock package. The `.buildinfo`/`.changes`/
-`SHA256SUMS` files are build-provenance metadata, not installable.
+- `tor_0.4.9.14-1~noble+1+tor41339.3_amd64.deb` — the patched daemon
+  (`/usr/bin/tor` + the systemd units). **Install this one alone; it contains
+  all 7 patches.**
+- `tor-geoipdb_0.4.9.14-1~noble+1+tor41339.3_all.deb` — optional,
+  arch-independent GeoIP *data* (no code), unchanged from stock; it is only a
+  `Recommends` of `tor`, and relays already have it from the stock package.
+- `SHA256SUMS`, `BUILD-INFO.txt` (provenance: source and patch hashes, branch
+  commit, builder image digest, test result), and the `.buildinfo` / `.changes`
+  Debian build metadata (not installable).
+
+On a host running several `tor@NAME` instances, do **not** install the package
+host-wide: its postinst restarts every instance. Use
+`../../operator/DEPLOY-AND-MEASURE.md` §1.1 to switch one instance only.
 
 ## How it was built (`build-reordered/`)
 
-A fresh `ubuntu:24.04` container ran `build-in-container-reordered.sh` on the
-deb.torproject.org noble source package `tor_0.4.9.14-1~noble+1`. The orig
-tarball sha256 is `182449ac…5e4a`, identical to dist.torproject.org. The quilt
-series in `debian-patches/` is:
+A fresh `ubuntu:24.04` container (Canonical's LTS image) ran
+`build-in-container-reordered.sh` on the deb.torproject.org noble source
+package `tor_0.4.9.14-1~noble+1`. The orig tarball sha256 is `182449ac…5e4a`,
+identical to dist.torproject.org. The quilt series in `debian-patches/` is
+`0000` (restores `doc/nofooter.conf`, which the release tarball omits) followed
+by `0001`–`0007`, byte-identical to `../../patches/`. `changelog` is the
+build's `debian/changelog`.
 
-- `0000` restores `doc/nofooter.conf`, which the release tarball omits;
-- `0001`–`0007` are the v3 patches in the **reordered** (upstream-proposed)
-  order — the same order as `../../patches/`.
+- `dh_auto_test` (`make test`): **1613 tests ok, 24 skipped, 0 failed.**
+- No compiler warnings in any file the series touches.
+- The binary contains all four counter names and both options.
 
-`dh_auto_test` passed: 1613 tests ok.
-
-The source order matches the series proposed upstream, so this build
-(`…+tor41339.2`) is the provenance-correct artifact. An earlier build in the
-original patch order (`…+tor41339.1`) produced a byte-identical `/usr/bin/tor`
-in `.text`, `.rodata` and `.data` (only `.note.gnu.build-id` differs); the
-reorder changes only commit boundaries and `exceptions.txt`, not compiled code.
+To rebuild after `patches/` changes, follow `REBUILD-FROM-CURRENT-SERIES.md`.
 
 ## Install + run test (`install-run-reordered/`)
 
-A second fresh `ubuntu:24.04` container installed the packages and ran
-`tor --verify-config` on the default and lab torrcs (both return 0). It then ran
-an unpublished relay (MetricsPort, `Sandbox 1`) joined only to a private
-loopback chutney network:
+`run-deb-test.sh` (host driver), `in-container.sh` and `lab-net` reproduce the
+test. A private loopback chutney network (its own directory authorities and
+consensus; nothing touches the real Tor network) is brought up, then a fresh
+`ubuntu:24.04` container installs **only the `tor` package** (`tor-geoipdb` not
+installed) and runs an unpublished relay joined to that network:
 
-- Reached Bootstrapped 100%, `Seccomp: 2`, **0 bad syscalls** over 120 s.
-- `tor_relay_dos_total{type="hsdir_circ_reused"}` and
-  `{type="hsdir_unknown_prev_hop"}` stayed at **0** for 120 s.
-- `tor --dump-config full` shows `HSDirOneRequestPerCircuit auto` and
-  `HSDirRefuseUnknownPrevHop auto`. The lab consensus has no `hsdir_*` params,
-  so enforcement is off and the relay only counts.
-- `defaults-and-libs.txt` records the installed conffile defaults and linked
-  shared libraries.
+- `tor --verify-config` returns 0 for the default and the lab torrc.
+- Option defaults: `HSDirOneRequestPerCircuit auto`,
+  `HSDirRefuseUnknownPrevHop auto`, `RefuseUnknownExits auto` — count-only
+  (`defaults-and-libs.txt`, with the linked libraries).
+- Under `Sandbox 1`: `Seccomp: 2`, Bootstrapped 100%, 0 bad syscalls.
+- All four counters present (`hsdir_circ_reused`, `hsdir_req_reused`,
+  `hsdir_request_total`, `hsdir_unknown_prev_hop`; 0, since an unpublished
+  relay gets no HS traffic), and no enforcement log lines.
+
+Evidence: `install-run-transcript.txt`, `labnet.log`, `torrc-lab`. The earlier
+`+tor41339.1` (original order) and `+tor41339.2` (reordered) builds predate the
+0002 call-order/telemetry fix and the upstream-polish refactor and are
+superseded.
 
 ## Shutdown with `Sandbox 1`
 
-In this run tor did **not** exit within 5 s of SIGTERM. This is the known
-upstream bug tor#41060, present on unpatched `main` too. On glibc 2.39, after
-the seccomp filter is installed, `pthread_create`'s `rt_sigprocmask(SIG_BLOCK)`
-is refused with EPERM, and glibc then restores an uninitialized signal mask that
-blocks TERM/INT/QUIT. See `../seccomp/out/anomaly/`. A controlled repro gave:
-Sandbox 1, stuck 15/15 for patched and for stock; Sandbox 0, exited 15/15 for
-both. Operators running `Sandbox 1` should expect systemd to fall back to
-SIGKILL at `TimeoutStopSec`. This is independent of this series.
+Earlier builds did not exit within 5 s of SIGTERM under `Sandbox 1`. That is the
+upstream bug tor#41060, present on unpatched `main` too: on glibc 2.39, once the
+seccomp filter is installed, `pthread_create`'s `rt_sigprocmask(SIG_BLOCK)` is
+refused with EPERM and glibc then restores an uninitialized signal mask that
+blocks TERM/INT/QUIT (`../seccomp/out/anomaly/`; controlled repro: stuck 15/15
+for patched and stock under `Sandbox 1`, exited 15/15 under `Sandbox 0`). In
+both `+tor41339.3` install runs, in a current Ubuntu 24.04.5 container, tor
+**did** exit on SIGTERM. This series does not touch that code, so treat the bug
+as environment-dependent rather than fixed: operators running `Sandbox 1`
+should still expect systemd may fall back to SIGKILL at `TimeoutStopSec`, and
+should confirm the PID changed after a restart.

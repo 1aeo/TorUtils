@@ -1,0 +1,35 @@
+Provenance: tor 0.4.9.14-1~noble+1+tor41339.3 (amd64) and tor-geoipdb (all)
+
+Source package (deb.torproject.org, noble):
+  tor_0.4.9.14.orig.tar.gz         sha256 182449ac1c8ff43278da27b69b02040e11d03d0327db6d9126e4190ec6235e4a
+                                   (identical to dist.torproject.org tor-0.4.9.14.tar.gz)
+  tor_0.4.9.14-1~noble+1.diff.gz   sha256 5dd5dd368a96a26206e22f310d8d3c4cef8517d3cd2e87d72e3262969b3a1b2f
+  tor_0.4.9.14-1~noble+1.dsc
+
+Quilt series applied (debian/patches), from tor41339-hsdir-defense/patches/ at
+branch tor41339-hsdir-defense-clean commit 2b8ae1a (after the call-order /
+telemetry fix and the upstream-polish refactor), plus 0000 restoring
+doc/nofooter.conf:
+  312d1c4c207a458bae203ef3ab53d88e2815b1554163cafaa95320ba68ba3dfb  0000-restore-doc-nofooter.conf.patch
+  1bf9653e1aa8203ee5077b9bbcf9d0458185ffbb776cf43a3abc7b995bbbd7b1  0001-hsdir-Refuse-HS-dir-requests-whose-previous-hop-is-n.patch
+  451226b6adabe9e7d632602425efc528e2d939de4b826f212f33abd7c416ff1e  0002-hsdir-Serve-one-onion-service-directory-request-per-.patch
+  1035f40439cc9f092fb21277fb43c1999944b222fa605ee6b6de5321252b925e  0003-dirserv-Stop-unthrottled-warnings-on-malformed-HTTP-.patch
+  dd3297ec0bfa8a0c735c4fafa713f0735c2da1be70b36b5c9220d147ec4c747f  0004-dirserv-Don-t-buffer-request-bodies-larger-than-an-H.patch
+  b3f170226ffd26c4048a19494b7d65e6ea676535f7df5f00b2c89a71d0763bdf  0005-dirserv-Discard-client-input-received-after-the-requ.patch
+  2f8922346c15693ffec2961db68899f9081c04523e36bb2665a5752e22db52d7  0006-hs_desc-Check-signature-length-before-verifying-the-.patch
+  dcfc08ca3c53551a26d74bfb7b64ad78c8850a1e2ae79ef736b24427eb6417f6  0007-hs_cache-Only-credit-HSDir-downloads-once-the-respon.patch
+
+Builder: fresh ubuntu:24.04 container (Canonical LTS image,
+  digest sha256:5ce7043d3beb84e91bfeecacb5fafc80602bf247a1dd6016bc0fe7d69d707eca),
+  driver ../engineering/deb/build-reordered/build-in-container-reordered.sh
+  (dpkg-buildpackage -b; set -o pipefail so a failed build cannot be masked).
+
+dh_auto_test (make test): 1613 tests ok, 24 skipped, 0 failed.
+Compiler warnings in files touched by the series: none.
+Binary contains all four count-only counters (hsdir_circ_reused,
+hsdir_req_reused, hsdir_request_total, hsdir_unknown_prev_hop) and both
+options (HSDirOneRequestPerCircuit, HSDirRefuseUnknownPrevHop), default auto.
+
+Install: only the tor package is needed; tor-geoipdb is a Recommends
+(unchanged GeoIP data). Checksums: SHA256SUMS.
+Install-and-run check: ../engineering/deb/install-run-reordered/.

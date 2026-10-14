@@ -300,7 +300,9 @@ If your relay runs with `Sandbox 1` on Ubuntu 24.04 (glibc 2.39), tor's main
 thread can end up ignoring `SIGTERM`/`SIGINT` after the seccomp filter installs
 — a **pre-existing upstream bug (tor#41060)** that reproduces identically on
 stock Tor 0.4.9.14 and is unrelated to this series (confirmed 15/15 on stock and
-patched; `Sandbox 0` exits cleanly). Practical effect: `systemctl stop`/`reload`
+patched; `Sandbox 0` exits cleanly; in the two `+tor41339.3` install runs, on a
+current Ubuntu 24.04.5 container, tor did exit, so it is environment-dependent).
+Practical effect: `systemctl stop`/`reload`
 via signals may not take, and systemd `SIGKILL`s the process at `TimeoutStopSec`.
 For this observe deployment: either run the canary **without** `Sandbox 1`
 (observe mode needs no sandbox), or, if you keep `Sandbox 1`, roll back with

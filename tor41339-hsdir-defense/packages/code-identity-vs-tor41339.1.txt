@@ -1,6 +1,0 @@
-Code identity: tor41339.1 (v3 order) vs tor41339.2 (reordered) /usr/bin/tor
-objdump -d (addresses normalized) diff lines: 0
-.text: identical
-.rodata: identical
-.data: identical
-.note.gnu.build-id: differs
