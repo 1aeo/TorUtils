@@ -53,6 +53,27 @@ The onion service and the client are stock (unpatched) tor.
   `out/anomaly/`). `chutney stop` sends SIGINT twice and then SIGKILL. The
   earlier note "all nodes exited on chutney stop" meant they were gone
   afterwards, not that they shut down cleanly.
-- **Not covered here:** the 0001 circuit-close and 0002 503 branches under
-  the sandbox. Stock traffic never reaches them. The benchmark track runs
-  `sandbox-check.sh` with `STRACE_SECS` in its enforcement cells.
+- **New enforcement branches, covered by the benchmark track.** Stock
+  traffic cannot reach these branches. The benchmark track ran
+  `sandbox-check.sh` with `STRACE_SECS=60` on target `004r` under
+  `Sandbox 1`, with 0001 + 0002 enforcing, while reuse-22 and then one-hop
+  load ran. Evidence: branch `tor41339-hsdir-defense` at 275ae51, in
+  `simulator/results/seccomp-newbranches-validation.md` and
+  `seccomp-evidence/`.
+  - The branches did fire: `hsdir_circ_reused` went 2 → 19 and
+    `hsdir_unknown_prev_hop` 0 → 40. Reuse served 1/418; one-hop served
+    1/40.
+  - `Seccomp: 2`, 0 "Caught a bad syscall", and the **EPERM audit is empty**
+    in each 60 s enforcement window.
+  - A control run (sandboxed tor traced from startup) captured EPERM for the
+    tor#41060 startup signal setup (`rt_sigprocmask` ×4, `rt_sigaction` ×1),
+    so the empty windows are a real result.
+  - The empty windows also agree with this audit. The kTLS `TCP_ULP` probe
+    only happens when a new TLS connection opens, and the target opened none
+    during those windows.
+
+**Seccomp conclusion (amd64).** Neither the stock paths (this audit) nor
+the new circuit-close and 503 branches (the benchmark-track audit) produce a
+syscall that the sandbox refuses. The only EPERMs seen anywhere are
+pre-existing and also occur on stock tor: OpenSSL's kTLS probe, glibc's
+`overcommit_memory` read, and the tor#41060 thread-creation signal setup.

@@ -65,17 +65,13 @@ host, so toolchain or host noise cancels out.
 
 ## Not covered here
 
-- **Runtime coverage of two enforcement branches.** The 0001
-  circuit-close (RESOURCELIMIT) branch and the 0002 503 branch cannot be
-  reached under seccomp with stock traffic, because a stock client never
-  reuses a circuit and always arrives from a known previous hop.
-  - Static audit: the added non-test code makes no direct syscalls.
-    `circuit_mark_for_close` only marks the circuit, and the close runs
-    through the same mainloop path every circuit close uses.
-    `write_short_http_response` is tor's existing 503 writer, and here it
-    returned a 503 under `Sandbox 1` with 0 bad syscalls.
-  - The benchmark track runs its enforcement-on cells with the target HSDir
-    under `Sandbox 1` and collects `seccomp/sandbox-check.sh` output. That
-    output will be added here when it arrives.
+- **Runtime coverage of two enforcement branches: done on the benchmark
+  track.** Stock traffic cannot reach the 0001 circuit-close (RESOURCELIMIT)
+  or the 0002 503. The benchmark track exercised both under `Sandbox 1`.
+  Counters rose (`hsdir_circ_reused` 2 → 19, `hsdir_unknown_prev_hop` 0 → 40),
+  there were 0 bad syscalls, and the EPERM audit was empty in each 60 s
+  window. Evidence: `tor41339-hsdir-defense` at 275ae51,
+  `simulator/results/seccomp-newbranches-validation.md`. Summarized in
+  `seccomp/README.md`.
 - **Patch 0002's false-positive rate under consensus churn** (Task C) moved
   to the benchmark track.
