@@ -29,8 +29,9 @@ echo $CHUTNEY_DATA_DIR > $OUT/datadir
 echo "### seccomp status of every running tor process (Seccomp: 2 == filter mode)"
 for pid in $(pgrep -f "$CHUTNEY_DATA_DIR/nodes"); do echo "pid=$pid $(tr '\0' ' ' < /proc/$pid/cmdline | grep -o 'nodes[^ ]*/[0-9]*[a-z]/torrc' | head -1) $(grep -E '^Seccomp(_filters)?:' /proc/$pid/status | tr '\n' ' ')"; done
 ONION=$(cat $CHUTNEY_DATA_DIR/nodes/010h/hidden_service/hostname | sed 's/.onion//')
-echo "### 10 ordinary single HSFETCHes from the stock client (one at a time)"
-python3 -I /work/eng/tools/hsfetch.py $CHUTNEY_DATA_DIR/nodes/009c/control $ONION 10
+echo "### 18 ordinary single HSFETCHes, SERVER= round-robin over all 9 HSDirs, from the stock client (one at a time)"
+HSDIRS=$(for d in $CHUTNEY_DATA_DIR/nodes/0*[ar]; do awk '{print $2}' $d/fingerprint; done | paste -sd,)
+python3 -I /work/eng/tools/hsfetch.py $CHUTNEY_DATA_DIR/nodes/009c/control $ONION 18 $HSDIRS
 echo "### DirPort probes against relay 004r (DirPort 7104) and authority 000a (7100)"
 python3 -I /work/eng/seccomp/dirport-probes.py 7104
 python3 -I /work/eng/seccomp/dirport-probes.py 7100
@@ -38,7 +39,10 @@ for p in $(grep -h "^MetricsPort" $CHUTNEY_DATA_DIR/nodes/*/torrc | awk '{print 
   echo "### metrics $p"; curl -s http://$p/metrics | grep -E 'tor_relay_dos_total\{type="hsdir' ; done
 sleep 5
 for i in 4; do chutney verify; echo "### verify $i rc=$?"; done
-chutney stop; echo "### stop rc=$?"; sleep 3
+chutney stop; echo "### stop rc=$?"; sleep 15
+echo "### shutdown check: nodes that logged a shutdown signal, and any survivors"
+for d in $CHUTNEY_DATA_DIR/nodes/[0-9]*; do echo "$(basename $d): $(grep -ho 'Catching signal [A-Z]*' $d/notice.log | tail -n1)"; done
+for pid in $(pgrep -f "$CHUTNEY_DATA_DIR/nodes"); do echo "SURVIVOR pid=$pid $(tr '\0' ' ' < /proc/$pid/cmdline | grep -o '[0-9]*[a-z]/torrc') main_SigBlk=$(awk '/^SigBlk/{print $2}' /proc/$pid/status) ShdPnd=$(awk '/^ShdPnd/{print $2}' /proc/$pid/status)"; kill -9 $pid; done
 echo "### sandbox / bug scan over all node logs"
 for d in $CHUTNEY_DATA_DIR/nodes/[0-9]*; do
   n=$(basename $d)

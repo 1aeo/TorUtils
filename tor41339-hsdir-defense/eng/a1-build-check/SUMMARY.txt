@@ -1,0 +1,20 @@
+/work/src/tor-patched build rc=0
+warnings: 0
+/work/src/tor-patched check rc=2
+# TOTAL: 34
+# PASS:  32
+# SKIP:  1
+# XFAIL: 0
+# FAIL:  1
+# XPASS: 0
+# ERROR: 0
+/work/src/tor-unpatched build rc=0
+warnings: 0
+/work/src/tor-unpatched check rc=2
+# TOTAL: 34
+# PASS:  32
+# SKIP:  1
+# XFAIL: 0
+# FAIL:  1
+# XPASS: 0
+# ERROR: 0

@@ -50,3 +50,32 @@ versa.
   than one such request (see "hsdir_one_request_per_circ"), and MAY refuse a
   request whose previous hop it does not recognize as a relay (see
   "hsdir_refuse_unknown_prev_hop").
+
+=== Concrete placement against torspec main (dd82a2aa, 2026-10-07) ===
+
+A ready-to-apply torspec patch with the text below is at
+eng/torspec/0001-param-spec-rend-spec-Document-HSDir-one-request-per-.patch
+(apply with "git am"). Placement:
+
+  * spec/param-spec.md, "## Denial-of-service parameters {#dos}": the two new
+    entries go after "DoSStreamCreationDefenseType", the last DoS entry.
+    "First appeared:" is left as TBD until a release is assigned.
+  * spec/param-spec.md, "## V3 onion service parameters": the
+    "HSV3MaxDescriptorSize" entry gets the non-authority request-body
+    sentence. The wording matches the code: a body, or a declared
+    Content-Length, of at least min(HSV3MaxDescriptorSize, 16 MB) bytes is
+    rejected; authorities keep MAX_DIR_UL_SIZE (16 MB).
+  * spec/rend-spec/deriving-keys.md, "## URLs for anonymous uploading and
+    downloading {#urls}": the one-request-per-circuit MUST, plus the two MAY
+    clauses, go after the existing sentence "These requests must be made
+    anonymously, on circuits not used for anything else."
+
+rend-spec-v3 sentence as placed:
+
+  Each descriptor fetch and each descriptor upload MUST be made on its own
+  circuit: a client or service MUST NOT send a second such request on a
+  circuit that already carried one.
+  An onion service directory MAY close a circuit that carries more than one
+  such request (see "hsdir_one_request_per_circ" in the parameter
+  specification), and MAY refuse a request whose previous hop it does not
+  recognize as a relay (see "hsdir_refuse_unknown_prev_hop").

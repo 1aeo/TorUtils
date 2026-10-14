@@ -1,0 +1,198 @@
++ export DEBIAN_FRONTEND=noninteractive
++ DEBIAN_FRONTEND=noninteractive
++ cat /etc/os-release
++ head -2
+PRETTY_NAME="Ubuntu 24.04.5 LTS"
+NAME="Ubuntu"
++ apt-get update -q
++ tail -n 5
++ apt-get install -y -q --no-install-recommends /debs/tor_0.4.9.14-1~noble+1+tor41339.1_amd64.deb /debs/tor-geoipdb_0.4.9.14-1~noble+1+tor41339.1_all.deb curl procps
+Setting up libgssapi-krb5-2:amd64 (1.20.1-6ubuntu2.10) ...
+Setting up libssh-4:amd64 (0.10.6-2ubuntu0.5) ...
+Setting up libcurl4t64:amd64 (8.5.0-2ubuntu10.15) ...
+Setting up curl (8.5.0-2ubuntu10.15) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.9) ...
++ dpkg -l tor tor-geoipdb
++ tail -n 2
+ii  tor            0.4.9.14-1~noble+1+tor41339.1 amd64        anonymizing overlay network for TCP
+ii  tor-geoipdb    0.4.9.14-1~noble+1+tor41339.1 all          GeoIP database for Tor
++ tor --version
+Tor version 0.4.9.14.
+This build of Tor is covered by the GNU General Public License (https://www.gnu.org/licenses/gpl-3.0.en.html)
+Tor is running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc.
+Tor compiled with GCC version 13.3.0
++ tor --verify-config
+Oct 14 01:50:10.753 [notice] Tor 0.4.9.14 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc.
+Oct 14 01:50:10.753 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+Oct 14 01:50:10.753 [notice] Read configuration file "/etc/tor/torrc".
+Oct 14 01:50:10.759 [warn] You are running Tor as root. You don't need to, and you probably shouldn't.
+Configuration was valid
+verify-config(default /etc/tor/torrc) rc=0
++ echo 'verify-config(default /etc/tor/torrc) rc=0'
++ install -d -o debian-tor -g debian-tor -m 700 /var/lib/tor-lab
++ cat
+++ cat /lab/torrc-lab
++ cat /etc/tor/torrc-lab
+TestingTorNetwork 1
+DirAuthority test000a no-v2 orport=5100 v3ident=050296217F7CE219451B92D833390FF39E971D2B 127.0.0.1:7100 2091B577FBE4ABE16C9AC4003BDF9ACC4B5D0EEB
+DirAuthority test001a no-v2 orport=5101 v3ident=BB696FEBB358C18801CAD223EE81A9DB62AFE0B1 127.0.0.1:7101 67B28E0B5EF864FF1A523510D3C3CB079BDC9818
+DirAuthority test002a no-v2 orport=5102 v3ident=8D98AB671B10D6D5DA448F73C5DE3FB04CC58438 127.0.0.1:7102 714A7E3DA1B23F4825C80E5F94234D6286EB2FC4
+DataDirectory /var/lib/tor-lab
+User debian-tor
+Nickname deblab
+Address 127.0.0.1
+ORPort 127.0.0.1:5650
+PublishServerDescriptor 0
+AssumeReachable 1
+ExitRelay 0
+SocksPort 0
+MetricsPort 127.0.0.1:9650
+MetricsPortPolicy accept 127.0.0.1
+Sandbox 1
+Log notice file /var/lib/tor-lab/notice.log
+Log info file /var/lib/tor-lab/info.log
++ tor -f /etc/tor/torrc-lab --verify-config
+Oct 14 01:50:10.794 [notice] Tor 0.4.9.14 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc.
+Oct 14 01:50:10.795 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+Oct 14 01:50:10.795 [notice] Read configuration file "/etc/tor/torrc-lab".
+Oct 14 01:50:10.797 [warn] Your ContactInfo config option is not set. Please strongly consider setting it, so we can contact you if your relay is misconfigured, end-of-life, or something else goes wrong. It is also possible that your relay might get rejected from the network due to a missing valid contact address.
+Oct 14 01:50:10.797 [notice] Based on detected system memory, MaxMemInQueues is set to 6437 MB. You can override this by setting MaxMemInQueues by hand.
+Oct 14 01:50:10.799 [warn] You have used DirAuthority or AlternateDirAuthority to specify alternate directory authorities in your configuration. This is potentially dangerous: it can make you look different from all other Tor users, and hurt your anonymity. Even if you've specified the same authorities as Tor uses by default, the defaults could change in the future. Be sure you know what you're doing.
+Oct 14 01:50:10.800 [warn] TestingTorNetwork is set. This will make your node almost unusable in the public Tor network, and is therefore only advised if you are building a testing Tor network!
+Configuration was valid
++ echo 'verify-config(lab) rc=0'
+verify-config(lab) rc=0
++ grep -E '^(DirAuthority|TestingTorNetwork|PublishServerDescriptor|MetricsPort|Sandbox)' /etc/tor/torrc-lab
+TestingTorNetwork 1
+DirAuthority test000a no-v2 orport=5100 v3ident=050296217F7CE219451B92D833390FF39E971D2B 127.0.0.1:7100 2091B577FBE4ABE16C9AC4003BDF9ACC4B5D0EEB
+DirAuthority test001a no-v2 orport=5101 v3ident=BB696FEBB358C18801CAD223EE81A9DB62AFE0B1 127.0.0.1:7101 67B28E0B5EF864FF1A523510D3C3CB079BDC9818
+DirAuthority test002a no-v2 orport=5102 v3ident=8D98AB671B10D6D5DA448F73C5DE3FB04CC58438 127.0.0.1:7102 714A7E3DA1B23F4825C80E5F94234D6286EB2FC4
+PublishServerDescriptor 0
+MetricsPort 127.0.0.1:9650
+MetricsPortPolicy accept 127.0.0.1
+Sandbox 1
++ TORPID=395
++ sleep 20
++ tor -f /etc/tor/torrc-lab
++ echo '--- after 20s: Seccomp state of packaged tor (pid 395)'
++ grep -E '^Seccomp' /proc/395/status
+--- after 20s: Seccomp state of packaged tor (pid 395)
+Seccomp:	2
+Seccomp_filters:	2
++ for i in 1 2 3 4
++ sleep 25
++ echo '--- metrics at +45s'
+--- metrics at +45s
++ curl -s http://127.0.0.1:9650/metrics
++ grep -E 'tor_relay_dos_total\{type="hsdir|tor_relay_load_tcp_exhaustion|^tor_relay_traffic_bytes'
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+tor_relay_traffic_bytes{direction="read"} 627132
+tor_relay_traffic_bytes{direction="written"} 594802
+# HELP tor_relay_load_tcp_exhaustion_total Total number of times we ran out of TCP ports
+# TYPE tor_relay_load_tcp_exhaustion_total counter
+tor_relay_load_tcp_exhaustion_total 0
++ for i in 1 2 3 4
++ sleep 25
+--- metrics at +70s
++ echo '--- metrics at +70s'
++ curl -s http://127.0.0.1:9650/metrics
++ grep -E 'tor_relay_dos_total\{type="hsdir|tor_relay_load_tcp_exhaustion|^tor_relay_traffic_bytes'
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+tor_relay_traffic_bytes{direction="read"} 652361
+tor_relay_traffic_bytes{direction="written"} 629086
+# HELP tor_relay_load_tcp_exhaustion_total Total number of times we ran out of TCP ports
+# TYPE tor_relay_load_tcp_exhaustion_total counter
+tor_relay_load_tcp_exhaustion_total 0
++ for i in 1 2 3 4
++ sleep 25
++ echo '--- metrics at +95s'
++ curl -s http://127.0.0.1:9650/metrics
++ grep -E 'tor_relay_dos_total\{type="hsdir|tor_relay_load_tcp_exhaustion|^tor_relay_traffic_bytes'
+--- metrics at +95s
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+tor_relay_traffic_bytes{direction="read"} 678511
+tor_relay_traffic_bytes{direction="written"} 663254
+# HELP tor_relay_load_tcp_exhaustion_total Total number of times we ran out of TCP ports
+# TYPE tor_relay_load_tcp_exhaustion_total counter
+tor_relay_load_tcp_exhaustion_total 0
++ for i in 1 2 3 4
++ sleep 25
++ echo '--- metrics at +120s'
+--- metrics at +120s
++ curl -s http://127.0.0.1:9650/metrics
++ grep -E 'tor_relay_dos_total\{type="hsdir|tor_relay_load_tcp_exhaustion|^tor_relay_traffic_bytes'
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+tor_relay_traffic_bytes{direction="read"} 702091
+tor_relay_traffic_bytes{direction="written"} 696414
+# HELP tor_relay_load_tcp_exhaustion_total Total number of times we ran out of TCP ports
+# TYPE tor_relay_load_tcp_exhaustion_total counter
+tor_relay_load_tcp_exhaustion_total 0
+--- HSDir enforcement options as loaded (expect auto => count-only)
++ echo '--- HSDir enforcement options as loaded (expect auto => count-only)'
++ grep -E 'HSDir|hsdir' /var/lib/tor-lab/notice.log
++ head
++ echo '--- notice log'
++ cat /var/lib/tor-lab/notice.log
+--- notice log
+Oct 14 01:50:10.000 [notice] Tor 0.4.9.14 opening new log file.
+Oct 14 01:50:10.817 [notice] We compiled with OpenSSL 300000d0: OpenSSL 3.0.13 30 Jan 2024 and we are running with OpenSSL 300000d0: 3.0.13. These two versions should be binary compatible.
+Oct 14 01:50:10.820 [notice] Tor 0.4.9.14 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc.
+Oct 14 01:50:10.820 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+Oct 14 01:50:10.820 [notice] Read configuration file "/etc/tor/torrc-lab".
+Oct 14 01:50:10.821 [warn] Your ContactInfo config option is not set. Please strongly consider setting it, so we can contact you if your relay is misconfigured, end-of-life, or something else goes wrong. It is also possible that your relay might get rejected from the network due to a missing valid contact address.
+Oct 14 01:50:10.822 [notice] Based on detected system memory, MaxMemInQueues is set to 6437 MB. You can override this by setting MaxMemInQueues by hand.
+Oct 14 01:50:10.822 [warn] You have used DirAuthority or AlternateDirAuthority to specify alternate directory authorities in your configuration. This is potentially dangerous: it can make you look different from all other Tor users, and hurt your anonymity. Even if you've specified the same authorities as Tor uses by default, the defaults could change in the future. Be sure you know what you're doing.
+Oct 14 01:50:10.822 [warn] TestingTorNetwork is set. This will make your node almost unusable in the public Tor network, and is therefore only advised if you are building a testing Tor network!
+Oct 14 01:50:10.822 [notice] Opening Metrics listener on 127.0.0.1:9650
+Oct 14 01:50:10.822 [notice] Opened Metrics listener connection (ready) on 127.0.0.1:9650
+Oct 14 01:50:10.822 [notice] Opening OR listener on 127.0.0.1:5650
+Oct 14 01:50:10.822 [notice] Opened OR listener connection (ready) on 127.0.0.1:5650
+Oct 14 01:50:10.000 [warn] Your log may contain sensitive information - you're logging more than "notice". Don't log unless it serves an important reason. Overwrite the log afterwards.
+Oct 14 01:50:10.000 [notice] Parsing GEOIP IPv4 file /usr/share/tor/geoip.
+Oct 14 01:50:11.000 [notice] Parsing GEOIP IPv6 file /usr/share/tor/geoip6.
+Oct 14 01:50:11.000 [notice] Configured to measure statistics. Look for the *-stats files that will first be written to the data directory in 24 hours from now.
+Oct 14 01:50:11.000 [notice] You are running a new relay. Thanks for helping the Tor network! If you wish to know what will happen in the upcoming weeks regarding its usage, have a look at https://blog.torproject.org/lifecycle-of-a-new-relay
+Oct 14 01:50:11.000 [notice] It looks like I need to generate and sign a new medium-term signing key, because I don't have one. To do that, I need to load (or create) the permanent master identity key. If the master identity key was not moved or encrypted with a passphrase, this will be done automatically and no further action is required. Otherwise, provide the necessary data using 'tor --keygen' to do it manually.
+Oct 14 01:50:11.000 [notice] Set list of supported TLS groups to: P-256:X25519:P-224
+Oct 14 01:50:11.000 [notice] Your Tor server's identity key fingerprint is 'deblab B2D69C867915CDCA363AE19C1AA8C7BFC56D6B1D'
+Oct 14 01:50:11.000 [notice] Your Tor server's identity key ed25519 fingerprint is 'deblab UZzhx6L/vxQJeilvRyxwYLPNSly4xpDUX3bh4igsAiE'
+Oct 14 01:50:11.000 [notice] Bootstrapped 0% (starting): Starting
+Oct 14 01:50:11.000 [notice] Starting with guard context "default"
+Oct 14 01:50:12.000 [notice] I learned some more directory information, but not enough to build a circuit: We have no usable consensus.
+Oct 14 01:50:12.000 [notice] I learned some more directory information, but not enough to build a circuit: We have no usable consensus.
+Oct 14 01:50:12.000 [notice] The current consensus has no exit nodes. Tor can only build internal paths, such as paths to onion services.
+Oct 14 01:50:12.000 [notice] I learned some more directory information, but not enough to build a circuit: We need more microdescriptors: we have 0/6, and can only build 0% of likely paths. (We have 0% of guards bw, 0% of midpoint bw, and 0% of end bw (no exits in consensus, using mid) = 0% of path bw.)
+Oct 14 01:50:12.000 [notice] Bootstrapped 5% (conn): Connecting to a relay
+Oct 14 01:50:12.000 [notice] Bootstrapped 10% (conn_done): Connected to a relay
+Oct 14 01:50:12.000 [notice] Bootstrapped 14% (handshake): Handshaking with a relay
+Oct 14 01:50:12.000 [notice] Bootstrapped 15% (handshake_done): Handshake with a relay done
+Oct 14 01:50:12.000 [notice] Bootstrapped 45% (requesting_descriptors): Asking for relay descriptors
+Oct 14 01:50:12.000 [notice] Bootstrapped 50% (loading_descriptors): Loading relay descriptors
+Oct 14 01:50:13.000 [notice] The current consensus contains exit nodes. Tor can build exit and internal paths.
+Oct 14 01:50:13.000 [notice] Bootstrapped 75% (enough_dirinfo): Loaded enough directory info to build circuits
+Oct 14 01:50:13.000 [notice] Bootstrapped 80% (ap_conn): Connecting to a relay to build circuits
+Oct 14 01:50:13.000 [notice] All current guards excluded by path restriction type 2; using an additional guard.
+Oct 14 01:50:13.000 [notice] Bootstrapped 85% (ap_conn_done): Connected to a relay to build circuits
+Oct 14 01:50:13.000 [notice] Bootstrapped 89% (ap_handshake): Finishing handshake with a relay to build circuits
+Oct 14 01:50:13.000 [notice] Bootstrapped 90% (ap_handshake_done): Handshake finished with a relay to build circuits
+Oct 14 01:50:13.000 [notice] Bootstrapped 95% (circuit_create): Establishing a Tor circuit
+Oct 14 01:50:14.000 [notice] Bootstrapped 100% (done): Done
+Oct 14 01:50:36.000 [notice] Self-testing indicates your ORPort 127.0.0.1:5650 is reachable from the outside. Excellent.
+Oct 14 01:50:36.000 [notice] Performing bandwidth self-test...done.
+Oct 14 01:51:11.000 [notice] All routers are down or won't exit -- choosing a doomed exit at random.
+Oct 14 01:51:11.000 [warn] Failed to choose an exit server
+Oct 14 01:51:11.000 [notice] Our circuit 0 (id: 23) died due to an invalid selected path, purpose General-purpose client. This may be a torrc configuration issue, or a bug.
++ kill -TERM 395
++ sleep 5
+exit check: exited
+++ kill -0 395
+++ echo exited
++ echo 'exit check: exited'
++ grep -c 'Caught a bad syscall' /var/lib/tor-lab/notice.log /var/lib/tor-lab/stdout.log
+/var/lib/tor-lab/notice.log:0
+/var/lib/tor-lab/stdout.log:0
+container rc=1

@@ -1,0 +1,8 @@
+0000-restore-doc-nofooter.conf.patch
+0001-hsdir-Serve-one-onion-service-directory-request-per-.patch
+0002-hsdir-Refuse-HS-dir-requests-whose-previous-hop-is-n.patch
+0003-dirserv-Stop-unthrottled-warnings-on-malformed-HTTP-.patch
+0004-dirserv-Don-t-buffer-request-bodies-larger-than-an-H.patch
+0005-dirserv-Discard-client-input-received-after-the-requ.patch
+0006-hs_desc-Check-signature-length-before-verifying-the-.patch
+0007-hs_cache-Only-credit-HSDir-downloads-once-the-respon.patch

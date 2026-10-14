@@ -1,0 +1,87 @@
+From 35daede4c58559b8918f5d4e30674b538ac06081 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Wed, 14 Oct 2026 00:56:47 +0000
+Subject: [PATCH] param-spec, rend-spec: Document HSDir one-request-per-circuit
+ rules
+
+Add the "hsdir_one_request_per_circ" and "hsdir_refuse_unknown_prev_hop"
+consensus parameters, note that HSV3MaxDescriptorSize also bounds the
+request body a non-authority directory server will buffer, and state in
+rend-spec that each descriptor fetch and upload is made on its own
+circuit.
+
+Companion to tor#41339.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ spec/param-spec.md              | 27 +++++++++++++++++++++++++++
+ spec/rend-spec/deriving-keys.md |  8 ++++++++
+ 2 files changed, 35 insertions(+)
+
+diff --git a/spec/param-spec.md b/spec/param-spec.md
+index 6a86178f..105c7db8 100644
+--- a/spec/param-spec.md
++++ b/spec/param-spec.md
+@@ -347,6 +347,11 @@ will upload its descriptor to.
+ Min: 1. Max: 128. Default: 4
+ 
+ "HSV3MaxDescriptorSize" -- Maximum descriptor size (in bytes).
++On relays that are not directory authorities, this also bounds the body of
++an HTTP request that the directory server will buffer: a request whose
++declared or actual body is at least this many bytes (or at least 16 MB, if
++that is smaller) is rejected without being fully buffered. Directory authorities
++keep the 16 MB limit.
+ Min: 1. Max: INT32_MAX. Default: 50000
+ 
+ "hs_service_max_rdv_failures" -- This parameter determines the
+@@ -492,6 +497,28 @@ First appeared: 0.4.9.0-alpha-dev.
+     First appeared: 0.4.9.0-alpha-dev.
+ ```
+ 
++"hsdir_one_request_per_circ" -- If 1, an onion service directory closes,
++with reason RESOURCELIMIT, any circuit on which it receives a second onion
++service descriptor fetch or upload. If 0, it only counts such circuits.
++Whatever the value, each such circuit is counted once (in the DoS
++heartbeat, and as `tor_relay_dos_total{type="hsdir_circ_reused"}` on the
++MetricsPort). The relay torrc option `HSDirOneRequestPerCircuit` (0, 1, or
++auto) overrides this parameter.
++Min: 0. Max: 1. Default: 0.
++First appeared: TBD.
++
++"hsdir_refuse_unknown_prev_hop" -- If 1, an onion service directory
++refuses, with an HTTP 503 response, an onion service descriptor fetch or
++upload whose previous hop is not a relay that it recognizes (one in its
++consensus, or for which it has a descriptor). If 0, it only counts such
++requests. Whatever the value, they are counted (in the DoS heartbeat, and
++as `tor_relay_dos_total{type="hsdir_unknown_prev_hop"}` on the MetricsPort).
++The relay torrc option `HSDirRefuseUnknownPrevHop` (0, 1, or auto)
++overrides this parameter. This parameter is independent of
++"refuseunknownexits": changing either one does not affect the other.
++Min: 0. Max: 1. Default: 0.
++First appeared: TBD.
++
+ <a id="param-spec.txt-10"></a>
+ 
+ ## Padding-related parameters {#padding}
+diff --git a/spec/rend-spec/deriving-keys.md b/spec/rend-spec/deriving-keys.md
+index 066f34d4..e3d6faa8 100644
+--- a/spec/rend-spec/deriving-keys.md
++++ b/spec/rend-spec/deriving-keys.md
+@@ -433,6 +433,14 @@ version which is "3" in this case.
+ 
+ These requests must be made anonymously, on circuits not used for
+ anything else.
++Each descriptor fetch and each descriptor upload MUST be made on its own
++circuit: a client or service MUST NOT send a second such request on a
++circuit that already carried one.
++An onion service directory MAY close a circuit that carries more than one
++such request (see "hsdir_one_request_per_circ" in the
++[parameter specification](../param-spec.md)), and MAY refuse a request whose
++previous hop it does not recognize as a relay (see
++"hsdir_refuse_unknown_prev_hop").
+ 
+ The legacy [".z" suffix][dot-z] is **not** supported for these URLs.
+ 
+-- 
+2.43.0
+

@@ -1,0 +1,6 @@
+# Private loopback chutney net for the .deb install test (own authorities and consensus).
+Authority = Node(tag="a", authority=1, relay=1, sandbox=False)
+Relay = Node(tag="r", relay=1, exit=1, sandbox=False)
+Client = Node(tag="c", client=1, launch_phase=2, sandbox=False)
+NODES = Authority.getN(3) + Relay.getN(3) + Client.getN(1)
+ConfigureNodes(NODES)

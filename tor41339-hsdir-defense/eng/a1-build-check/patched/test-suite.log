@@ -1,0 +1,46 @@
+=============================================
+   tor 0.5.0.0-alpha-dev: ./test-suite.log
+=============================================
+
+# TOTAL: 34
+# PASS:  32
+# SKIP:  1
+# XFAIL: 0
+# FAIL:  1
+# XPASS: 0
+# ERROR: 0
+
+.. contents:: :depth: 2
+
+SKIP: src/test/fuzz_static_testcases.sh
+=======================================
+
+You need to set TOR_FUZZ_CORPORA to point to a checkout of 
+the 'fuzzing-corpora' repository.
+SKIP src/test/fuzz_static_testcases.sh (exit status: 77)
+
+FAIL: scripts/maint/practracker/test_practracker.sh
+===================================================
+
+unit tests:
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK
+ex0:
+--- /tmp/pracktracker.test.EHYNOm/ex0-received.txt	2026-10-14 00:54:44.023797366 +0000
++++ scripts/maint/practracker/testdata/ex0-expected.txt	2026-10-14 00:47:32.933700484 +0000
+@@ -1,8 +1,8 @@
++Unusual pattern permitted.h in scripts/maint/practracker/testdata
+ problem file-size a.c 41
+ problem include-count a.c 6
+ problem function-size a.c:i_am_a_function() 9
+ problem function-size a.c:another_function() 12
+-Unusual pattern permitted.h in scripts/maint/practracker/testdata
+ problem dependency-violation a.c 4
+ problem file-size b.c 15
+ problem function-size b.c:foo() 4
+FAILED
+FAIL scripts/maint/practracker/test_practracker.sh (exit status: 1)
+

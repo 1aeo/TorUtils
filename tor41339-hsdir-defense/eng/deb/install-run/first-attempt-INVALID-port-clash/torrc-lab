@@ -1,0 +1,18 @@
+TestingTorNetwork 1
+DirAuthority test000a no-v2 orport=5100 v3ident=68FF139AB6C16B3F817F385DBCB72F15F684A1C4 127.0.0.1:7100 0CD1F52015A93C9492A007A8A62A684CFBBA93AC
+DirAuthority test001a no-v2 orport=5101 v3ident=DFF1ACF2902A1BA9A132110E64CDFFB2986748A4 127.0.0.1:7101 0E45C071E9E9D29989EFAA8DEB29BD103E2B13CA
+DirAuthority test002a no-v2 orport=5102 v3ident=4B854EFACA6E8387F5A0F85E387466CF9286B748 127.0.0.1:7102 5DC8EEE010D7F7A7C41BACB1A9D83791481F7FA2
+DataDirectory /var/lib/tor-lab
+User debian-tor
+Nickname deblab
+Address 127.0.0.1
+ORPort 127.0.0.1:5650
+PublishServerDescriptor 0
+AssumeReachable 1
+ExitRelay 0
+SocksPort 0
+MetricsPort 127.0.0.1:9650
+MetricsPortPolicy accept 127.0.0.1
+Sandbox 1
+Log notice file /var/lib/tor-lab/notice.log
+Log info file /var/lib/tor-lab/info.log
