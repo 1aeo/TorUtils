@@ -4,8 +4,10 @@
 > `+tor41339.3` is built from the current series (`../../patches/` at branch
 > commit `2b8ae1a`). It ships both behavioral defenses **observe-only**
 > (enforcement stays off until a torrc `AUTOBOOL` or a consensus parameter turns
-> it on), so installing it on a relay only adds the four count-only
-> `hsdir_*` MetricsPort counters and changes no behavior. The crash-at-scale
+> it on). It exposes four `hsdir_*` MetricsPort counters, but patches 0003–0007
+> remain active in both modes: the full build is not equivalent to stock.
+> The accepted [canary plan](../../operator/CANARY-MEASUREMENT-PLAN.md) holds this
+> full build constant while measuring inactive/active defenses. The crash-at-scale
 > review (`../../operator/patch-crash-at-scale-critique.md`: 0 critical / 0 high,
 > re-verified after the later fixes — see its addendum) is why it is cleared for
 > the count-only canary in `../../operator/`. It is not a released package; do
@@ -28,7 +30,7 @@ On a host running several `tor@NAME` instances, do **not** install the package
 host-wide: its postinst restarts every instance. Use
 `../../operator/DEPLOY-AND-MEASURE.md` §1.1 to switch one instance only.
 
-That §1.1 switch and the §6 rollback were dry-run as written on a booted
+An earlier version of the §1.1 switch and §6 rollback was dry-run on a booted
 systemd `ubuntu:24.04` container with no network interface (a loopback-only
 `tor-instance-create` relay pointed at a fake loopback authority). The drop-in
 took effect; the stock `ExecStartPre` verify passed; the patched binary ran as
@@ -36,6 +38,12 @@ took effect; the stock `ExecStartPre` verify passed; the patched binary ran as
 …=0` and the reload revert worked; an `HSDir*` torrc line failed the stock
 verify, as §1.1 warns; and the rollback restored `/usr/bin/tor`. Stock tor under
 `Sandbox 1` took the full 60 s `TimeoutStopSec` to stop (tor#41060).
+
+The revised preflight, maintenance-restoration, observation/trial procedures and
+[probe acceptance specification](../../operator/probe-helper-acceptance.md)
+are documentation updates. They were not executed or revalidated by that older
+dry-run, and do not change the package or claim that the future helper passes
+its tests. Pin the package/source hashes before any later authorized use.
 
 ## How it was built (`build-reordered/`)
 

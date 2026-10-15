@@ -2,7 +2,7 @@
 
 A small, upstreamable patch series for **Tor 0.4.9.14** that bounds the resource
 cost of the 2026 BEGIN_DIR / onion-service-descriptor flood on a directory cache
-(HSDir) while preserving all legitimate directory traffic, plus a **closed-lab
+(HSDir), with compatibility evidence from a **closed-lab
 benchmark** that measures the effect on a private network and an **operator kit**
 for a count-only canary on a live relay.
 
@@ -50,8 +50,17 @@ closes a circuit or refuses a request. Each has
 independent controls — a torrc `AUTOBOOL` option overriding a consensus
 parameter overriding the count-only default — so operators and the directory
 authorities can measure before enabling enforcement, and the enforcement toggle
-is a live `SIGHUP`/`SETCONF` with **no restart** (proven in `analysis/prevhop-false-positive.md`).
+uses live `SETCONF` with **no restart** in the canary runbook (the configuration
+mechanism also supports reloads; see `analysis/prevhop-false-positive.md`).
 `connection_edge.c` is untouched.
+
+The accepted experiment keeps **all seven patches** as one fixed baseline.
+Patches 0003–0007 remain active when defenses 0001/0002 are disabled; the full
+build is not behaviorally identical to stock. The existing four counters remain
+unchanged. See the [final canary plan](operator/CANARY-MEASUREMENT-PLAN.md) for
+7–14 usable HSDir days of passive collection, human review, and an optional
+separately approved live-toggle trial. This plan is documentation, not runtime
+authorization or a fresh release-readiness attestation.
 
 The series is written to upstream conventions: one single-pass HS-request guard
 (`connection_dir_allow_hs_request()`) for GET and POST, consensus parameters
@@ -77,13 +86,15 @@ loopback-only chutney net (4 dir auths, 6 HSDir relays, 3 onion services, stock
   one-request-per-circuit client stays **100% successful**.
 - **Stock traffic is untouched:** one-request-per-fresh-circuit and the
   post-defense "adapted" attacker shape are **100% served under every mode**,
-  including both-enforcing; count-only observe mode changes nothing.
+  including both-enforcing in this lab matrix. These results do not establish
+  population-wide client compatibility or full-build equivalence to stock.
 - **Legit preservation:** stock-client success **1.000 across all 24 valid
   enforcement cells**.
 
 **0001 false-positive bound (`analysis/prevhop-false-positive.md`).**
 2,416 legitimate HS fetches, **0 false refusals** (`hsdir_unknown_prev_hop`
-delta 0); empirical bound **< 4.1e-4**, consistent with the ~1.2e-6 model.
+delta 0). This sample and the model do not establish the live canary's
+legitimate-client failure rate; report controlled-client evidence separately.
 
 **amd64 build + seccomp (`engineering/`, `simulator/results/seccomp-*`).**
 Native amd64 build, full unit suite, upstream CI matrix, and an installable
@@ -115,11 +126,15 @@ net); the ratios are the valid outputs, and `data/` grounds the attack *shape*.
 
 ## Operator kit (`operator/`)
 
-For running a **count-only** canary on a live relay and measuring the real
-flood: `DEPLOY-AND-MEASURE.md` (end-to-end), `capture-and-validate-playbook.md`
-(MetricsPort → Prometheus capture, efficient under a flood), and
-`operator-agent-prompt.md`. The patched binary defaults to observe-only, so the
-canary only adds the four counters; enforcement is a separate live toggle.
+Start with [the final plan](operator/CANARY-MEASUREMENT-PLAN.md). The kit includes
+[deployment and incident procedures](operator/DEPLOY-AND-MEASURE.md),
+[measurement and report definitions](operator/capture-and-validate-playbook.md),
+[the operator handoff](operator/operator-agent-prompt.md), and
+[future probe-helper acceptance tests](operator/probe-helper-acceptance.md).
+The helper specification is **not implemented or tested** by this documentation
+update. Passive collection comes first; any controlled probe/enforcement trial
+requires a separate human decision. Keep the same binary and four counters
+throughout. No handoff counters or extra C telemetry are planned.
 
 ## Live capture (`data/`)
 
