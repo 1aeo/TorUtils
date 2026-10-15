@@ -16,6 +16,11 @@ Another agent builds and pushes that artifact; follow
 not build or deploy it. Begin with one pilot on vipopen, then expand in small
 approved batches toward half its relays, including the pilot. Retain stock
 references and contemporaneous patched-off controls for later enforcement.
+The objective is improved **efficiency and legitimate-client outcomes within
+the measured scope**, not recovery from assumed overload. The operator's
+comparative snapshots show elevated directory traffic without demonstrated
+exceptional CPU/RSS pressure or queue growth; see the final plan's evidence
+section. They do not measure the flood's incremental cost or prove no harm.
 
 Read the README, this entire runbook, the
 [capture playbook](capture-and-validate-playbook.md), the addendum and evidence
@@ -42,9 +47,10 @@ Prepare a private manifest before any host mutation:
 | Confinement | Existing AppArmor profile/attachment, seccomp/Sandbox and other unit security settings; how the `/opt` path preserves them |
 | Maintenance | Existing holds/exclusions and contents, upgrades/reboot timers and external automation; shared changes explicitly scoped; review/expiry date and emergency security-maintenance exception |
 | Monitoring | Persistent scraper, scheduled read-only checker, existing incident alert path, operator/backup owner, coverage during recovery and observation |
-| Baseline | Previous-day per-process CPU/RSS summaries, units/CPU normalization and sampling; existing traffic context, not a substitute for post-flag HS baseline |
+| Baseline | Synchronized main-thread CPU where available, total/worker CPU, RSS and traffic; exact windows, units and sources; process totals cannot silently substitute for main-thread measurements |
 | Thresholds | Per-member and host-level sustained limits, serving-capacity floor, batch size/review gates, responder, live-disable/per-instance rollback triggers; expected flood load alone is not failure |
-| Data quality | Scrape interval, each required series/source, uniqueness, freshness, minimum coverage and maximum allowed gap; restart evidence sources |
+| Data quality | Scrape interval, required series/sources, uniqueness, freshness, coverage/gap limits and restart evidence; distinguish unavailable thread/client evidence from observed zero |
+| Trial interpretation | Preregister minimum worthwhile efficiency/useful-service gain, allowable controlled-client impact, precision/exposure and stopping rules; benefit/no_detectable_benefit/regression/inconclusive are permitted outcomes |
 | Timing | Selected 7–14 usable days per patched member, per-member T0/flag deadline, common-time comparison exposure, absolute study end/extension policy and postexperiment review |
 | Retention | At least 30 days or private daily/window exports; owner handles any Prometheus configuration change |
 | Rollback | Original loaded binary/command/config and backed-up changed files; exact restoration plan; no blanket unhold or deletion of pre-existing files |
@@ -369,7 +375,11 @@ peak-hour contrasts are explicitly secondary. No guessed values or hidden
 failures. Per-window estimates cannot establish unobserved attack traffic,
 legitimate-client failure rates, or causal resource savings.
 
-**Check-in 3:** observation report. The human chooses continued observation,
+**Check-in 3:** observation report. Describe measured resource pressure rather
+than inferring overload from BEGIN_DIR or asymmetry. High CPU common to peers,
+large baseline RSS or fewer transferred bytes do not establish an attack cost.
+Preserve client-impact evidence gaps and uncertainty. The human chooses
+continued observation,
 collection completion, or a separately approved bounded trial. High `R/T` or
 `U/T` alone never automatically enables a defense. If both are low, report weak
 evidence for these predicates rather than forcing an enforcement experiment.
@@ -442,7 +452,12 @@ dedicated stock clients, owned descriptor fixtures for each assigned target,
 explicit aggregate low probe cadence/budget, matched off/on time blocks, phase
 order, settling criteria, per-member/host incident limits and trial end.
 Retain a contemporaneous **patched-off control group** in every active block;
-never enable every patched member together. Match using pretreatment evidence
+never enable every patched member together. Record the efficiency and
+controlled-client endpoints, minimum meaningful gain, unacceptable harm,
+required exposure/precision and stopping criteria before looking at treatment
+results. No detectable benefit or regression is a valid result; do not change
+windows, members or duration merely to obtain an improvement. Match using
+pretreatment evidence
 and randomize within comparable candidates where practical. Stock references
 remain useful context but do not isolate a toggle's effect. Run comparable
 low-rate checks in the trial's patched-off and active windows, one target per
@@ -478,6 +493,13 @@ nested rate lookbacks, not only the reported outer window. Match conditions
 within episodes and repeat comparisons when safe; retain temporal/adaptation
 confounding as a limitation. Never infer benefit just because the flood moved
 away or because enforcement prevented later requests from reaching the counter.
+Lower bandwidth, CPU or request volume is not a successful policy result if
+controlled receipt or latency worsens beyond the registered bound. Compare
+absolute main-thread CPU together with total/worker CPU and circuit/handshake
+demand: enforcement may move work or increase its cost. Do not infer client
+benefit from whole-relay throughput. Apply the capture playbook's explicit
+benefit/no_detectable_benefit/regression/inconclusive classification and retain
+mixed tradeoffs; lack of sufficient exposure or precision remains inconclusive.
 
 Report `delta R` during isolated reuse enforcement as inferred **circuit-close
 decisions**, and `delta U` during isolated previous-hop enforcement as inferred
@@ -506,6 +528,7 @@ add handoff counters to pretend to measure this. Use existing pressure metrics
 as resource indicators, not delivery measurements.
 
 At trial end explicitly return every patched trial member to `0,0`, verify
-per member, report individual and matched results/limitations,
-and hand back the continuation/maintenance decision. No automatic enforcement
+per member, report individual and matched efficiency/client-impact results,
+including neutral or adverse findings and uncertainty, and hand back the
+continuation/maintenance decision. No automatic enforcement
 scheduler is part of this plan.

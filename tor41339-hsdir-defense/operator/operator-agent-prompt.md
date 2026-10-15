@@ -29,6 +29,25 @@ per-member restart/recovery; observation/quality rules; human trial decision;
 probe recovery/privacy limits. Resolve source/artifact/docs discrepancies before
 dependent runtime work. Do not call a build or test passed without evidence.
 
+## Study question and interpretation
+
+Evaluate whether the selected rule improves efficiency or useful service while
+preserving controlled legitimate-client outcomes. Do not start from assumed
+overload or expected mitigation success. The operator-supplied comparison found
+high BEGIN_DIR/asymmetric traffic with CPU/RSS/queues broadly ordinary for
+peers; it did not establish flood-attributable resource cost. Reference the
+final plan's de-identified evidence, not invented production findings.
+
+Preregister synchronized main-thread CPU, process/worker demand, circuit and
+handshake work, controlled receipt/timeouts/latency, and safety endpoints.
+Treat unavailable main-thread/client evidence as a gap. Whole-relay bytes are
+not legitimate goodput, and profile shares are not absolute CPU utilization.
+Require declared meaningful-gain/client-harm bounds, exposure and uncertainty.
+Report benefit, no_detectable_benefit, regression or inconclusive; neutral or
+adverse findings are valid outcomes. Never extend/rematch selectively until
+an improvement appears. High directory rate alone triggers observation, not
+automatic enforcement or a claim of resource exhaustion.
+
 ## Fixed rules
 
 - Host scope: **vipopen**, Ubuntu 26.04 amd64. Freeze the private roster N;
@@ -165,6 +184,10 @@ release shared maintenance protections or remove the staged binary required by
 remaining patched members. Restore shared state only after its dependencies
 end and the operator authorizes it. At trial end return all patched trial
 members to verified `0,0`, report per-member/matched resource and controlled
-receipt outcomes with limitations, and hand back the continuation decision.
+receipt outcomes with limitations and an explicit efficiency/client-impact
+verdict. Lower traffic or CPU must not conceal unacceptable client harm;
+report circuit/handshake work shifts, no detectable benefit, regressions and
+uncertainty. Hand back the continuation decision without presuming expansion
+or continued enforcement is warranted.
 Receipt does not establish uploads, application availability, every legitimate
 client's experience, or an independent-host effect.

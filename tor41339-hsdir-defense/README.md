@@ -67,6 +67,15 @@ authorization or a fresh build/release-readiness attestation. See the
 [native build handoff](operator/NATIVE-26.04-BUILD-HANDOFF.md); the older Noble
 package is historical evidence, not an automatic fallback for this rollout.
 
+The live study asks whether the rules improve **resource efficiency while
+preserving or improving legitimate-client outcomes within the measured scope**.
+The supplied comparative snapshot showed high directory activity without
+exceptional CPU/RSS pressure or queue accumulation relative to peers; overload
+and attack-attributable cost must be measured, not assumed. Lower request or
+byte volume alone is not success. **No detectable benefit and regression are
+valid outcomes**, with inconclusive reserved for insufficient evidence; all
+comparisons retain uncertainty and client-impact guardrails.
+
 The series is written to upstream conventions: one single-pass HS-request guard
 (`connection_dir_allow_hs_request()`) for GET and POST, consensus parameters
 cached in `set_dos_parameters()` (O(1) per-request check), table-driven

@@ -218,6 +218,21 @@ not remove it from the denominator or turn it into a success.
 
 ## Outcomes, denominators, and reporting
 
+The goal is to measure legitimate-client impact within this controlled test's
+scope, not to demonstrate that enforcement succeeds. Preregister acceptable
+receipt/timeout/latency bounds and the minimum coverage/precision needed for a
+comparison. A policy that lowers traffic while causing unacceptable test-client
+harm is not a benefit. Preserve no detectable benefit, regression and mixed
+tradeoffs alongside any improvement; insufficient precision/exposure remains
+inconclusive. Do not selectively repeat successful-looking batches or discard
+valid failed/time-out outcomes to obtain a favorable result.
+
+Distinguish **policy outcomes** from **collector correctness**. A correct helper
+may faithfully observe policy-related failure or regression. That is a valid
+experiment result, while broken correlation or accounting is a collector fault
+that limits inference. Passing helper acceptance is not evidence of a benign
+or effective enforcement policy.
+
 Keep a private append-only record of attempted submissions, bounded metadata
 from relevant control events, outcome, and recovery. Do not store authentication
 secrets, payloads, descriptor contents, or unrelated client events. Event
@@ -306,6 +321,7 @@ access. No test execution is part of this documentation change.
 | Matched off/on schedule or artifact mismatch | Reject an undeclared comparison or mismatched patched artifact; retain excluded samples in accounting and document the gap rather than selecting favorable replacements. |
 | Sensitive output or full buffers | No payload/authentication content in logs; bounded metadata storage; public output passes identifier redaction. |
 | Accounting reconciliation | Every attempted submission appears once; failures/timeouts stay in the denominator; recovery gaps are reported separately. |
+| Neutral or adverse policy outcome | A correctly observed no-gain or degraded receipt/latency scenario is preserved and reportable under the declared assessment rule. Lower traffic/resource figures cannot hide failed attempts; the helper is not required to manufacture a positive policy conclusion. |
 
 The isolated stock-client lab must additionally establish that explicit
 HSFETCH bypasses the client descriptor cache, reaches each batch's assigned

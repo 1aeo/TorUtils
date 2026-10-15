@@ -8,9 +8,12 @@ its evidence to the repository. This task does not perform or certify that build
 
 ## Outcome and fixed scope
 
-Characterize received HS directory traffic, inform a human decision about
-enforcement, then optionally measure its incremental effect. The selected host
-is **vipopen**, Ubuntu 26.04 amd64. Start with **one pilot**, then expand in
+Characterize received HS directory traffic and test whether enforcement
+**improves resource efficiency while preserving or improving legitimate-client
+service within the measured scope**. Do not presume overload, memory exhaustion,
+or a beneficial treatment effect. No detectable benefit and regression are
+valid study outcomes. The selected host is **vipopen**, Ubuntu 26.04 amd64.
+Start with **one pilot**, then expand in
 small batches toward **half of the host's relays**, retaining stock references.
 This supersedes the previous experiment-wide one-relay limit; the one-pilot
 limit still applies to the initial deployment stage.
@@ -40,6 +43,48 @@ limit still applies to the initial deployment stage.
 The host alias above is an explicit scope identifier requested by the operator.
 Keep actual relay identities, endpoints, credentials and host/fleet inventory
 counts in a private manifest; use stable opaque member IDs in reports.
+
+## Findings motivating the efficiency-first objective
+
+The operator supplied a comparative snapshot of a relay with elevated directory
+activity and three reference relays. This is **supplied observational evidence**,
+not a new measurement, matched experiment, or proof about every proposed cohort
+member. Names and total inventory counts are omitted; units are as reported.
+
+| Snapshot measure | Elevated-directory relay | Three reference relays |
+|---|---|---|
+| BEGIN_DIR/s | 189 | 10 / 4 / 1.6 |
+| Absolute main-thread CPU, one core = 100% | 77% | 80% / 94% / 94% |
+| Userspace share of its CPU | 60% | 61% / 59% / 59% |
+| RSS, GB as reported | 5.2 | 4.5 / 5.2 / 10.0 |
+| Read / written MB/s | 13 / 21 | 19 / 19; 25 / 25; 28 / 28 |
+| Open circuits and observed change | 44,506; -2/s | 32,367; +8/s / 36,930; +15/s / 34,020; +1/s |
+| Outbuf stop flag | 0 | 0 / 0 / 0 |
+| Cell-queue estimate | 212 | 219 / 167 / 185 |
+
+The elevated-directory relay is a request-rate/asymmetry outlier, but this
+snapshot does **not** establish exceptional CPU utilization, memory pressure,
+queue accumulation, or an attack-attributable resource delta. Its socket count
+is comparable to peers. The broader supplied peer comparison likewise placed
+its CPU near the median and RSS below the median; no inventory size is needed
+for that interpretation. A resident footprint above 4 GB is not evidence of
+flood-induced memory demand when ordinary peers also exceed that footprint.
+
+Earlier main-thread profiles described shares of on-CPU samples, not absolute
+utilization. Do not mix those profiles, later five-second CPU observations, and
+different traffic windows to calculate a purported CPU cost. A synchronized
+CPU-time-per-total-byte ratio can be a descriptive proxy, but directory serving
+and transit forwarding have different work mixes; it is not measured attack
+cost or legitimate goodput. Do not divide independently summarized medians to
+invent a representative relay's efficiency.
+
+The historical directory-byte asymmetry and live whole-relay excess egress are
+useful context, not proof of overload or measured per-HS-request amplification.
+A reconstructed request size or historical ratio applied to another window
+must remain labeled as an estimate with its assumptions. The current evidence
+supports testing efficiency and useful service, not claiming that enforcement
+will rescue an already exhausted relay. It also does not prove the flood has
+zero cost or cannot matter on a more constrained system.
 
 ## Private roster, rollout size, and comparison groups
 
@@ -84,7 +129,7 @@ checks. Do not publish the private N or a total host/fleet inventory.
 | One pilot | Stage once, validate, restart only the selected pilot, verify its binary/configuration/metrics | Pilot startup and ordinary-load checks pass; operator receives check-in |
 | Bounded expansion | After pilot review and later expansion authorization, convert the remaining approved patched members in small batches | Up to the agreed half-host target reached, each member verified; stock references untouched |
 | HSDir recovery and passive observation | Track each converted member's own uptime/flag recovery, then gather 7–14 usable days with controls inactive | Observation/report criteria satisfied, or deadline/incident outcome reported |
-| Human review | Review patterns, quality, resources, and comparison limitations | Continue, finish, or explicitly approve a bounded enforcement/probe trial |
+| Human review | Review patterns, efficiency, client-impact evidence, quality and comparison limitations | Continue, finish, or explicitly approve a bounded trial without presuming benefit |
 | Probe preparation | Implement and validate the external helper in mock/isolated lab tests under its own authorization | Acceptance evidence reviewed; no relay C changes |
 | Optional trial | Matched patched-off/on groups, one defense at a time, controlled-client checks if approved | Bounded trial completed or stopped, all patched members returned inactive |
 | Handoff | Retain fixed binaries inactive pending instruction; dated maintenance review | Human decides continuation or planned removal |
@@ -177,6 +222,33 @@ gaps; do not imply that an open chat provides unattended incident coverage.
 
 ## Enforcement comparisons and limits
 
+The primary question is whether the selected rule improves resource efficiency
+or useful service **without unacceptable harm to controlled legitimate-client
+checks**. High BEGIN_DIR, byte asymmetry, a busy main thread or a large RSS alone
+is not an emergency-enforcement trigger. Existing safety limits still apply;
+a normal snapshot does not justify disabling incident protection.
+
+Prioritize synchronized **absolute main-thread CPU time/utilization**, with
+userspace/kernel attribution where available, and controlled descriptor-receipt
+success, timeouts and latency. Record total-process/worker CPU and new circuit/
+handshake demand to detect work moving into workers or becoming more expensive.
+Track useful traffic only where its measurement is defined; whole-relay bytes
+or request count alone do not establish useful service. RSS, sockets, queues,
+OOM reclamation and host pressure remain safety/context indicators, not assumed
+failure modes. Missing per-thread or client-impact evidence is an explicit gap,
+not a reason to relabel a process total or traffic volume as that measurement.
+
+Before a trial, register the minimum worthwhile gain, acceptable client-impact
+bounds, exposure/coverage requirements, uncertainty method, and stopping rules.
+Classify each supported comparison as **benefit**, **no_detectable_benefit**,
+**regression**, or **inconclusive**, as defined in the capture playbook. Less
+traffic alone is not benefit; lower CPU/bandwidth must not conceal unacceptable
+client failure or latency. More handshake/worker cost may offset other gains;
+retain mixed tradeoffs and individual results instead of forcing a favorable
+net label. Adequate evidence of no detectable gain is a legitimate result, not
+a reason to extend or repeat until a positive result appears. Missing exposure
+or insufficient precision is inconclusive, not proof of zero effect.
+
 The operator approves matched assignments, mode order, time blocks, probe
 cadence, settling limits and safety stops after observation. Match using
 **pretreatment** load/role/capacity, not request rates already changed by the
@@ -243,7 +315,9 @@ legitimate clients' experience. No internal handoff counters are added.
 Use the capture playbook's cohort report contract: one JSON containing per-member
 and comparison records, one bounded CSV with opaque member IDs, and a 6–10-line
 summary. Separate stock-reference/full-build observations from patched-off/on
-enforcement evidence. Preserve individual results and heterogeneity; do not
+enforcement evidence, and explicitly state the efficiency/client-impact verdict
+with uncertainty. Preserve no-detectable-benefit and regression results,
+individual results and heterogeneity; do not
 replace them with an average of per-relay ratios or count overlapping windows
 twice. Raw target manifests, source labels, credentials, descriptors and
 identities remain private. Exact-time operator reports require separate

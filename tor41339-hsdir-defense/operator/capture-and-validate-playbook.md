@@ -47,6 +47,21 @@ It can identify patterns a rule matches. It cannot prove that every matching
 request is malicious, predict saved bandwidth, establish legitimate-client
 success, or establish a network-wide effect from this selected cohort.
 
+The later trial evaluates **main-thread efficiency and legitimate-client
+service**, not whether total bytes fall. Register the primary outcome and
+decision rule before the trial: a worthwhile main-thread efficiency gain or
+a directly measured controlled-client/useful-service gain can qualify, subject
+to the registered harm bounds. Do not switch primary outcomes after seeing
+the results. Operator-supplied
+snapshots motivate this question: they show disproportionate directory
+activity and outbound skew without establishing increased CPU/RSS or queue
+saturation attributable to that traffic. These are supplied contextual
+snapshots, not fresh measurements collected for this plan. Do not assume
+overload, a resource saving, or successful mitigation in advance. Benefit,
+no detectable benefit and regression are all legitimate experimental outcomes.
+Those snapshots are not a controlled trial and do not themselves establish
+`no_detectable_benefit` or any other effectiveness classification.
+
 “Count-only” describes the two controls in patches 0001 and 0002. Patches
 0003–0007 also change behavior and accounting. The full build with both controls
 off is the experiment's baseline; it is **not stock Tor with only counters
@@ -142,7 +157,7 @@ or restart oracle.
 |---|---|---|
 | B | `tor_relay_streams_total{type="BEGIN_DIR"}` | BEGIN_DIR streams terminated here; includes directory work other than HS requests. |
 | C | `tor_relay_congestion_control_total{state="cc_circuits",action="circs_created"}` | Congestion-control circuits created, not all circuits or HS circuits. |
-| BW, BR | `tor_relay_traffic_bytes{direction="written"}` and `{direction="read"}` | Whole-relay byte counters, not served HS-descriptor bytes. |
+| BW, BR | `tor_relay_traffic_bytes{direction="written"}` and `{direction="read"}` | Whole-relay byte counters, not served HS-descriptor bytes or useful-service goodput. |
 | OP, OD | `tor_relay_load_onionskins_total{type="ntor_v3",action="processed"}` and `{type="ntor_v3",action="dropped"}` | Whole-relay ntor_v3 handshake processing and drops. Zero drops do not exclude other overload. |
 | Queue pressure | `tor_relay_dos_total{type="circuit_killed_max_cell_outq"}` | Stock output-queue-related circuit kills; does not attribute a failed HS response to a rule. |
 | HSDir memory pressure | `tor_relay_load_oom_bytes_total{subsys="hsdir"}` | HSDir-cache bytes reclaimed during OOM handling; **not response-queue loss, failed responses, or delivered bytes**. |
@@ -154,12 +169,41 @@ of a flood. The `dirreq-v3-*` request statistics describe network-status
 requests, not HS descriptor fetches. Directory traffic histories are also not
 HS-only traffic measurements.
 
-Use an **existing, identified per-process** CPU/RSS source for each relay, not
-host totals or another Tor instance. Record sampling cadence, aggregation and
-units. In this report, RSS is MiB (`bytes / 2^20`) and CPU percent uses **100% per
-logical CPU**; record any conversion from an existing normalized source. If the
-required process series do not exist, report the gap rather than install a new
-exporter or substitute a host measurement.
+Use **existing, identified main-thread, worker and process-total CPU sources**
+and per-process RSS for each relay, not another instance's measurements. Record
+collector availability, exact scope, thread/process continuity, sampling cadence,
+aggregation and units. Main-thread absolute CPU time/utilization is the primary
+efficiency measure. Preserve user and system/kernel CPU time separately, their
+total, and mean utilization over the accepted window. A sampled function or
+library's percentage of a profile is not absolute CPU utilization.
+
+For a future authorized collection, use a validated per-thread metric or an
+existing collector that correctly reads
+`/proc/<pid>/task/<main-tid>/stat`, with the main-thread identity and process
+continuity verified. With validated `utime`/`stime` tick differences and the
+host's recorded `CLK_TCK`, `user_s = delta_utime / CLK_TCK`,
+`system_s = delta_stime / CLK_TCK`, and `total_s = user_s + system_s`.
+Do not substitute the process-level `/proc/<pid>/stat` total: workers can
+become busier while main-thread use falls. This is a method specification,
+not an instruction to start a collector or run these reads now.
+
+In this report, RSS is MiB (`bytes / 2^20`) and CPU percent uses **100% per
+logical CPU**; record any conversion from an existing normalized source.
+For aligned measurements, `mean_cpu_pct = 100 * cpu_seconds / W`; define which
+threads/processes contribute to each total. Report worker CPU and process-total
+CPU alongside main-thread CPU so that more circuit creation/handshakes or work
+moved to workers is visible. Account for worker lifecycle and collection
+coverage rather than treating an incomplete worker sum as a complete total.
+Host CPU/softirq pressure remains separate context, not a substitute for
+main-thread or process CPU.
+
+If the required per-thread/process collector is unavailable or cannot maintain
+the required scope/continuity, record availability as false and the affected
+values as null with a gap. Do not infer main-thread CPU from the process total
+or silently install a new collector. Any later external collector implementation
+or deployment needs its own authorized scope; no additional Tor C instrumentation
+is planned. A missing primary outcome limits the efficiency conclusion; it need
+not invalidate independently valid request-pattern observations.
 
 ### 2.3 Different required metric sets for stock and patched relays
 
@@ -206,6 +250,19 @@ appear in the returned report. Predeclare:
    median and p95), the peak definition and sampling interval, and whether the
    comparison uses predeployment or same-build observation data. Keep both
    periods distinguished when available.
+5. **Outcome criteria:** the selected primary outcome and minimum worthwhile
+   gain in main-thread efficiency or directly measured controlled-client/
+   useful service; acceptable decreases in receipt success and increases in timeouts/latency,
+   acceptable worker/process-total cost increases, and any available useful-
+   service measure. Specify numerical bounds, units, directions and decision
+   precedence before the trial. Keep safety-stop thresholds distinct from
+   effectiveness criteria; a safe trial need not be useful.
+6. **Exposure and uncertainty:** the minimum matched eligible duration/blocks
+   and controlled-probe attempts needed for each conclusion, the uncertainty
+   method/level, and any planned interim decisions or extension rule. Scrapes
+   and repeated requests can be correlated; do not count every scrape as an
+   independent experimental replication. If the agreed exposure or precision
+   cannot be achieved, report the affected conclusion as inconclusive.
 
 Every per-relay query must use the fixed selector for **exactly that relay**.
 Before accepting a result, require exactly one fresh series for each metric
@@ -471,6 +528,28 @@ Keep the opaque per-relay results visible so opposing effects, outliers and
 unequal attack exposure remain apparent. Aggregation does not remove the
 same-host interference, selection or hash-ring limitations in §1.1 and §6.
 
+### 5.5 Optional descriptive CPU cost per byte
+
+If both CPU time and byte counters cover the **same accepted UTC window,
+relay, build, mode and coverage**, an optional descriptive quantity is:
+
+```text
+ms_cpu_per_MB = (1000 * delta_cpu_seconds) / (delta_bytes / 1000000)
+```
+
+Declare the CPU scope (main thread, workers or process total), byte direction
+and MB definition. Use aligned cumulative increments or aligned integrated
+rates; never divide independently calculated CPU and bandwidth medians, mix
+different windows, or borrow a historical traffic ratio to supply a missing
+denominator. Use null for missing/invalid inputs or a nonpositive denominator.
+
+This describes CPU time per whole-relay byte under the observed traffic mix.
+It does not identify flood-attributable CPU, the counterfactual CPU without a
+flood, saved resources caused by a rule, or useful goodput. Treatment may alter
+the mix and volume of bytes, so the ratio is secondary to absolute CPU and
+client outcomes. Do not rank a rule as beneficial solely because this ratio
+or total bandwidth decreased.
+
 ## 6. Later enforcement: separate approval and limited claims
 
 ### 6.1 Rule selection from observation
@@ -564,6 +643,53 @@ not silently become success. Even accepted controlled checks establish only
 the tested client/path/service experience, not fleet-wide or all-client
 success. Return only approved aggregate probe results and limitations.
 
+Primary client outcomes are controlled descriptor-receipt success across all
+attempts, timeout fraction, and receipt-latency distribution under the accepted
+helper protocol. Read them jointly: better latency among the remaining
+successful attempts can conceal additional failures/timeouts. Add a validated
+measure of useful service if one already exists and its population/meaning
+can be stated; otherwise report that limitation. Whole-relay written bytes
+are not goodput, and controlled descriptor receipt is not application-level
+service success. Lower CPU or bandwidth caused by denying useful work must
+not be called a benefit while concealing client harm.
+
+### 6.4 Assess benefit, regression, or unresolved evidence
+
+Each matched contrast receives an `outcome_assessment` separate from its
+data-quality and observation status. Evaluate the registered numerical
+criteria with the declared uncertainty and exposure requirements, retaining
+individual main-thread, worker, process-total and client effects. The
+uncertainty method must account for temporal dependence and shared-host effects;
+many correlated scrapes or probe attempts are not independent relay/host
+replications. State the sampling unit and comparison assumptions:
+
+| Classification | Required interpretation |
+|---|---|
+| `benefit` | Evidence meets the minimum worthwhile registered efficiency, controlled-client or useful-service gain and the acceptable client/resource-harm bounds under the registered decision rule. State the tested population and useful-service limitations. Improved service with unchanged CPU can qualify when that is the registered primary outcome; a fall in bytes alone never qualifies. |
+| `no_detectable_benefit` | The comparison has adequate relevant exposure and sufficiently resolved uncertainty under the registered rule, but does not demonstrate the worthwhile gain or a qualifying regression. This is not proof of exactly zero effect or universal equivalence. |
+| `regression` | Evidence crosses a registered harm/regression criterion, including client harm or an unacceptable resource tradeoff. Report any simultaneous improvement rather than hiding the tradeoff. |
+| `inconclusive` | Missing primary measurements, inadequate relevant exposure, unresolved confounding, or uncertainty too broad to distinguish the registered useful/harmful outcomes prevents a conclusion. State the specific reason. |
+
+For example, lower main-thread CPU with higher worker/total CPU and more
+handshakes is a **mixed cost change**, not automatic efficiency improvement.
+Apply the declared limits and decision precedence; if an unanticipated
+tradeoff has no registered decision rule, report it and leave the overall
+assessment inconclusive for human review. Client-harm bounds take precedence
+over claiming benefit from fewer bytes or less CPU.
+
+Distinguish a valid finding of no detectable benefit from no qualifying flood
+exposure or missing data. A quiet covered observation remains a valid
+`baseline_only` result, but cannot establish mitigation effectiveness during
+a flood. Low power or a wide interval is not evidence of zero effect. Report
+separately any conclusions supported only in quiet traffic or for the tested
+client fixture. The observational and shared-host limitations still constrain
+causal language even when the classification is `benefit`.
+
+Do not repeat trials, extend collection, change thresholds, or select new
+windows until a positive result appears. Use only the predeclared stopping/
+extension rule and approval scope; an additional investigation requires a
+documented new decision, not reinterpretation of the finished experiment.
+
 ## 7. Report contract
 
 Return exactly: **(1) one fenced JSON report, (2) one combined CSV of at most
@@ -611,6 +737,11 @@ in §2.3 and populate `metric_unavailability` with the affected fields and
 `not_available_on_stock_build`. Stock has no patched toggle history, and its
 unused patched-deployment/restart fields remain null with an explanation.
 Coverage is assessed against that report's declared required metric set.
+The schema remains version 2: the additional `outcome_criteria`, per-window
+`cpu_time`/`useful_service`, resource `cpu_collectors`, and matched-contrast
+`outcome_assessment` fields extend the existing report without changing its
+counter definitions. Numerical criteria are unset in this template and must
+be registered before a trial; they are not inferred from the snapshots.
 
 ```json
 {
@@ -622,6 +753,30 @@ Coverage is assessed against that report's declared required metric set.
     "native_artifact_id": null,
     "allocation_method": null,
     "expansion_gate_status": null
+  },
+  "outcome_criteria": {
+    "primary_outcome": null,
+    "decision_rule": null,
+    "minimum_primary_gain": {
+      "metric": null,
+      "unit": null,
+      "value": null,
+      "direction": null
+    },
+    "minimum_main_thread_cpu_gain_pct_points": null,
+    "maximum_receipt_fraction_decrease": null,
+    "maximum_timeout_fraction_increase": null,
+    "maximum_receipt_latency_p95_increase_ms": null,
+    "maximum_worker_cpu_increase_pct_points": null,
+    "maximum_process_total_cpu_increase_pct_points": null,
+    "useful_service_requirement_if_available": null,
+    "minimum_matched_duration_s": null,
+    "minimum_matched_blocks": null,
+    "minimum_probe_attempts_per_condition": null,
+    "uncertainty_method": null,
+    "uncertainty_level": null,
+    "decision_precedence": null,
+    "stopping_or_extension_rule": null
   },
   "relay_reports": [
     {
@@ -724,7 +879,34 @@ Coverage is assessed against that report's declared required metric set.
         "onionskins_processed_per_s": null,
         "onionskins_dropped_per_s": null,
         "output_queue_circuit_kills": null,
-        "hsdir_oom_reclaimed_bytes": null
+        "hsdir_oom_reclaimed_bytes": null,
+        "cpu_time": {
+          "main_thread": {
+            "user_s": null,
+            "system_s": null,
+            "total_s": null,
+            "mean_pct": null
+          },
+          "workers": {
+            "user_s": null,
+            "system_s": null,
+            "total_s": null,
+            "mean_pct": null
+          },
+          "process_total": {
+            "user_s": null,
+            "system_s": null,
+            "total_s": null,
+            "mean_pct": null
+          }
+        },
+        "useful_service": {
+          "available": null,
+          "measure": null,
+          "value": null,
+          "unit": null,
+          "population": null
+        }
       },
       "flood_windows": [],
       "mode_windows": [],
@@ -754,7 +936,30 @@ Coverage is assessed against that report's declared required metric set.
         "cpu_pct_normal": null,
         "cpu_pct_flood_peak": null,
         "registered_stop_thresholds": null,
-        "threshold_breaches": []
+        "threshold_breaches": [],
+        "cpu_collectors": {
+          "main_thread": {
+            "available": null,
+            "source_description_without_identifiers": null,
+            "scope_description": null,
+            "sampling_interval_s": null,
+            "continuity_complete": null
+          },
+          "workers": {
+            "available": null,
+            "source_description_without_identifiers": null,
+            "scope_description": null,
+            "sampling_interval_s": null,
+            "continuity_complete": null
+          },
+          "process_total": {
+            "available": null,
+            "source_description_without_identifiers": null,
+            "scope_description": null,
+            "sampling_interval_s": null,
+            "continuity_complete": null
+          }
+        }
       },
       "probe_aggregates": {
         "performed": false,
@@ -820,10 +1025,52 @@ Each `matched_comparisons` entry names the contrast
 start/end, assigned relay IDs and referenced `window_id` values, build/mode
 identities, accepted simultaneous coverage, common measured outcomes and
 limitations. State whether each contrast is accepted, missing or
-inconclusive and why. HS-dependent stock contrasts are unavailable. Compare
+inconclusive in `data_status` and explain why. HS-dependent stock contrasts are unavailable. Compare
 mean rates or other preregistered outcomes, not unnormalized counts from
 unequal exposures; preserve individual contrasts instead of only reporting
 the favorable aggregate.
+
+Each comparison also contains `outcome_assessment` with:
+
+- `classification`: `benefit`, `no_detectable_benefit`, `regression`, or
+  `inconclusive`, under §6.4;
+- `adequate_exposure`, `adequate_precision`,
+  `primary_gain_meets_minimum`, `client_harm_within_bounds`, and
+  `worker_and_total_cost_within_bounds`: booleans or null when unresolved;
+  optional `main_thread_gain_meets_minimum` applies only when such a gain
+  criterion was registered;
+- `effect_estimates`: per-outcome metric, unit, reference/treatment values,
+  signed contrast, uncertainty bounds and method/level, with the exact
+  referenced windows. A CPU gain is reference minus treatment; a client harm
+  estimate states its direction explicitly;
+- `useful_service_evidence`, `mixed_tradeoffs`, `interpretation_scope`, and
+  `reasons`: the supporting evidence, observed conflicting changes, limitations
+  and grounds for the classification, without inventing missing outcomes.
+
+`outcome_criteria.primary_outcome`, `decision_rule` and `minimum_primary_gain`
+state the prespecified metric, direction, magnitude and rule for qualifying
+benefit. A CPU-reduction threshold is conditional on CPU being the primary
+outcome or an explicitly registered additional gain criterion; it is not
+mandatory for a registered useful-service/client improvement with acceptable
+resource costs. Do not select a different primary measure after the trial.
+CPU bounds use percentage points on the 100%-per-logical-CPU
+basis; receipt and timeout bounds use absolute fractions. Latency bounds are
+milliseconds and refer to the registered conditional receipt population.
+Report unknown fields as null; do not turn unavailable primary evidence into
+a passing harm check or a finding of no detectable benefit. Effect estimates
+retain observational/causal limitations even when their numerical interval is
+narrow. A data-quality pass is not an effectiveness result.
+
+For each accepted window, `cpu_time` contains measured CPU-time increments
+in seconds and mean percentages for the main thread, documented worker scope
+and process total. `resources.cpu_collectors` identifies availability, source,
+scope, cadence and continuity for each. Do not sum overlapping CPU scopes
+or add a process total to its own workers. Missing components remain null
+with a stated limitation; no new Tor C metric is implied. `useful_service`
+names an independently validated measure, its units and population if one is
+available; BW/BR and receipt timing alone must not be relabeled as goodput.
+Any optional ms-CPU/MB value must carry its aligned window, CPU scope and byte
+direction under §5.5.
 
 Each `cohort_summaries` entry declares one exact build, one mode, included
 nonoverlapping `window_id` references, exposure units/denominator, selection
@@ -907,7 +1154,9 @@ relay_id,cohort,mode,window_id,t_offset_min,begin_dir_per_s,hs_req_per_s,r_hs,ph
 ### 7.3 Six-to-ten-line summary
 
 State the phase and per-relay/matched coverage, without fleet counts; the
-mean-rate increase above baseline or why it is unavailable; r_hs and phi;
+main-thread efficiency effect, worker/process-total tradeoffs and controlled
+client outcomes with uncertainty; the effectiveness classification or why it
+is unresolved; the mean-rate increase above baseline or why unavailable; r_hs and phi;
 the qualified rho_hs/transition ratio and hs_share; observed ntor_v3 drops and
 resource/pressure evidence; which rule matches the observed pattern; and the
 main gaps, heterogeneous results or surprising observations. Distinguish the
