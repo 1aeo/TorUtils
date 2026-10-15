@@ -1,396 +1,298 @@
 # What the flood costs an HSDir, and who it can cripple
 
-**Source:** an operator's dashboard snapshot of four of their own production
-relays (2026-10-15). One relay was under the BEGIN_DIR / HS-descriptor flood
-(tor#41339); the other three were not. The snapshot has per-relay rates and a
-CPU profile (sample shares by library and top functions). The rates and profile
-are read here against the tor 0.4.9.14 source.
+> **Status (revised 2026-10-15 with operator measurements).** Two findings
+> reproduce: the flooded relay's traffic increase, and its elevated
+> `connection_free_` cost. Three stronger claims are **not established** by the
+> measurements: "bandwidth fails first", exact descriptor sizes, and a 79–83%
+> mitigation effect. §1–§2 give the measured data. §3–§6 separate measurement
+> from source-based reasoning and model estimates.
+
+**Sources:**
+- The operator's own measurements of four of their production relays:
+  - retained Prometheus data;
+  - three attributable CPU profile reports;
+  - fresh read-only CPU, RSS and counter readings;
+  - the relays' published extra-info.
+- The tor 0.4.9.14 source, from the pristine release tree (tarball sha256
+  `182449ac…5e4a`) and `../patches/`.
+
+No settings were changed and no new profiles were recorded for this note. The
+operator's full de-identified reconciliation (25 claims) is kept privately and
+is not in this repository.
 
 **Anonymized:**
-- The relays are **F** (flooded) and **P1–P3** (peers).
+- The relays are **F**, flooded on 2026-10-14/15, and **P1–P3**, not flooded.
 - F is not necessarily the relay called `relay_A` in
   `realflood-capture-interpretation.md`.
-- No nicknames, fingerprints, IPs or hostnames appear here.
+- No nicknames, fingerprints, IPs, hostnames or ports appear here.
+- Times are UTC.
 
-**How sure this is:**
-- Code facts come from the pristine release tree (tarball sha256
-  `182449ac…5e4a`). Patch behaviour comes from `../patches/`.
-- Numbers derived from the snapshot are inferences, with their assumptions
-  stated.
-- CPU-per-byte figures are **estimates**, not measurements.
-- Method: five source-grounded investigations, two adversarial verifiers each,
-  a completeness critic, then a final three-reviewer check of this note.
-  Corrected figures are used throughout.
+## 1. Measurements
 
-## 1. The snapshot
+### 1.1 F across the flood (retained Prometheus data)
 
-| Relay | BEGIN_DIR/s | Kernel | Tor | OpenSSL | libc | Circuits open | New/s | Closed/s | OR out | OR in | Sockets | MB/s in | MB/s out | Handshakes/s | DESTROY/s | DROP/s |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| F (flooded) | 210 | 44% | 24% | 17% | 11% | 43,076 | 45 | 46 | 6,435 | 598 | 11,053 | 13 | 21 | 55 | 91 | 13 |
-| P1 | 13 | 49% | 21% | 15% | 10% | 30,490 | 12 | 10 | 5,046 | 17 | 10,545 | 18 | 18 | 43 | 52 | 11 |
-| P2 | 6 | 47% | 20% | 17% | 11% | 35,648 | 9 | 11 | 6,341 | 69 | 11,072 | 26 | 26 | 31 | 54 | 4 |
-| P3 | 1.6 | 48% | 21% | 17% | 11% | 33,195 | 8 | 6 | 6,551 | 122 | 11,115 | 24 | 25 | 25 | 54 | 8 |
+| Window (UTC) | BEGIN_DIR/s | Written − read, MB/s | Whole-process CPU, cores |
+|---|---:|---:|---:|
+| Oct 14 14:10–14:40, before onset | 3.76 | 0.21 | 0.93 |
+| Oct 14 14:40–15:10, onset | 233.50 | 8.81 | 1.00 |
+| Oct 15 00:40–01:10, higher-rate episode | 1,030.48 | 48.44 | 0.95 |
+| Oct 15 03:40–04:10, near the profile reports | 205.71 | 7.53 | 0.84 |
+| Oct 15 15:06–15:36, after the flood | 1.94 | 0.23 | 0.87 |
 
-Top functions, % of samples (F / P1 / P2 / P3):
-- **Kernel:**
-  - `srso_return_thunk` 1.2/2.0/1.8/1.5, `srso_safe_ret` 1.4/1.5/1.4/1.7
-  - `entry_SYSCALL_64` 1.0/1.1/1.3/1.3, `rep_movs_alternative` 1.0/0.5/1.4/1.2
-  - `_copy_to_iter` 1.1/0.6/0.7/1.0, `memset_orig` 0.7/0.8/1.0/0.8
-  - `__tcp_transmit_skb` 0.3/0.5/0.7/0.7, `do_syscall_64` 0.5/0.6/0.5/0.5
-  - `tcp_recvmsg_locked` 0.4/0.5/0.5/0.5
-- **Tor:**
-  - `siphash24` 2.3/2.2/2.6/2.7, `tor_memcmp` 1.3/1.5/1.3/1.1
-  - `cell_pack` 0.8/1.1/0.5/0.9, `polyvalx_add_zpad` 0.5/0.7/0.5/0.8
-  - **`connection_free_` 0.9/0.1/0.1/0.0**, `polyval_add_block` 0.5/0.2/0.3/0.6
-  - `command_process_cell` 0.3/0.4/0.5/0.4
-  - `channelpadding_decide_to_pad_channel` 0.5/0.4/0.3/0.3
+- Rates use the actual observed spans: about 28 minutes for tor's counters and
+  29 minutes for process CPU.
+- No counter decreases occurred in these windows.
 
-The operator also reported the flood as "about 1:70, request size to response
-size". The dashboard columns are not defined (§7), so read them with care:
-- **New/s and Closed/s:** §2's requests-per-circuit figure rests on these.
-  - Stock 0.4.9.14 has no all-circuits creation counter.
-  - The closest is `tor_relay_congestion_control_total{action="circs_created"}`,
-    which counts only congestion-control circuits.
-- **OR in/out:** if this is tor's `tor_relay_connections` gauge, the
-  "received" side drifts low (connection.c:2105-2111, rephist.c:1719-1738). So
-  F's 598 is not evidence of direct one-hop requesters.
-- **Handshakes/s:** unknown.
-- **DROP/s:** if this is `tor_relay_drop_cell_total`, it counts
-  circuit-padding DROP cells this relay sends, not dropped handshakes.
+### 1.2 Near the profile reports (about 210 BEGIN_DIR/s)
 
-## 2. What the numbers show
+**F against the peers:**
 
-**About 5.75 requests per flood circuit.**
-- F's excess over the peer mean is +203 BEGIN_DIR/s against +35.3 new
-  circuits/s.
-- Using each peer alone as the baseline gives 5.6–6.0 (P1 5.97, P2 5.67, P3
-  5.63), and about 5.5–6.2 allowing for integer rounding.
-- The extra closes (+37/s) and DESTROYs (+37.7/s) match the extra new
-  circuits, so the flood circuits are in steady state.
-- The 2026-10-13 capture gave 5.69 raw for its flooded relay. That is 5.89 as
-  excess over the unflooded relays' mean (F's basis), and 6.02 as excess over
-  that relay's own pre-flood baseline.
-- **Caveat:** a relay that stayed near its own baseline in that capture showed
-  a similar ratio. `relay_B` read 5.85 at baseline and 5.54 in the flood
-  window, and is "not proven attacked" in
-  `realflood-capture-interpretation.md`. So this ratio alone does not prove
-  circuit reuse.
+| | F | P1 | P2 | P3 |
+|---|---:|---:|---:|---:|
+| BEGIN_DIR/s | 210 | 13 | 6 | 1.6 |
+| New circuits/s | 45 | 12 | 9 | 8 |
+| MB/s in / out | 13 / 21 | 18 / 18 | 26 / 26 | 24 / 25 |
+| `connection_free_`, % of samples | 0.85–0.9 | 0.1 | 0.1 | 0.0 |
 
-**About 40 KB on the wire per flood request.**
-- F sends (21 − 13) − 0.33 ≈ 7.7 MB/s more than it receives. The peers are
-  symmetric, so this surplus is bytes F generates itself.
-- That works out to 37.7 KB net per flood request, about 40 KB sent once the
-  ~2.5 KB of inbound per request is added back.
-- Allowing ±0.5 on all six MB/s cells, it is about 30–50 KB sent.
-- In descriptor bytes that is about 35–38 KB at the point estimate (roughly
-  28–47 KB across the rounding range): large descriptors.
-- For scale, a stock-built descriptor is about 14 / 28 / 41 KB at 1 / 2 / 3
-  padding blocks. The HSDir cap is 49,999 B, about 103 cells.
-- This is inferred from total traffic, not measured (§7 lists the stock
-  counters that would measure it).
+- In the two attributable control profiles, `connection_free_` was 0.07% and
+  0.08%.
+- **Library shares were unchanged by the flood.** F was kernel 44%, tor 24%,
+  OpenSSL 17%, libc 11%. The peers were 47–49%, 20–21%, 15–17%, 10–11%.
+- **Background, not the flood.** These were the same on all four relays:
+  - `srso_*`: AMD's Speculative Return Stack Overflow mitigation.
+  - `polyval*`: 0.4.9's CGO relay crypto.
+  - `siphash24`: tor's per-cell hash-table lookups (`circuitlist.c:231`,
+    `circuitmux.c:175`).
+- **Nothing was being shed.** There were no increments in the onionskin-drop,
+  tor OOM-freed or bandwidth-limit counters.
 
-**The amplification depends on the layer.** A request is about 96 HTTP bytes
-in at least two cells (BEGIN_DIR + DATA).
+**Host and main thread:**
+- The host has a 64-core server CPU, about 300 GiB of memory available and a
+  10 Gbit/s interface.
+- Interface transmit averaged 73% of the reported link speed.
+- **During the flood, F's main thread was 77–94% of one core. So were the
+  unflooded relays' main threads.** Other threads were idle.
 
-| Layer | Ratio |
+### 1.3 After the flood (2026-10-15 ~15:13)
+
+| Relay | RSS now | Peak RSS | BEGIN_DIR/s | New circuits/s | Read / write, MB/s |
+|---|---:|---:|---:|---:|---:|
+| F | 5.5 GB | 5.8 GB | 2.4 | 5.5 | 23.4 / 24.4 |
+| P1 | 4.8 GB | 5.3 GB | 2.4 | 10.5 | 23.9 / 24.0 |
+| P2 | 5.4 GB | 5.6 GB | 4.3 | 10.4 | 20.2 / 20.6 |
+| P3 | 10.4 GB | 10.5 GB | 0.5 | 8.3 | 32.7 / 32.8 |
+
+- F's main thread was 79% of one core over 15 s, at quiet traffic.
+- Onionskins dropped, the global rate-limit counter, OOM bytes and the outbound
+  stop flag were all 0.
+
+### 1.4 Directory byte history (F's published extra-info)
+
+The state-file history and notice log need root, so the published extra-info
+stands in for them:
+- **2026-10-14:** directory reads 2.47 GB and directory writes 29.3 GB, about
+  **12 bytes out per byte in**.
+- **The five published days:** 12–27 bytes out per byte in.
+- Directory writes were a few percent of total bytes written. On F, directory
+  writes never exceeded total writes.
+
+### 1.5 What the dashboard columns are
+
+| Column | Meaning |
 |---|---|
-| HTTP | about 150× (1-block, ~14 KB descriptor) to 520× (cap); the field's ~170:1 (`claims-ledger.md` D3/D4) sits at the low end |
-| Relay cells, reused circuit | 15.5–51.5×; 10.6–19.6× counting SENDMEs |
-| Relay cells, fresh circuit per fetch | 8–26×; 8–14.9× with SENDMEs |
+| DROP/s | `tor_relay_drop_cell_total`: circuit-padding DROP cells, not dropped handshakes. Its help text says "received"; in 0.4.9.14 the counter is incremented on the padding write path (`rephist.c:2805-2808`). |
+| Handshakes/s | ntor plus ntor_v3 onionskins processed |
+| OR in | The opened-connections gauge, a poor census (see below) |
+| New/s | Built from the congestion-control `circs_created` counter, which counts only congestion-control circuits (`congestion_control_common.c:410`) |
 
-- These counts use v0 498-byte DATA payloads. With 0.4.9's CGO cells (488 B)
-  each fetch takes 1–2 more cells.
-- The operator's 1:70 fits "one 514-byte request cell to about 70–80 response
-  cells". Two request cells cannot reach 1:70.
-- A fetch of up to about 101 DATA cells fits in the initial congestion window
-  (124 cells), so a requester never has to acknowledge to receive it.
-- This is not reflection: responses travel back along the requester's own
-  circuit, so its middle and guard relays carry them too.
+The OR in gauge read 598 during the flood. A socket count on the ORPort at the
+same time showed about 2,300 direct clients and 2,500 relays. It read 33 after
+the flood. It is not a count of one-hop requesters.
 
-**The CPU mix on F is close to the peers'.** Tor is +3.3 points, kernel −4.0,
-OpenSSL +0.7.
-- The one flood-specific function is `connection_free_`: 0.9% versus ≤0.1%.
-- Each BEGIN_DIR creates and frees two connection objects, a linked exit edge
-  and a dir connection (`connection_edge.c:4701-4714`).
-- Every free runs an always-on assert that scans the whole connection array
-  (`connection.c:970` → `mainloop.c:437`, a linear scan), about 11k entries
-  here.
-- Caveat: that scan's samples land under `connection_free_` only with
-  inlining or inclusive accounting. Check with a call-graph profile before
-  relying on it.
+## 2. What the measurements do and do not show
 
-**Background, not the flood:**
-- `srso_*` is AMD's Speculative Return Stack Overflow mitigation, on all four
-  relays.
-- `polyval*` is 0.4.9's CGO relay crypto, driven by forwarded traffic.
-- `siphash24` is the hash behind tor's per-cell hash-table lookups (the
-  circuit-ID map, `circuitlist.c:231`, and the circuitmux map,
-  `circuitmux.c:175`).
+**The traffic increase reproduces.**
+- The written-minus-read surplus rose from 0.21 MB/s before onset to 8.81
+  MB/s at onset and 48.44 MB/s in the higher-rate episode.
+- Per added BEGIN_DIR that is about 37 KB at onset, 36 KB near the profiles,
+  and 47 KB in the higher-rate episode.
+- These are **aggregate estimates** from traffic asymmetry, not measured
+  descriptor lengths.
 
-**All serving work runs on tor's main thread:** TLS, relay crypto, cell
-packing and the response copy. Worker threads do only onionskins, consensus
-diffs and PoW. A share-only profile cannot tell a main thread at 20% from one
-at 100%.
+**The "1:70" ratio is replaced.**
+- It came from an assumed 0.5 KB request.
+- F's own directory history gives about **12:1** directory bytes out per byte
+  in on 2026-10-14, and 12–27:1 over five days. That mixes the flood with
+  ordinary directory traffic.
+- Wire-level and HTTP-level amplification factors remain unmeasured.
 
-## 3. Would it cripple a compute- or RAM-constrained host?
+**Requests per circuit flags the flood, but does not prove reuse.**
+- During the flood F ran about 4.7 BEGIN_DIR per new circuit (210/45). The
+  unflooded relays ran 0.06–0.4, then and after.
+- At onset, the excess was 5.65 BEGIN_DIR per extra congestion-control
+  circuit.
+- That denominator counts only congestion-control circuits, not all circuits.
+  So per-circuit HS-request reuse is not established.
+- The earlier capture's unflooded-relay value of about 5.8 came from a
+  different capture, not this host.
 
-### Bandwidth and metered hosts: yes, and first
+**The CPU cost did not show as extra CPU.**
+- Whole-process CPU stayed at 0.84–1.00 cores in every window, including the
+  1,030 BEGIN_DIR/s episode.
+- Main threads were 77–94% of one core on flooded and unflooded relays alike.
+- **Interpretation, not established:** on this host each relay's main thread
+  runs near one core from ordinary forwarding. Flood work would then show up
+  as work displaced inside that budget, not as added CPU. F's lower relayed
+  input during the flood (13 MB/s against 18–26 MB/s on the peers) fits this,
+  but so does a smaller relay.
+- The one flood-specific CPU signal is `connection_free_` (0.85–0.9% vs
+  0.07–0.1%). Each BEGIN_DIR creates and frees two connection objects
+  (`connection_edge.c:4701-4714`). Each free runs an always-on assert that
+  scans the whole connection array (`connection.c:970` → `mainloop.c:437`).
+  Whether the scan's time lands under `connection_free_` depends on inlining;
+  a call-graph profile would settle it.
 
-Cost scales with bytes, and nothing lets a small HSDir serve less:
+**Memory was not the issue on F.**
+- F's peak RSS was 5.8 GB. Unflooded P3's was 10.5 GB.
+- No tor OOM activity was recorded.
+
+**No resource was shown to be the binding constraint on this host.** It had
+bandwidth and memory headroom, and nothing was shed.
+
+## 3. Constrained hosts: what follows, and what is only a model
+
+**Bandwidth (arithmetic, not demonstrated here).** The surplus is what the
+flood spends:
+- About 8 MB/s near the profiles is about 64 Mbit/s. That would fill a small
+  uplink and use a 2 TB monthly allowance in about 2.9 days.
+- At the higher-rate episode (48 MB/s), 2 TB lasts about 11.5 hours.
+- Whether this binds first depends on capacity. It did not bind on this host.
+
+**Exposure does not scale with capacity (source).**
 - HSDir placement is a hash ring with no bandwidth weight
   (`hs_common.c:1281`).
-- An HSDir stores any validly signed descriptor without checking that it is
-  responsible for it (`dircache.c:1608-1621`). A requester can therefore post
-  a large descriptor to a chosen HSDir and fetch it there.
+- A small HSDir therefore gets the same per-descriptor demand as a large one.
 
-At F's rate (about 210 req/s at 30–50 KB each, about 40 KB as the point
-estimate):
-- It fills 50–84% of a 100 Mbit uplink (about 67% at 40 KB). It saturates
-  20–50 Mbit home uplinks.
-- It burns a 2 TB/month cap in 2.2–3.7 days on flood bytes alone (about 2.8
-  days at 40 KB).
-- At the 2026-10-13 capture's 950 req/s, the same cap goes in about 12–19 h. That
-  capture's flooded relay's measured 45.3 MB/s output gives 12.3 h.
+**CPU (model only, unmeasured).**
+- Serving runs on tor's single main thread: TLS, relay crypto, cell packing
+  and the response copy.
+- Estimates that put a 210 req/s flood at a few percent of a modern core and
+  a large share of a Raspberry Pi core are **not measured**.
+- On F, the main thread at 210 req/s looked like the unflooded relays', which
+  were already near one core from ordinary forwarding. Constrained-host CPU
+  needs measuring on such a host.
 
-### CPU: estimates by host class
+**RAM (source, size unmeasured).**
+- Stock tor writes each descriptor response into memory whole when the
+  request arrives (`dircache.c:1384`), with no admission check.
+- If responses cannot drain, because of slow readers or a capped uplink,
+  those buffers accumulate until circuits close or tor's OOM handler acts.
+- How large that gets on a constrained host is **unmeasured**. The earlier
+  model figures are withdrawn pending lab measurement.
+- **`MaxMemInQueues` defaults** (`config.c:4131-4143`):
+  - below 8 GiB of RAM: 0.75 × RAM;
+  - at 8 GiB or more: 0.4 × RAM, capped at 8 GiB on 64-bit.
+- RAM is read from `/proc/meminfo`, so container limits are ignored. The
+  default counts only queues, buffers and caches.
 
-The per-request main-thread cost is modelled as a fixed part plus a per-byte
-part at 40 KB per request. These are **assumptions**:
-
-| Host | Per-byte cost | Fixed cost | Flood alone at 210 req/s | Max served rate, free main thread |
-|---|---|---|---|---|
-| Modern x86 core | 7–20 ns/B | 20–100 µs | 6–19% of a core | about 1,100–3,300 req/s |
-| Cloud vCPU (assumed 1.5× x86) | — | — | 9–28% | about 740–2,200 req/s |
-| Raspberry Pi 4 (no AES instructions) | 40–100 ns/B | 100–400 µs | 36–92% | about 230–590 req/s |
-| Raspberry Pi 5 (assumed 0.67–1.8 ms per request) | — | — | 14–38% | about 560–1,500 req/s |
-
-- **Field rates against these estimates:**
-  - Reports of about 1,100–2,300 req/s at 70–115 MB/s (`claims-ledger.md`
-    D7) fall inside the x86 range.
-  - Reports above about 3,300 req/s (about 4,100/s; above 10,000/s) would
-    exceed one main thread even on large hosts.
-- A refused request costs only the fixed part, about 4–40× cheaper than
-  serving one.
-
-### RAM: only once bytes cannot drain
-
-- **When requesters read normally, at F's rate:** tens of MB. That is 10k
-  extra circuits × 2–5 KB of state, plus a few MB to about 30 MB of responses
-  in flight.
-- **Stock tor has no admission control.** It writes every descriptor into
-  memory, whole, as soon as the request arrives (`dircache.c:1384`).
-- **When bytes cannot leave,** because of a capped uplink, `RelayBandwidthRate`
-  or requesters that stop reading, memory grows:
-  - Stock can pin every response on a stalled circuit: about 10k circuits ×
-    5.75 × 38–40 KB ≈ 2.2–2.3 GB at F's shape. That is about 1.6 GB after
-    each circuit's 124-cell initial window drains.
-  - With one response per circuit, as under enforced 0002 (§5), it is about
-    0.4 GB.
-  - Either is fatal on a 1 GB host.
-  - With SENDME-withholding there is no relay-side timer. Bytes stay pinned
-    until the circuit closes or the OOM handler runs.
-- **`MaxMemInQueues` will not catch it in time on small hosts.**
-  - It defaults to 0.75 × RAM below 8 GB (`config.c:4143`), with RAM read
-    from `/proc/meminfo`, so container limits are ignored.
-  - It counts only queues, buffers and caches, not circuit, connection or TLS
-    state.
-  - On a 1–2 GB host the kernel OOM killer probably strikes first.
-- **Is F stalled today?** F's numbers alone do not settle it.
-  - From F's byte budget, 0.30–0.36 of flood circuits could be
-    non-acknowledging at the point estimate, and roughly 0.1–0.5 across the
-    rounding range.
-  - The same inference on the 2026-10-13 capture bounds that capture's
-    flooded relay (a different relay and day) at ≤21%.
-  - Elsewhere the stall-or-discard mode does occur: on 66–98 relays a day,
-    dir-write history exceeds total write history (`claims-ledger.md` D5).
-
-## 4. Why stock tor has no brake on this path
+## 4. Why stock tor has no brake on this path (source)
 
 - **The stream limit is skipped.** BEGIN_DIR is dispatched before the
-  per-circuit stream DoS limit (`connection_edge.c:4333` returns before
-  `:4340`). That limit is also off by default and per-circuit, at rate 100 /
-  burst 300.
+  per-circuit stream DoS check (`connection_edge.c:4333` returns before
+  `:4340`). That check is also off by default and per-circuit.
 - **Circuit-creation limits only cover clients.** `DoSCircuitCreation` counts
-  client (unauthenticated) channels only (`dos.c:535`, `:720`).
-  - A peer that authenticates as a relay, even an unpublished one, escapes
-    it. It can open cheap CREATE_FAST one-hop circuits, handled inline
-    without a worker thread (`command.c:365`).
-  - Patch 0001 closes the unpublished-identity part of this, for HS requests
-    only and only when enforced. It answers 503 to an HS request whose
-    previous hop is not a known relay; by default it only counts.
-  - It does not limit circuit creation, and a published relay still escapes
-    `DoSCircuitCreation`.
-- **The "directory busy" check never fires here.**
-  - The HS GET handler never calls it: its only callers are
+  client (unauthenticated) channels only (`dos.c:535`, `:720`). Patch 0001
+  addresses HS requests whose previous hop is not a known relay. It does this
+  for HS requests only and only when enforced; by default it only counts.
+- **The "directory busy" check does not apply.**
+  - The HS GET handler never calls it: its callers are
     `dircache.c:962/1071/1130/1228/1324`.
-  - It also returns "not low" for linked (BEGIN_DIR) connections
+  - It also returns "not low" for BEGIN_DIR (linked) connections
     (`connection.c:3428`).
 - **Bandwidth limits cap egress, not demand.** `BandwidthRate` and
-  `RelayBandwidthRate` charge the OR connection, so they limit egress. They
-  never turn a request away; unsent bytes queue in memory.
+  `RelayBandwidthRate` limit egress but never turn a request away.
 
 ## 5. What this means for the defenses
 
-1. **Bytes are the binding resource.** 0001 and 0002 change *how* requests may
-   arrive; neither caps bytes served.
+1. **Measure before deciding.** The count-only build gives each figure
+   directly; all are cumulative counters, so take deltas over a window:
+   - **HS requests per circuit that made one:** ΔT/(ΔT−ΔR), from
+     `hsdir_request_total` (T) and `hsdir_req_reused` (R). This is not the
+     same quantity as BEGIN_DIR per new circuit.
+   - **Unknown-previous-hop share:** ΔU/ΔT, from `hsdir_unknown_prev_hop` (U).
+   - **Circuits that carried two or more:** `hsdir_circ_reused`.
 
-2. **0002 (one HS request per circuit), when enforced:**
-   - **Effect today:** it cuts F's served flood responses by about 82–83%
-     (1 − 1/ρ for ρ = 5.6–6.0). That is about 79% of all F's BEGIN_DIR.
-     - It is an upper bound that assumes the requester keeps building circuits
-       at about today's rate.
-     - The closed-lab reuse-5 cell measured a smaller −67% in served bytes
-       (`../README.md`).
-   - **Memory:** it limits pinned memory to at most one response per circuit.
-     A maximum-size response fits the initial window when the consensus
-     `cc_cwnd_init` is ≥ 101 (v0 498-byte DATA cells), or ≥ 103 with 0.4.9's
-     CGO cells.
-   - **If the requester switches to one request per fresh circuit:**
-     - Bytes served do not drop at all. F's flood circuits rise about 5.75×,
-       from 35/s to about 203/s.
-     - Each request then costs the HSDir an ntor_v3 handshake on its worker
-       threads.
-     - Those handshakes share one first-in-first-out queue with legitimate
-       CREATE cells (admission by `MaxOnionQueueDelay`, default 1750 ms,
-       `onion_queue.c:49`), which drops without regard to source.
-     - This is tolerable at F's rate. At field rates a 1–2 vCPU HSDir would
-       start dropping legitimate circuits.
+   Served descriptor bytes and queued bytes are not exposed by tor today.
+   They would need lab instrumentation.
+2. **0002's effect depends on measured reuse.**
+   - If the flood's requests really share circuits at about F's ratio, one
+     request per circuit would keep about 21% of the flood's BEGIN_DIR and cut
+     about 79%, or about 83% if roughly 10 of F's 45 circuits/s are ordinary.
+   - That is an **upper bound conditional on reuse**, which §2 does not
+     establish. The closed-lab reuse-5 cell measured −67% in served bytes
+     (`../README.md`).
+   - If requests arrive one per circuit, 0002 does not reduce bytes served,
+     and each request then also costs a circuit handshake. Those handshakes
+     share a queue with legitimate circuits (`onion_queue.c:49`,
+     `MaxOnionQueueDelay` 1750 ms).
+3. **0001 and 0002 belong together.** 0002 alone does not address HS requests
+   whose previous hop is not a known relay. 0001 does, and 0002's commit
+   message already requires it.
+4. **A per-HSDir byte budget for HS descriptor responses is a lab hypothesis,
+   not a recommendation.** It is not part of the 7-patch series.
+   - **Idea:** refuse cheaply before the descriptor is copied (between
+     `dircache.c:1375` and `:1384`) once a relay-sized budget is spent.
+   - **Before considering it, test in the lab:**
+     - legitimate-client success, given that each descriptor is stored on 8
+       HSDirs and a client picks among 6 (`hs_common.h:112,114,116`);
+     - behaviour with slow readers;
+     - behaviour if request patterns change;
+     - the client-side effect of the refusal status. A 503 marks the HSDir
+       overloaded for an hour in `router_pick_directory_server()`
+       (`dirclient.c:2137`, `routerlist.h:49`, `node_select.c:366`), mainly
+       affecting relays and clients without directory guards.
+5. **Small upstream candidate.** Make the `connection_in_array` assert O(1),
+   only if a call-graph profile shows the scan matters.
 
-3. **0001 must ship with 0002.** Without 0001, the cheapest workaround for
-   0002 is one-hop CREATE_FAST circuits from self-made relay identities. They
-   need no handshake work and pass every stock check. 0002's own commit
-   message already requires 0001.
+## 6. Advice for constrained HSDirs on stock tor (source-based)
 
-4. **The missing piece is a per-HSDir byte budget for HS descriptor
-   responses.** This is a **proposal**, not part of the current 7-patch
-   series, which keeps its four counters unchanged.
-   - **Where:** checked before the descriptor is copied (between
-     `dircache.c:1375` and `:1384`). A refusal costs about 3 cells instead of
-     about 80.
-   - **Rollout:** count-only first with a would-refuse counter, sized to the
-     relay's own capacity.
-   - **Effect on legitimate clients:**
-     - Each descriptor is stored on 8 HSDirs (2 replicas × `hsdir_spread_store`
-       4), and a client picks among 6 of them (2 × `hsdir_spread_fetch` 3;
-       `hs_common.h:112,114,116`).
-     - Clients skip an HSDir they asked within 15 minutes.
-     - So one HSDir shedding load costs a client about one extra circuit.
-   - **Risk 1:** an exhausted budget makes denying one targeted service
-     cheaper. Over budget, refuse in this order: unknown previous hop, then
-     reused circuit, then descriptors fetched beyond their share, and only
-     then stock-looking traffic.
-   - **Risk 2:** a 503 marks the HSDir as overloaded for an hour
-     (`dirclient.c:2137`; `DIR_503_TIMEOUT` 60 min, `routerlist.h:49`).
-     - `router_pick_directory_server()` then deprioritizes it as a general
-       directory server (`node_select.c:366`).
-     - Clients that use directory guards bypass that picker
-       (`dirclient.c:345-351`), so the effect falls mainly on relays and
-       guardless clients.
-     - Choose the refusal status deliberately; this applies to 0001's 503 too.
-   - **Not reusable:** stock's "directory busy" check (§4).
+- **Set `MaxMemInQueues` explicitly** for the real memory limit, especially in
+  containers.
+- **Also set `MaxHSDirCacheBytes`.** Its default is `MaxMemInQueues/5`
+  (`hs_cache.c:1263`), so lowering one shrinks the descriptor cache too.
+- **`RelayBandwidthRate` protects a bandwidth bill, not the relay.** Below
+  51,200 B/s it also turns off directory service (`router.c:1269`).
+- **`AccountingMax` is not a defense.** With default rates, tor stops
+  advertising tunnelled directory service (`router.c:1325-1328`), losing
+  HSDir, Guard and V2Dir, and it can hibernate the relay.
+- **`DirCache 0` + reload is the last resort.** It refuses BEGIN_DIR without a
+  restart, but loses Guard and V2Dir as well as HSDir.
 
-5. **Smaller follow-ups (also proposals):**
-   - Refuse an HS request while its circuit's window is closed or its stream
-     is XOFF'd. That closes the pinning cases 0002 leaves open.
-   - Add a count-only gauge of bytes waiting in exit-edge buffers, to make
-     stalls visible.
-   - Make the `connection_in_array` assert O(1), only if a call-graph profile
-     shows it matters. That also needs `conn_array_index` reset in
-     `connection_remove`.
-   - Lowering `HSV3MaxDescriptorSize` is a weak lever. A cap that keeps 2-block
-     descriptors (about 28 KB) would serve at most about 1.3–1.4× fewer bytes
-     at F's estimated 35–38 KB descriptors (1.5–1.8× only if flood
-     descriptors are 41–50 KB). It also breaks legitimate 3-block descriptors.
+## 7. What to collect next
 
-6. **Stock DoS options will not help** (§4).
+**Stock tor, during a flood.** Share counts and aggregates only:
+- main-thread and whole-process CPU, together with forwarded throughput, to
+  test the displacement interpretation;
+- a call-graph profile, shared as text: `perf report --stdio`, not
+  `perf.data`, whose header records the hostname;
+- RSS and the OOM, onionskin-drop and rate-limit counters;
+- directory and total byte history (needs root).
+  - These are 24-hour buckets (`bw_array_st.h:15-23`).
+  - Directory and total bytes are counted at different layers
+    (`connection.c:3652` onward), so their difference is not queue occupancy
+    or response size.
 
-## 6. Advice for constrained HSDirs on stock tor today
+**Count-only build:** the counters in §5.1.
 
-- **Set `MaxMemInQueues` explicitly:** physical or container RAM, minus
-  baseline RSS, minus headroom.
-- **Also set `MaxHSDirCacheBytes`.**
-  - Its default is `MaxMemInQueues/5` (`hs_cache.c:1263`), so lowering one
-    shrinks the descriptor cache.
-  - Under memory pressure stock evicts the least-downloaded descriptors first.
-    Flooded descriptors are fetched constantly, so legitimate ones can go
-    first.
-  - Stock also credits a download at connection close even if nothing was
-    delivered (`directory.c:536`).
-  - Patch 0007 credits a download only once the response has been flushed to
-    the linked exit edge. That is still not proof of delivery, and its commit
-    message says it does not affect the fetch flood. It does not change this
-    eviction order.
-- **`RelayBandwidthRate` protects a bandwidth bill, not the relay.** Pressure
-  moves to RAM, and below 51,200 B/s directory service turns off
-  (`router.c:1269`).
-- **Not `AccountingMax`.**
-  - With default rates, tor stops advertising tunnelled directory service
-    (`router.c:1325-1328`), which loses HSDir, Guard and V2Dir.
-  - It can also hibernate the relay. `AccountingMax 1 TB` (tor's 2^40 B) lasts
-    about 14.5 h at F's 21 MB/s output.
-- **Last resort: `DirCache 0` + reload (no restart).**
-  - Each BEGIN_DIR then gets a one-cell refusal.
-  - It costs Guard and V2Dir as well as HSDir, and the flood moves to the
-    next HSDir on the ring.
-
-## 7. What to collect from F next (stock tor, no new build)
-
-Share counts and aggregates only, never raw lists.
-
-- **Main-thread CPU:** `pidstat -t -p <pid> 1 60` (or `top -H`), with core
-  count and model. This decides the CPU question.
-  - A 60 s `perf record --call-graph dwarf` settles the `connection_free_`
-    attribution.
-  - Share the `perf report --stdio` text, not `perf.data`, whose header
-    records the hostname.
-- **Byte history:** `grep -E '^BWHistory(Dir)?(Read|Write)(Values|Ends|Interval)' <DataDirectory>/state`.
-  - Values are 24-hour buckets (`bw_array_st.h:19`) plus the running day's
-    total.
-  - Read the running total twice, some hours apart. Divide the difference by
-    the BEGIN_DIR counter delta over the same interval.
-  - That gives the mean response size, the HTTP ratio, and bytes generated
-    versus sent.
-- **Memory:** `VmRSS` / `VmHWM` against the peers and against F before the
-  flood.
-  - Also grep the notice log for `We're low on memory` and
-    `Removed .* bytes by killing`.
-- **MetricsPort:**
-  - `tor_relay_load_global_rate_limit_reached_total{side}`
-  - `tor_relay_load_onionskins_total{type,action}` (including
-    `type="ntor_v3"`, the handshake 0.4.9 clients mostly use)
-  - `tor_relay_load_oom_bytes_total`
-  - the series behind each dashboard column, with `instance`, `job` and any
-    host, nickname or fingerprint labels removed before sharing
-- **`GETINFO orconn-status`:** report only two counts, and do not share the
-  list (it contains peer fingerprints and client IP:port pairs).
-  - Entries shown as a bare `$FINGERPRINT` (no `~nickname`): authenticated
-    peers this relay knows from neither the consensus nor a descriptor. That
-    is 0001's "unknown previous hop".
-  - Entries shown as `address:port`: unauthenticated clients, which stock
-    already refuses for HS requests.
-- **Two SIGUSR1 dumps, 60 s apart.** Keep only these lines:
-  - "For N Exit/Directory connections" (buffer use);
-  - the create and destroy cell counts;
-  - "ntor onionskins have averaged" (ntor v1 only).
-- **Consensus `params` line** from the cached consensus: `cc_cwnd_init`,
-  `circwindow`, `HSV3MaxDescriptorSize`, `sendme_accept_min_version`, `DoS*`.
-- **Definitions** of the dashboard columns New/s, Closed/s, OR in,
-  Handshakes/s and DROP/s, and the layer at which 1:70 was measured.
-
-With the count-only build, the counters `T = hsdir_request_total`,
-`R = hsdir_req_reused` and `U = hsdir_unknown_prev_hop`, taken as deltas over
-a window, give:
-- ΔT/(ΔT−ΔR): HS requests (fetches and uploads) per circuit that made one;
-- ΔU/ΔT: the unknown-previous-hop share.
-
-ΔT/(ΔT−ΔR) is not the same quantity as §2's BEGIN_DIR per new circuit.
+**Lab, before any enforcement decision:** the tests in §5.4.
 
 ## 8. Open items
 
-- §2's response size and §3's capacity numbers rest on F's out-minus-in
-  surplus until the byte history (§7) is read.
-- The CPU estimates are uncalibrated against F.
-- Whether F's flood circuits stall is open; RSS settles it.
+- Per-circuit HS-request reuse, unknown-previous-hop share, served descriptor
+  bytes and queued bytes are unmeasured.
+- Constrained-host CPU and memory behaviour are unmeasured.
+- The operator could not verify the original perf recording metadata or the
+  fourth comparison profile.
 - `claims-ledger.md` P1/P2 still describe an earlier design: on by default, a
   1-bit flag, and an edit inside `connection_dir_is_anonymous`. The current
   series is count-only by default, uses a 2-bit counter and a separate guard,
