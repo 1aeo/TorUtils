@@ -1,4 +1,4 @@
-# One-canary deployment, passive measurement, and optional live trial
+# vipopen pilot, staged half-host rollout, and optional controlled trial
 
 **Status: approved design documentation, not execution authorization.** The
 current update changes documents only. Do not build, install, restart, probe,
@@ -8,8 +8,14 @@ relevant phase. Start with [the final plan](CANARY-MEASUREMENT-PLAN.md).
 Keep patches 0001–0007 and all four existing counters unchanged. The accepted
 baseline is the full patched build with the two optional defenses inactive;
 0003–0007 still change logging, buffering, validation order, and cache accounting.
-Do not describe the full package as behaviorally identical to stock. One binary
-serves observation and any later trial, avoiding a second planned restart.
+Do not describe the full package as behaviorally identical to stock. One pinned
+**native Ubuntu 26.04** binary serves every patched member through
+observation and any later trial, avoiding a second planned restart per member.
+Another agent builds and pushes that artifact; follow
+[the build handoff](NATIVE-26.04-BUILD-HANDOFF.md). This documentation task does
+not build or deploy it. Begin with one pilot on vipopen, then expand in small
+approved batches toward half its relays, including the pilot. Retain stock
+references and contemporaneous patched-off controls for later enforcement.
 
 Read the README, this entire runbook, the
 [capture playbook](capture-and-validate-playbook.md), the addendum and evidence
@@ -30,25 +36,27 @@ Prepare a private manifest before any host mutation:
 
 | Required item | Evidence / decision |
 |---|---|
-| Scope and identity | Exactly one currently eligible HSDir; unit, torrc/includes/defaults, user, DataDirectory, MetricsPort, ControlPort/auth; identifiers never in shared reports |
-| Artifact | Exact source commit, seven-patch hashes, package and binary SHA256, base Tor version, Ubuntu/architecture/library compatibility; explain any version change |
+| Scope and identity | Frozen private vipopen roster; one pilot, planned patched target floor(N/2) including it, retained stock references; per-member unit/config/user/DataDirectory/ports/auth and stable opaque ID; no inventory counts in shared reports |
+| Artifact | Builder-delivered native Ubuntu 26.04 amd64 artifact; actual filename/version, source/patch hashes, package and binary SHA256, lab evidence; same frozen build for all patched members |
 | Service | Loaded ExecStart and ExecStartPre, source files/drop-ins, environment/specifiers, dependencies/PartOf, stop/start/restart policy, pending manager reloads |
 | Confinement | Existing AppArmor profile/attachment, seccomp/Sandbox and other unit security settings; how the `/opt` path preserves them |
 | Maintenance | Existing holds/exclusions and contents, upgrades/reboot timers and external automation; shared changes explicitly scoped; review/expiry date and emergency security-maintenance exception |
 | Monitoring | Persistent scraper, scheduled read-only checker, existing incident alert path, operator/backup owner, coverage during recovery and observation |
 | Baseline | Previous-day per-process CPU/RSS summaries, units/CPU normalization and sampling; existing traffic context, not a substitute for post-flag HS baseline |
-| Thresholds | Sustained service/resource limits, alert delay and responder, live-disable/binary-rollback triggers; expected flood load alone is not a failure |
+| Thresholds | Per-member and host-level sustained limits, serving-capacity floor, batch size/review gates, responder, live-disable/per-instance rollback triggers; expected flood load alone is not failure |
 | Data quality | Scrape interval, each required series/source, uniqueness, freshness, minimum coverage and maximum allowed gap; restart evidence sources |
-| Timing | Selected 7–14 usable observation days, flag-recovery deadline, absolute end/extension policy, check-in cadence, dated postexperiment review |
+| Timing | Selected 7–14 usable days per patched member, per-member T0/flag deadline, common-time comparison exposure, absolute study end/extension policy and postexperiment review |
 | Retention | At least 30 days or private daily/window exports; owner handles any Prometheus configuration change |
 | Rollback | Original loaded binary/command/config and backed-up changed files; exact restoration plan; no blanket unhold or deletion of pre-existing files |
 
-Proposed defaults: 14 usable days, a flag-recovery review at T0 + 7 days,
-state/health/coverage checks every five minutes, daily human summaries, and
+Proposed defaults: 14 usable days per patched member, a flag-recovery review
+at each member's T0 + 7 days, state/health/coverage checks every five minutes, daily human summaries, and
 HSDir checks every few hours from T0 + 90 hours. Continuous crash/service alerts
 come from the monitoring system, not the daily summary. Record selected values
-and available coverage before deployment. If defaults are unsuitable, choose
-and document replacements. Unset health thresholds or unowned incident alerts
+and available coverage before deployment. Match proposed control assignments
+using prior traffic, role and capacity; randomize within comparable candidates where practical.
+Do not choose controls based on traffic already affected by enforcement. If
+defaults are unsuitable, choose and document replacements. Unset health thresholds or unowned incident alerts
 must be resolved before deployment, not improvised during a flood.
 
 Prometheus access is **read-only**. Missing retention/scrape/allowlist support
@@ -59,52 +67,73 @@ one restart. Codex handles collection/analysis, the human reviews and decides
 whether to continue or trial a defense.
 
 Host-wide holds, shared security-profile changes, and automatic reboot policy
-are shared-host changes even if only one process restarts. Prefer an eligible
-host with less shared scope when practical; otherwise include those narrow
-exceptions in the deployment authorization. Do not change/restart/reload any
-other relay. Never operate on the unqualified master `tor` service.
+are shared-host changes even when restart operations are per-instance. The
+selected host is vipopen; include those narrow shared exceptions in the later
+deployment authorization. Only the approved patched roster may be converted,
+and only after the pilot/batch gates. Retained stock references and other
+relays are not changed, restarted or reloaded. Never operate on the unqualified
+master `tor` service or use a wildcard restart.
+
+Current HSDir status is preferred, but an operator may select a healthy member
+with verified recent HSDir history that is recovering from a restart. Record
+that exception; swapping now starts a new uptime gate rather than requiring
+recovery first and immediately resetting it again. Initial pilot validation
+while ineligible proves startup/ordinary-load behavior, not flood stability.
+Any expansion before a flood must explicitly accept that remaining uncertainty.
 
 ## 1. Pin and stage the binary (after deployment authorization)
 
 ### Path A — unpack the existing package to `/opt`
 
-Candidate: `../packages/tor_0.4.9.14-1~noble+1+tor41339.3_amd64.deb`, Ubuntu
-24.04 amd64. Read `BUILD-INFO.txt` and the matching manifest, and pin the actual
-reviewed commit/digests. Checksums from the same checkout detect corruption;
-they do not independently authenticate a build. A strings check establishes
-names are present, not that the code is correct or that metrics are scraped.
+The selected artifact is the **native Ubuntu 26.04 amd64 package to be
+published by the designated builder agent**. Its version, filename, manifest
+and test evidence are pending until actually delivered and reviewed. Obtain
+these exact values from [the build handoff](NATIVE-26.04-BUILD-HANDOFF.md), not
+from the old Noble example. Historical Noble artifacts are not an automatic
+fallback for this revised plan.
 
-The following are future operator steps, not commands executed by this update:
+Before staging, pin package/source/patch/executable digests and review native
+lab evidence. Checksums from the same checkout detect corruption; they do not
+independently authenticate a build. A strings check proves names are present,
+not correct behavior or successful scraping.
+
+The following are future operator steps, not executed by this update. The two
+variables must be populated from the **reviewed native artifact manifest**:
 
 ```bash
-cd tor41339-hsdir-defense/packages
-sha256sum -c --ignore-missing SHA256SUMS
-# REQUIRE the specific tor .deb line to be present and OK, not merely exit 0.
-# REQUIRE /opt/tor41339 to be an approved new destination or verified same build.
+: "${APPROVED_PACKAGE_PATH:?set the reviewed native 26.04 artifact path}"
+: "${APPROVED_CHECKSUM_MANIFEST:?set its reviewed checksum manifest}"
+sha256sum -c --ignore-missing "$APPROVED_CHECKSUM_MANIFEST"
+# REQUIRE the selected .deb entry to be present and OK, not merely exit 0.
+# REQUIRE /opt/tor41339 to be an approved new destination for this frozen build.
 sudo mkdir -p /opt/tor41339
-sudo dpkg-deb -x tor_0.4.9.14-1~noble+1+tor41339.3_amd64.deb /opt/tor41339
+sudo dpkg-deb -x "$APPROVED_PACKAGE_PATH" /opt/tor41339
 /opt/tor41339/usr/bin/tor --version
 strings /opt/tor41339/usr/bin/tor | grep -c '^hsdir_\(circ_reused\|req_reused\|request_total\|unknown_prev_hop\)$'
-# Expected: 4. Also record the extracted executable's SHA256 privately.
+# Expected: 4. Check the extracted executable against its reviewed SHA256.
 ```
 
-Unpacking runs no maintainer scripts. Keep `/usr/bin/tor` and the installed
-package in place. `tor-geoipdb` is not needed for this binary swap. **Do not use
-host-wide package installation for this experiment**, including as a shortcut
-on a multi-instance host. Verify root ownership and that the staged executable
-is not writable by the relay account.
+Stage once, with root ownership and no relay-account write access. All approved
+patched members reference this same immutable executable. Never unpack over or
+replace it after the pilot has started; verify the hash before each expansion
+batch. Unpacking runs no maintainer scripts. Keep `/usr/bin/tor` and the
+installed stock package in place. `tor-geoipdb` is not needed for the swap.
+**No host-wide package installation is part of this experiment.**
 
-### Path B — build only if the pinned artifact cannot be used
+### Path B — builder handoff, not an operator-side fallback build
 
-A new build is separate preparation, never an on-relay improvisation. Follow
-[the build instructions](../engineering/deb/REBUILD-FROM-CURRENT-SERIES.md),
-retain the same seven patches and four counters, and review its provenance and
-lab results before deployment. Match systemd notification support and the
-production feature/library set. This documentation update does not build a
-package or certify a replacement artifact. Keep the selected artifact fixed
-through all observation and trial phases.
+The other agent owns the native package build and its actual validation
+results. This task changes documentation only. A missing/failed artifact means
+wait for that handoff, not build on the relay, substitute the Noble package, or
+change C code. If a corrected artifact is later required, freeze expansion and
+review its impact on comparability before replacing any running member.
 
-### 1.1 Switch exactly one systemd instance
+### 1.1 Switch one authorized instance at a time
+
+This procedure applies first to the pilot and later to each specifically
+approved expansion member. `CANARY` means that one member, never an entire
+cohort. Each converted member has one planned restart; stock members have none.
+The binary is staged once in section 1, not re-extracted for each instance.
 
 All names below are placeholders. Substitute from the private manifest;
 `tor@default` and named instances use different defaults/config paths.
@@ -156,7 +185,7 @@ All names below are placeholders. Substitute from the private manifest;
    manager's loaded ExecStart/ExecStartPre and security properties. A manager
    reload is not a service restart, but it reads unit changes host-wide.
 
-5. **Perform the one authorized restart of `tor@CANARY` only.** Record the
+5. **Perform this member's one authorized restart of `tor@CANARY` only.** Record the
    command's UTC start/end, old/new PID, new process start time, service
    activation/invocation and host boot evidence privately. Require active/ready
    service and `/proc/<new-pid>/exe` resolving to the staged binary. Compare
@@ -174,13 +203,37 @@ Sandbox 1, the old process may remain until TimeoutStopSec and be killed.
 Record the observed behavior and startup outcome; do not treat these historical
 30/60-second examples as guaranteed limits or turn off sandboxing.
 
+### 1.2 Pilot review and bounded expansion toward half
+
+Freeze private N and the approved roster before rollout; the planned patched
+population is floor(N/2), including the pilot. Choose opaque IDs and a matched
+stock-reference subset from the remaining unchanged relays. Do not publish
+inventory counts or silently replace excluded/failed members.
+
+After the pilot's check-in, review startup, configuration, confinement,
+allocator, per-process/host health and telemetry against the declared gates.
+Pilot-only authorization does not include expansion. Once the operator approves
+bounded expansion, repeat section 1.1 **sequentially within small batches** for
+only that roster, preserving the same artifact and inactive controls. Record
+each member's T0 and results, check the serving-capacity floor and host pressure
+between batches, and pause on an incident or failed gate. Do not restart half
+the host simultaneously. Routine progress within the approved batch plan does
+not require a new permission request for every instance.
+
+An ordinary-load pilot while waiting for HSDir has not tested the flood path.
+Record the operator's decision about that residual uncertainty if expansion
+precedes a flood. Track recovery/eligible observation per member. Stock
+references continue their existing processes and supply common metrics; they
+will not expose the four new counters or accept the new ControlPort options.
+
 ## 2. Initial observe mode
 
 Leave both options omitted so the patched runtime normally reports `auto`.
 Initial `auto` is accepted if the canary's current validated consensus lacks
 `hsdir_one_request_per_circ` and `hsdir_refuse_unknown_prev_hop` and no runtime
 or configuration override enables either defense. All four counters remain
-active regardless of enforcement.
+active regardless of enforcement on patched members. Apply these checks per
+patched member; do not query/set the new options on stock reference binaries.
 
 The public 2026-10-14 21:00 UTC consensus lacked both parameters (fetched at
 21:49 UTC). This is a dated observation, not a permanent guarantee. Recheck the
@@ -238,12 +291,14 @@ counter at the local MetricsPort; neither permits unapproved Prometheus edits.
 The regular DoS heartbeat is supplementary evidence of counter availability;
 its scheduling is not the primary verification or enforcement-state check.
 
-**Check-in 1:** T0 UTC, package/build identity, effective command stock/custom,
+**Check-in 1 (pilot, then each expansion batch):** stable opaque member IDs,
+completed/pending roster state, each T0 UTC, package/build identity, effective command stock/custom,
 verification success, PID changed, correct executable and confinement, four
 fresh counters, expected inactive mode, Sandbox state, restart duration, and
 exceptions. Share no private unit names or identifying command arguments.
 
-Monitor from T0. From roughly T0 + 90 hours, inspect the canary's entry in a
+Monitor each converted member from its own T0. From roughly T0 + 90 hours,
+inspect that member's entry in a
 fresh accepted consensus every few hours. The matching `s` line must contain
 HSDir. Record the last observation without HSDir, first observation with it,
 and the consensus valid-after/valid-until times. `T_flag` is the first observed
@@ -256,20 +311,40 @@ At the predeclared recovery deadline without the flag, stop the automatic wait
 and report; the human decides whether to extend. Do not restart to try to
 accelerate eligibility.
 
-## 4. Collect 7–14 usable HSDir days
+## 4. Collect 7–14 usable HSDir days per patched member
 
-The human selects the duration before deployment (proposed default 14 days).
-Do not include the four-day warmup or unusable gaps. Record wall time and usable
-time separately and honor the absolute end/extension policy. Collect multiple
-quiet/flood episodes; do not stop at the first favorable peak hour.
+The human selects the duration before deployment (proposed default 14 days
+per patched member). Do not include each member's warmup or unusable gaps.
+Valid zero traffic counts as observation. Record wall time, usable time and
+common-time comparison exposure separately, and honor the absolute end/extension
+policy. Collect multiple quiet/flood episodes; do not stop at the first peak.
+Stock references are observed continuously using common metrics without restart;
+their missing custom counters are structurally unavailable, not zero or a
+failed patched-counter check. Keep individual outcomes, including incomplete
+members, and do not hide heterogeneity behind a cohort average.
 
 ### 4.1 Prometheus and persistent monitoring
 
-Use the existing private scrape endpoint and selectors. Preserve restrictions;
-never expose MetricsPort publicly or broaden access to `accept *`. Prefer an
-existing 10–15-second scrape if available; use the observed interval in the
-analysis. If owner-side changes are required, arrange them before deployment.
-Keep at least 30 days or export validated daily/window data before expiry.
+Use the existing private scrape routes and per-member canonical selectors.
+The four new counters are emitted by Tor **MetricsPort**; Prometheus stores
+those samples and the future collector queries its API for history/exports.
+GETCONF checks configuration state only; it is not a traffic-metric source.
+Preserve restrictions; never expose MetricsPort publicly or use `accept *`.
+
+Arrange a target-specific **15-second interval / 10-second timeout** for every
+approved comparison target, including selected stock references, through the
+monitoring owner's authorized path. Existing 2-minute samples cannot be made
+15-second samples by polling the query API more often. The read-only preflight
+found support for two exact-address relabel overrides of `__scrape_interval__`
+and `__scrape_timeout__` in the existing job. Preserve the current static group,
+job/instance labels and single target occurrence; do not create a duplicate job
+or split a group required by the target-sync tool. Validate only intended
+roster members match. Assess aggregate scrape cost as the roster grows; one
+pilot's short scrape duration does not prove capacity for half-host collection.
+
+If owner-side changes are required, arrange them before the applicable rollout
+stage. Keep at least 30 days or export validated daily/window data before expiry,
+extending preservation through the last member's observation/review/trial.
 Exports are private, dated, include query/provenance and gaps, and are never
 silently overwritten. Raw data is not copied into a shared report.
 
@@ -285,9 +360,11 @@ is not proof that the flood does not exist or that defenses have no effect.
 
 ## 5. Observation report and human decision
 
-Produce the private de-identified JSON, <=40-row CSV for a selected main flood
-window, and 6–10-line summary in the capture playbook. Include the entire
-observation's coverage/episode history alongside representative windows;
+Produce the private de-identified cohort JSON, combined <=40-row CSV with
+opaque member IDs, and 6–10-line summary in the capture playbook. Include
+per-member build/mode/coverage and matched comparisons. Separate stock versus
+patched-off (full build) from patched-off versus patched-on (incremental
+rule). Preserve individual observation coverage/episode history;
 peak-hour contrasts are explicitly secondary. No guessed values or hidden
 failures. Per-window estimates cannot establish unobserved attack traffic,
 legitimate-client failure rates, or causal resource savings.
@@ -303,7 +380,9 @@ Distinguish three actions:
 
 1. **Enforcement trouble:** apply explicit `0,0` through SETCONF and verify
    GETCONF. No binary swap or planned restart; keep metrics running. Record the
-   incident and stop the active trial. This disables only the two defenses,
+   incident and pause the active cohort trial/expansion. Preserve verified
+   patched-off controls; any broader shutdown/rollback follows the approved
+   incident scope. This disables only the two defenses,
    not patches 0003–0007, and is not a claim of restored stock behavior.
 2. **Binary/startup/service failure:** follow the authorized incident policy.
    Restore the exact prior per-instance ExecStart/drop-in/configuration and
@@ -311,22 +390,35 @@ Distinguish three actions:
    only the canary. Verify active service and the original executable. This
    costs a new uptime/HSDir interval; safety takes precedence. Preserve incident
    evidence privately and report the interruption.
-3. **Normal collection completion:** leave the patched binary running with
-   inactive defenses until instructed otherwise. Do not automatically remove
+3. **Normal collection completion:** leave each patched member on the same
+   binary with inactive defenses until instructed otherwise. Do not convert
+   or restart stock references as cleanup. Do not automatically remove
    the drop-in, unhold packages, remove exclusions, or restart. Schedule the
    agreed dated human maintenance review; do not leave exceptions unowned.
 
-When a rollback/removal is authorized, restore the previous maintenance state:
-only unhold packages newly held for this experiment; preserve earlier holds;
-restore modified files and remove only experiment-created files. Do not blindly
-remove a shared exclusion/profile. Verify restoration before declaring success.
+A per-member rollback restores only that member's instance changes. Track
+shared-state ownership and dependencies in the private roster: the host-wide
+package hold/reboot exception, shared profile changes and staged immutable
+binary must remain while any active patched member still depends on them.
+Do not unhold, restore shared policy, or remove the binary merely because one
+member was rolled back.
+
+Only when no active member depends on a shared experiment change **and the
+operator authorizes its restoration**, restore the previous shared state:
+unhold only packages newly held for this experiment, preserve earlier holds,
+restore modified files, and remove only experiment-created files. Retain any
+still-needed per-member exclusion. Verify both per-member and shared-state
+restoration before declaring the applicable removal complete.
 Binary rollback always needs a process restart; SIGHUP never changes the binary.
 Security maintenance can supersede the experiment; report an interrupted run
 rather than suppressing required maintenance indefinitely.
 
 ## 7. Privacy and output boundary
 
-Call the relay `canary`. No relay fingerprints, nicknames, IPs, hostnames,
+Use stable opaque member IDs such as `pilot`, `patched_01` and `stock_01`,
+with the identity mapping kept private. The plan explicitly names vipopen as
+its authorized host scope; operational reports must not add host identifiers.
+No relay fingerprints, nicknames, IPs, hostnames,
 ContactInfo, onion addresses, descriptor IDs, Prometheus job/instance labels or
 URLs, or fleet counts in any shared check-in/report. Keep keys, auth material,
 source labels and exact private service/configuration inventory out of tool
@@ -345,10 +437,16 @@ First implement and validate the external helper against
 authorization. The helper and acceptance suite are not implemented or executed
 by this documentation change. The original passive phase remains probe-free.
 
-The human approves the tested helper, dedicated stock client, owned descriptor
-fixture, explicit low probe cadence, matched off/on durations, phase order,
-settling criteria, incident limits, and trial end. Run identical low-rate checks
-in the trial's comparison and active windows. Do not use an arbitrary service's
+The human approves matched patched-member assignments, the tested helper,
+dedicated stock clients, owned descriptor fixtures for each assigned target,
+explicit aggregate low probe cadence/budget, matched off/on time blocks, phase
+order, settling criteria, per-member/host incident limits and trial end.
+Retain a contemporaneous **patched-off control group** in every active block;
+never enable every patched member together. Match using pretreatment evidence
+and randomize within comparable candidates where practical. Stock references
+remain useful context but do not isolate a toggle's effect. Run comparable
+low-rate checks in the trial's patched-off and active windows, one target per
+batch and one outstanding fetch per client across all targets. Do not use an arbitrary service's
 404 as evidence of enforcement damage. Do not probe other HSDir targets or
 collect payload/identity data from ordinary users.
 
@@ -366,7 +464,9 @@ SETCONF HSDirRefuseUnknownPrevHop=0 HSDirOneRequestPerCircuit=1
 GETCONF HSDirRefuseUnknownPrevHop HSDirOneRequestPerCircuit
 ```
 
-These are alternative phases, not a script to run consecutively. No torrc edits,
+These are alternative per-member phases, not a script to run consecutively or
+broadcast to a cohort. Apply them only to the specifically assigned patched
+members; stock binaries do not recognize the options. No torrc edits,
 SIGHUP, SAVECONF, or canary restarts are used for trial transitions. Test one
 defense at a time; combined enforcement is outside this initial trial. An
 unverified or unexpected mode ends the usable analysis segment.
@@ -385,6 +485,13 @@ decisions**, and `delta U` during isolated previous-hop enforcement as inferred
 before a toggle. With both on, reuse closure takes precedence and the overlap
 needed to attribute 503s is absent. None of these is a delivered-response count.
 
+Same-host members share CPU, memory, network and failure risk. Treatment can
+relieve pressure for controls as well. Preserve host-pressure context, unequal
+HSDir/ring exposure and attacker adaptation as comparison limits. A crossover
+is a separate predeclared choice requiring demonstrated settling; it does not
+instantly restore prior circuits. Aggregate only validated same-build/mode
+windows without double-counting episodes and their nested peak windows.
+
 Probe TIMEOUT and failures stay in the attempted-probe denominator; client reset
 or bootstrap downtime is separately reported as coverage gaps. On ambiguous
 probe state, abort the batch and reset only the dedicated client before a new
@@ -398,6 +505,7 @@ legitimate-client success. Client authorization can still prevent use. Do not
 add handoff counters to pretend to measure this. Use existing pressure metrics
 as resource indicators, not delivery measurements.
 
-At trial end explicitly return to `0,0`, verify, report the results/limitations,
+At trial end explicitly return every patched trial member to `0,0`, verify
+per member, report individual and matched results/limitations,
 and hand back the continuation/maintenance decision. No automatic enforcement
 scheduler is part of this plan.

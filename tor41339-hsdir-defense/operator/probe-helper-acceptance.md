@@ -11,15 +11,26 @@ probe, deployment, or enforcement change is authorized by this document alone.
 
 After passive collection and human review, optional controlled checks can
 measure whether a stock Tor client receives a known-good descriptor from the
-canary, and how long that takes. Run comparable checks before and during an
-approved enforcement trial. This complements relay counters and resource
-measurements without changing the seven-patch relay binary or adding C metrics.
+assigned approved relay, and how long that takes. The deployment pilot keeps
+the opaque ID `pilot`; later approved probe batches can assign it or another
+approved patched member as their one target. Run
+predeclared, matched checks on patched relays with enforcement off and on
+before and during an approved enforcement trial. All such patched targets
+must use the same reviewed Ubuntu 26.04 seven-patch artifact, identified by its
+version and digest; record the separately built artifact's provenance before
+use. This complements relay counters and resource measurements without
+changing relay C code or adding metrics.
 
 These checks are **outside the initial passive collection phase**. Before
-public-network use, the human operator must approve the target, owned test
-service, client configuration, cadence, total request budget, time limits, and
-experimental modes. An approved enforcement trial does not implicitly authorize
-probes, uploads, or tests against additional HSDirs.
+public-network use, the human operator must approve the target set, owned test
+services, client configuration, aggregate cadence and request budget, time
+limits, and experimental modes. Each batch has exactly one assigned target.
+Membership in an approved cohort is not permission for automatic fallback or
+requests to any unassigned target. An approved rollout or enforcement trial
+does not implicitly authorize probes, uploads, or tests against additional
+HSDirs. Stock reference relays may contribute passive comparison metrics;
+active checks against them require separate explicit inclusion in the approved
+probe target set.
 
 The scope is controlled descriptor-fetch receipt and latency. It does not
 measure all legitimate clients, descriptor uploads, application reachability,
@@ -35,28 +46,36 @@ failure rate.
 The future implementation must refuse to start a measurement batch unless all
 of the following are explicit and verified:
 
-1. **Consent and mode.** Record the operator's approval reference and allowed
-   phase. The canary's actual enforcement state must be known, with timestamped
-   state checks bounding the batch. Unknown, contradictory, or changing state
-   blocks new submissions and invalidates attribution to a stable mode.
+1. **Consent, target, and mode.** Record the operator's approval reference,
+   allowed phase, immutable assigned target, and declared comparison role for
+   the batch. The target's actual enforcement state must be known, with
+   timestamped state checks bounding the batch. Do not infer mode from cohort
+   membership. Unknown, contradictory, or changing state blocks new submissions
+   and invalidates attribution to a stable mode. Match patched-off and
+   patched-on checks using the predeclared schedule, client/fixture policy,
+   deadlines, and request budgets; do not choose checks afterward by outcome.
 2. **Dedicated stock client.** Use a probe-only stock Tor client with its own
-   process, control endpoint, and DataDirectory, separate from the canary and
+   process, control endpoint, and DataDirectory, separate from all relays and
    any user's browsing client. Prove process ownership before any cleanup.
    This helper must never restart, stop, reload, or reset the canary or another
    relay. No unrelated application may use the probe client during a batch.
 3. **Owned descriptor fixture.** The test service belongs to the operator and
-   the canary is known to hold its current, valid descriptor. Maintain this
-   fixture across descriptor time-period changes. An arbitrary owned service
-   need not be stored by this canary; an expected 404 is not collateral damage.
+   the assigned target is known to hold its current, valid descriptor. Verify
+   fixture readiness separately for every target and maintain it across
+   descriptor time-period changes. An arbitrary owned service need not be
+   stored by an approved target; an expected 404 is not collateral damage.
    Any controlled publication needed to establish the fixture requires a
    separately approved preparation step. Do not infer that `SERVER=` makes
-   the canary responsible for the service or causes it to obtain a descriptor.
-4. **One target and no fallback.** Each explicit request names only the
-   canary. Validate that the chosen client configuration prevents automatic
-   refetches to other HSDirs after failure. `SERVER=` alone is insufficient:
-   it selects the initial request's destination, while teardown can enter the
-   ordinary refetch path. If no supported, validated way to prevent fallback
-   is available, public-network probing remains blocked.
+   the assigned target responsible for the service or causes it to obtain a
+   descriptor.
+4. **One target per batch and no fallback.** Each explicit request names only
+   the batch's assigned target. Validate that the chosen client configuration
+   disables automatic descriptor refetches, including retries to another
+   approved cohort member or back to the assigned target. All measured fetches
+   must originate from the scheduled explicit command. `SERVER=` alone is
+   insufficient: it selects the initial request's destination, while teardown
+   can enter the ordinary refetch path. If no supported, validated way to
+   prevent fallback is available, public-network probing remains blocked.
 5. **Client readiness.** Authentication, event subscription, bootstrap,
    usable directory information, target availability, and fixture readiness
    are established before timing a fetch. Use bounded setup deadlines.
@@ -65,7 +84,11 @@ of the following are explicit and verified:
    maximum batch duration, per-attempt deadline, setup/recovery deadlines,
    and bounded input-buffer sizes. Do not inherit the existing script's
    0.5-second gap. The approved minimum interval applies between submission
-   starts; never run parallel attempts or catch up after missed slots.
+   starts; never run parallel attempts within a client or catch up after missed
+   slots. Maintain one global cadence and total request budget across all
+   targets, batches, and probe clients, with any additional per-target caps.
+   Expanding the approved cohort must not multiply load by creating independent
+   per-relay budgets. Exhausting the global budget blocks every new submission.
 7. **Private storage.** Agree on a local protected output location, access
    controls, retention period, and deletion owner. Verify storage availability
    before submission; inability to record an outcome ends the batch.
@@ -75,7 +98,8 @@ One candidate to investigate in the isolated lab is
 refetch guard checks it, while explicit HSFETCH uses a different launch path.
 This is a source-supported candidate, **not a validated recipe**. Acceptance
 must establish that explicit requests work and failure paths produce no
-unapproved descriptor fetches. Do not change the relay's configuration for it.
+automatic descriptor fetches, even to an approved target. Do not change any
+relay's configuration for it.
 
 ## Protocol and state model
 
@@ -91,26 +115,41 @@ unambiguous receipt successes only. Any non-success, including FAILED, command
 rejection, unresolved timeout, I/O failure, unexpected protocol state, target
 violation, or correlation ambiguity moves it to `ABORTED`.
 `ABORTED` has no transition back to `READY` in the same client generation.
+This rule applies across **all** targets: selecting a different cohort member
+does not clear a pending request or permit work after an abort. At most one
+request may be outstanding in a probe-client process, regardless of target.
+
+Change targets only between cleanly completed batches, after the prior batch's
+reply/event handling and validated lifecycle checks establish no unresolved
+work. Run target, fixture, mode, and budget preflight again. Reusing the same
+dedicated client after a clean batch is allowed; a new client per relay is not
+required unless the validated lifecycle contract requires stronger isolation.
+Record every target/batch transition privately. Never round-robin targets
+within a batch or use a target change as timeout recovery.
 
 For each attempted submission:
 
-1. Allocate a local batch/attempt number and record UTC for comparison with
-   relay metrics. Local numbers are bookkeeping; Tor does not echo them as
+1. Allocate a local batch/attempt number, bind it to the assigned target and
+   declared comparison role, and record UTC for comparison with relay metrics.
+   Local numbers and cohort labels are bookkeeping; Tor does not echo them as
    request identifiers.
 2. **Start a monotonic deadline before writing the HSFETCH command.** Include
    command-write time, the final command reply, REQUESTED, and terminal-event
    processing in the same bounded attempt. Socket inactivity timeouts alone
    are insufficient: unrelated events must not extend the total deadline.
-3. Allow only one outstanding command/fetch. Track the final command reply
-   separately from asynchronous events. A `250 OK` acknowledges acceptance
-   of the command, not successful descriptor retrieval. A rejected command is
-   a measured non-success, not an unsubmitted attempt.
+3. Allow only one outstanding command/fetch per client across all targets.
+   Track the final command reply separately from asynchronous events. A
+   `250 OK` acknowledges acceptance of the command, not successful descriptor
+   retrieval. A rejected command is a measured non-success, not an unsubmitted
+   attempt.
 4. Correlate events to the normalized service address and canonical HSDir
    identity. Normalize optional address suffix/case and control-protocol
    identity decoration using validated formats; do not compare nicknames.
    Verify descriptor context against the matching REQUESTED event and the
    fixture's expected time period when available. Never accept an event for
-   another service, server, descriptor context, or client generation.
+   another service, server, descriptor context, or client generation. An event
+   from a different approved relay is still unrelated to this batch; cohort
+   membership never makes it a valid match.
 5. Require a consistent command reply and matching REQUESTED/terminal
    sequence for a verified result. Tor 0.4.9.14 sends command OK before the
    launch events. Parse interleaving without losing events; unexpected order,
@@ -146,7 +185,7 @@ Do not silently erase this limitation from the report.
 ## Timeout, cancellation, and recovery
 
 `TIMEOUT` means no verified result was obtained before the local deadline. It
-does not mean Tor emitted FAILED, that the request stopped, or that the canary
+does not mean Tor emitted FAILED, that the request stopped, or that the target
 never served the response. Record the timeout once and abort the batch.
 
 Do not wait indefinitely for RECEIVED/FAILED. In 0.4.9.14, HTTP 503 is handled
@@ -158,9 +197,10 @@ the helper socket, and `NEWNYM` are not cancellation guarantees.
 
 Before a new batch after a non-success or unresolved work, stop the
 **dedicated probe-client process**, verify that exact process has exited, and
-then start/reset the client under its approved lifecycle policy. Verify
-readiness again. If process ownership, shutdown, or readiness cannot be established within its bounded
-deadline, stop the experiment and report the gap; do not keep attempting
+then start/reset the client under its approved lifecycle policy. This applies
+even if the next batch would use a different target. Verify readiness again.
+If process ownership, shutdown, or readiness cannot be established within its
+bounded deadline, stop the experiment and report the gap; do not keep attempting
 recovery or launch a second overlapping client.
 
 Keep the probe client's DataDirectory and guard state across approved restarts
@@ -190,7 +230,7 @@ fails after an uncertain partial submission, retain the attempt as
 whether the command was acknowledged. Preflight failures and missed schedule
 slots have no submitted request and belong in coverage/recovery gaps.
 
-For each verified stable mode, report:
+For each assigned target and verified stable mode, report:
 
 - Attempted submissions, acknowledged commands, verified RECEIVED, verified
   FAILED, command rejections, timeouts, and indeterminate/protocol/I/O outcomes.
@@ -206,10 +246,19 @@ For each verified stable mode, report:
 - Planned/observed coverage, elapsed duration, mode checks, client resets,
   fixture gaps, and recovery gaps. Samples crossing a mode transition remain
   in the audit totals but are excluded from either stable-mode comparison.
-- Client version, relevant settings, test limitations, and consistent timing
-  definitions. Name the relay only `canary`; omit service addresses,
+- Client version, target artifact version/digest, declared comparison role,
+  relevant settings, test limitations, and consistent timing definitions.
+  Name the initial pilot `pilot`; use stable opaque IDs for later approved
+  targets and keep their identity mapping private. Omit service addresses,
   descriptors, fingerprints, nicknames, hostnames, addresses, and control or
   monitoring endpoints from shared output.
+
+Reconcile target/mode totals with the global attempt budget. Keep individual
+target results available when producing matched patched-off versus patched-on
+comparisons; cohort aggregation must not hide uneven probe coverage or mode
+changes. Compare stock references separately from patched-off controls, since
+the former also differ in software. Do not relabel stock observations as an
+estimate of the toggles' isolated effect.
 
 No number inferred from a missing event may be reported as measured HTTP 503,
 actual circuit closure, or actual client receipt. Receipt tests do not replace
@@ -234,8 +283,12 @@ access. No test execution is part of this documentation change.
 | Missing final command reply | REQUESTED/terminal events do not silently substitute for the reply; no verified success and no unbounded wait. |
 | Reply timing and event ordering | Delayed ACK consumes the same deadline; unrelated events may interleave; inconsistent ordering or contradictory reply fails closed without misattribution. |
 | Fragmented and multiline input | Partial reads and protocol continuation lines parse correctly; bounded buffers and total deadline remain effective. |
-| Interleaved unrelated events | Wrong service, HSDir, or descriptor context never changes the pending result and never resets its deadline. |
+| Interleaved unrelated events | Wrong service, HSDir, or descriptor context never satisfies the pending request or resets its deadline. Evidence of unexpected descriptor fetch activity aborts the batch. |
+| Event from another approved cohort member | Never attribute it to the assigned target, count it as its success, or silently change the batch target; detect unexpected fetch activity and abort. |
+| Concurrent submission to a different approved target | Reject it while any request is pending in that client. One-outstanding applies across the entire client, not once per target. |
+| Target change between batches | Permit only after a clean completed batch and renewed target/fixture/mode/budget checks; keep target immutable within each batch. No forced client restart is required after a validated clean completion. |
 | Late same-tuple event after timeout | Batch is already aborted: retain the timeout, do not begin another request, and never turn the late event into a new attempt's success. |
+| Target switch after timeout or ambiguity | Block all new targets in that client generation until verified probe-client process reset and readiness. An approved alternate target is not a recovery mechanism. |
 | Indistinguishable same-tuple event across attempts | Document the protocol limit; a test must not claim a local sequence number solves it. Validate the pinned stock-Tor success/terminal contract. If the real lab produces an old terminal after a later REQUESTED despite resolved success, fail acceptance and require stronger batch/client-generation isolation. |
 | Duplicate terminal event | Count at most once; detected ambiguity stops the batch. No duplicate success or denominator drift. |
 | EOF or read error | Stop promptly with one explicit outcome, no busy loop, and no new submission in that client generation. |
@@ -245,19 +298,21 @@ access. No test execution is part of this documentation change.
 | Reconnect or NEWNYM without process exit | Must not satisfy the reset prerequisite or authorize another request after unresolved work. |
 | Client reset fails or readiness never returns | Recovery has a bounded end; report the gap and stop. Never touch a relay or spawn an overlapping client. |
 | Wrong process ownership | Refuse cleanup and further probes; do not kill an inferred or unverified process. |
-| Automatic fallback attempt | Fail acceptance if the configured stock client fetches the test descriptor from another HSDir after any tested outcome, including 404, 503, connection loss, and cancellation. |
-| Unknown or changed enforcement mode | Block new submissions; preserve and mark pending/transition samples indeterminate for mode attribution. |
+| Automatic fallback or retry attempt | Fail acceptance if the configured stock client automatically fetches the descriptor after any tested outcome, including 404, 503, connection loss, and cancellation. This includes the assigned target and every other approved cohort member. |
+| Unknown or changed enforcement mode | Block new submissions; preserve and mark pending/transition samples indeterminate for mode attribution. Assigned cohort role cannot override the target's measured mode. |
 | Missing consent or passive-only phase | Preflight rejects the batch before any HSFETCH or test-descriptor publication. |
 | Fixture missing, expired, or wrong authorization | Block or explicitly mark fixture-invalid measurements; never attribute these failures to enforcement. |
-| Rate/budget boundary and missed slots | Enforce explicit cadence and total budget; no parallel requests or catch-up burst. |
+| Rate/budget boundary and missed slots | Enforce explicit global cadence and total budget across clients/targets, plus per-target caps; no per-client parallel requests or catch-up burst. Adding targets does not reset or multiply budget. |
+| Matched off/on schedule or artifact mismatch | Reject an undeclared comparison or mismatched patched artifact; retain excluded samples in accounting and document the gap rather than selecting favorable replacements. |
 | Sensitive output or full buffers | No payload/authentication content in logs; bounded metadata storage; public output passes identifier redaction. |
 | Accounting reconciliation | Every attempted submission appears once; failures/timeouts stay in the denominator; recovery gaps are reported separately. |
 
 The isolated stock-client lab must additionally establish that explicit
-HSFETCH bypasses the client descriptor cache, reaches the specified canary
-fixture, and remains isolated from other HSDir targets across the complete
-failure matrix. Verify the actual path and circuit/stream isolation rather
-than asserting a fixed hop count from the helper: Tor 0.4.9.14 normally adds
+HSFETCH bypasses the client descriptor cache, reaches each batch's assigned
+fixture, and produces no automatic descriptor retries or fallback across the
+complete failure matrix, including when several lab targets are approved.
+Verify the actual path and circuit/stream isolation rather than asserting a
+fixed hop count from the helper: Tor 0.4.9.14 normally adds
 the selected HSDir to its anonymous path, and client options can affect path
 length. Sequential stock fetches do not by themselves exercise every request
 reuse pattern the relay defense can encounter.

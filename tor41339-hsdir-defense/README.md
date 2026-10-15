@@ -4,7 +4,7 @@ A small, upstreamable patch series for **Tor 0.4.9.14** that bounds the resource
 cost of the 2026 BEGIN_DIR / onion-service-descriptor flood on a directory cache
 (HSDir), with compatibility evidence from a **closed-lab
 benchmark** that measures the effect on a private network and an **operator kit**
-for a count-only canary on a live relay.
+for a live pilot and staged observation cohort.
 
 This is defensive relay hardening for the attack tracked upstream as
 [tor#41339](https://gitlab.torproject.org/tpo/core/tor/-/issues/41339) and
@@ -58,9 +58,14 @@ The accepted experiment keeps **all seven patches** as one fixed baseline.
 Patches 0003–0007 remain active when defenses 0001/0002 are disabled; the full
 build is not behaviorally identical to stock. The existing four counters remain
 unchanged. See the [final canary plan](operator/CANARY-MEASUREMENT-PLAN.md) for
-7–14 usable HSDir days of passive collection, human review, and an optional
-separately approved live-toggle trial. This plan is documentation, not runtime
-authorization or a fresh release-readiness attestation.
+a native Ubuntu 26.04 build supplied by the designated builder agent, one pilot
+on vipopen followed by staged expansion toward half its relays, and 7–14 usable
+HSDir days of passive collection per patched member. Stock references remain
+unchanged; later enforcement trials retain contemporaneous **patched-off
+controls** on the same pinned build. This plan is documentation, not runtime
+authorization or a fresh build/release-readiness attestation. See the
+[native build handoff](operator/NATIVE-26.04-BUILD-HANDOFF.md); the older Noble
+package is historical evidence, not an automatic fallback for this rollout.
 
 The series is written to upstream conventions: one single-pass HS-request guard
 (`connection_dir_allow_hs_request()`) for GET and POST, consensus parameters
@@ -133,8 +138,10 @@ Start with [the final plan](operator/CANARY-MEASUREMENT-PLAN.md). The kit includ
 [future probe-helper acceptance tests](operator/probe-helper-acceptance.md).
 The helper specification is **not implemented or tested** by this documentation
 update. Passive collection comes first; any controlled probe/enforcement trial
-requires a separate human decision. Keep the same binary and four counters
-throughout. No handoff counters or extra C telemetry are planned.
+requires a separate human decision. Keep the same native artifact and four
+counters across patched members and modes. Rollout is one pilot, then small
+approved batches toward half of vipopen's relays; retain stock references and
+patched-off controls. No handoff counters or extra C telemetry are planned.
 
 ## Live capture (`data/`)
 

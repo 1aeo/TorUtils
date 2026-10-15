@@ -1,7 +1,10 @@
-# Measuring the tor#41339 canary and reporting the evidence
+# Measuring the staged tor#41339 cohort and reporting the evidence
 
-This is the measurement specification for **one canary**, using the existing
-four HSDir counters and stock telemetry. Deployment and operational controls
+This is the measurement specification for **one pilot followed by a staged
+cohort**, using the existing four HSDir counters and stock telemetry. The
+planned rollout covers half the relays in the privately agreed host roster,
+including the pilot; it is not a simultaneous restart of half the host.
+Deployment and operational controls
 are in [DEPLOY-AND-MEASURE.md](DEPLOY-AND-MEASURE.md). Preparing or reviewing this
 document does not authorize deployment, production collection, probes, or an
 enforcement trial. Each operational phase requires the authorization specified
@@ -9,29 +12,83 @@ in that runbook.
 
 ## 1. Scope and the question this experiment answers
 
-Keep one fixed, identified build of the full seven-patch series throughout the
-experiment. First observe with both enforcement controls verified inactive.
+The external build agent supplies and publishes the **native Ubuntu 26.04
+amd64 artifact**, using the pinned full seven-patch series and the existing
+four HSDir counters. No additional C instrumentation or helper implementation
+is part of this documentation work. Verify the supplied artifact and build
+provenance under the deployment runbook; this document is not evidence that
+the artifact already exists or has passed acceptance. Keep that exact
+identified patched build fixed throughout the experiment, and record the
+versions/configuration of the retained stock controls separately.
+
+Start with one deployment pilot. After its explicit rollout gates pass,
+expand in stages to the target in the private roster: `floor(N/2)` patched
+relays **including the pilot**, where N is the roster size fixed before
+allocation. The remaining assigned controls stay stock. Do not print N, the
+target count, or the host identity in returned reports. Startup success and
+ordinary-load stability are distinct from surviving a real flood; record what
+each expansion gate has actually established. The deployment runbook owns
+batching, capacity limits and stop decisions.
+
+First observe each patched relay with both enforcement controls verified
+inactive.
 Initial `auto` is acceptable when the current validated consensus contains
 neither HSDir parameter and no configuration or runtime override enables a
 rule. Check the effective state as specified in the deployment runbook.
 Explicit `0,0` is used for later trial comparison and incident recovery; do
 not treat an initial `auto` value alone as proof that enforcement is inactive.
-After **7–14 eligible observation days**, give the human reviewer the report
-before deciding whether to authorize a short trial. The proposed default is
+After **7–14 eligible observation days per patched relay**, give the human
+reviewer the report before deciding whether to authorize a short trial. The proposed default is
 **14 eligible days**; the reviewer chooses the duration before collection.
 
 The observation asks how much traffic reaches the HS request guard, how often
 it reuses circuits, and how often its previous hop is classified as unknown.
 It can identify patterns a rule matches. It cannot prove that every matching
 request is malicious, predict saved bandwidth, establish legitimate-client
-success, or establish a network-wide effect from one relay.
+success, or establish a network-wide effect from this selected cohort.
 
 “Count-only” describes the two controls in patches 0001 and 0002. Patches
 0003–0007 also change behavior and accounting. The full build with both controls
 off is the experiment's baseline; it is **not stock Tor with only counters
 added**. Keep its source commit, package version, artifact digest, and relevant
-configuration fixed and privately recorded. A later comparison concerns this
-same build with a different control state.
+configuration fixed and privately recorded. The first comparison is **stock
+versus the full patched build with its two controls off**. It cannot isolate
+0001/0002 from 0003–0007 or from other stock/patched build differences. The
+later comparison is **patched off versus the same patched build with one
+control on**; it concerns the incremental control change under the limits in
+§6. Stock relays are not substitutes for patched-off enforcement controls.
+
+### 1.1 Private roster, allocation, and contemporaneous controls
+
+Keep a stable private manifest mapping opaque IDs such as `pilot`, `stock_01`
+and `patched_01` to the operational identities, exact selectors, fixed build,
+rollout role, baseline features and allocation history. These are examples,
+not an inventory. Do not rename an ID across windows or encode fingerprints,
+addresses, hostnames or fleet size in it. Build cohort and current treatment
+are separate fields; the ID remains stable if a planned treatment changes.
+
+Match or stratify candidates using **pre-treatment** traffic, role, bandwidth
+limits, resource use, eligibility history and other declared features. Assign
+stock/patched groups, and later patched-off/patched-on groups, in advance;
+randomize within comparable strata where practical and record exceptions.
+Do not pick controls retrospectively because their post-treatment rates look
+similar, or rematch using a response to treatment.
+
+Retain a nonempty **contemporaneous patched-off group throughout every
+enforcement block**. Never turn all patched relays on together. If the agreed
+roster cannot support both groups or the matched controls become unusable,
+the proposed comparison is unavailable; do not relabel stock as patched off.
+Preserve stock controls for the whole-build comparison without counting them
+as a second enforcement control condition.
+
+Relays on one host share CPU, memory, kernel/network resources and a failure
+domain. A treatment can relieve or worsen load experienced by its controls.
+Monitor declared host-level pressure as contextual evidence in addition to
+the per-process measurements, and apply predeclared host as well as per-relay
+stop limits. Same-host relays are not independent host replications. Different
+hash-ring positions and rotating attacks also create unequal exposure, even
+at identical UTC times; neither simultaneous sampling nor matching proves
+that the relays received the same offered workload.
 
 Do not add C counters, histograms, per-request logs, or descriptor/identity
 tracking for this plan. Accept the measurement limits below. The existing lab
@@ -97,17 +154,40 @@ of a flood. The `dirreq-v3-*` request statistics describe network-status
 requests, not HS descriptor fetches. Directory traffic histories are also not
 HS-only traffic measurements.
 
-Use an **existing, identified per-process** CPU/RSS source for the canary, not
+Use an **existing, identified per-process** CPU/RSS source for each relay, not
 host totals or another Tor instance. Record sampling cadence, aggregation and
 units. In this report, RSS is MiB (`bytes / 2^20`) and CPU percent uses **100% per
 logical CPU**; record any conversion from an existing normalized source. If the
 required process series do not exist, report the gap rather than install a new
 exporter or substitute a host measurement.
 
+### 2.3 Different required metric sets for stock and patched relays
+
+Register separate required sets in the manifest:
+
+- **Stock:** B, C, BW, BR, OP, OD and the agreed resource/pressure/continuity
+  signals, checked against the actual stock version's definitions and
+  available metrics.
+- **Patched:** the same common signals plus T, R, K and U, with exactly one
+  fresh series per custom type. The four counters come directly from the
+  patched relay's existing MetricsPort into Prometheus; no separate exporter
+  or additional collector-generated counter is required.
+
+Stock does not expose the four custom counters. Set T/R/K/U,
+`hs_req_per_s`, r_hs, phi, rho_hs, reused_circ_share, hs_share and any other
+derived field requiring them to **null**, with
+`not_available_on_stock_build` in `metric_unavailability`. This is structural
+unavailability, **not zero and not a failed stock quality gate**. Do not query
+missing stock counters and turn their absence into a failure or compute R/T
+for stock. An unexpectedly missing custom counter on a patched relay is a
+quality failure. A common metric unavailable in a particular stock version
+must be declared before comparison; omit that contrast or report its limit
+rather than equating differently defined metrics.
+
 ## 3. Register the measurement and quality gates before deployment
 
-Privately record the selected duration, exact canary selector, expected labels,
-metric definitions, scrape interval, resource sources, window rules, and
+Privately record the selected duration, each relay's exact selector, expected
+labels, metric definitions, scrape interval, resource sources, window rules, and
 analysis version. An identifying selector is necessary internally but must not
 appear in the returned report. Predeclare:
 
@@ -127,18 +207,21 @@ appear in the returned report. Predeclare:
    comparison uses predeployment or same-build observation data. Keep both
    periods distinguished when available.
 
-Every query must use the fixed selector for **only the canary**. Before
-accepting a result, require exactly one fresh series for each expected metric
-and label combination, including one for each of the four named HS types.
+Every per-relay query must use the fixed selector for **exactly that relay**.
+Before accepting a result, require exactly one fresh series for each metric
+and label combination in that build's required set, including one for each
+of the four named HS types on patched relays.
 `count(...)=4` alone is insufficient: a duplicate can hide a missing type.
 Account explicitly for any HA replicas or label changes; do not sum duplicates
 or silently change selectors.
 
-For every analysis window and each required series, record observed versus
-expected samples, coverage fraction, maximum inter-sample gap, and freshness.
+For every relay/window and each build-appropriate required series, record
+observed versus expected samples, coverage fraction, maximum inter-sample gap,
+and freshness.
 Check successful scrapes as well as the metric's own samples. A successful
 scrape can still omit a metric. Absence, a stale series, or a query with an
-unexpected result cardinality is a gap, never zero.
+unexpected result cardinality is a gap, never zero. The documented structural
+absence of custom metrics on stock is handled under §2.3 instead.
 
 Use independent process-start and service/journal evidence, including boot
 continuity when applicable, to establish restarts. Inspect counter resets as a
@@ -156,17 +239,32 @@ review or trial timing goes beyond it. Prometheus access is read-only: do not
 edit relabeling, rules, retention, or scrape configuration. Missing collection
 or retention is a prerequisite for its authorized owner to resolve.
 
+Register matched comparison blocks and required **simultaneous valid
+coverage** separately from each relay's individual exposure. Use the same
+UTC `[S,E]` for both members/conditions of a matched contrast. If a member is
+ineligible or fails quality, that contrast is missing, even if each relay
+has good data at different times. Preserve its otherwise valid individual
+data and record the lost matched coverage; do not silently replace the
+member or use a different UTC window to fill it.
+
 ## 4. Eligibility, baseline, and episode windows
 
-Record `T0` as the **new process start time**, separately from the restart
-command's start/end and elapsed duration. `T_flag` is the UTC time of the first
-check that observes the HSDir flag in the canary's current valid consensus;
+For each restarted patched relay, record `T0` as the **new process start
+time**, separately from the restart command's start/end and elapsed duration.
+`T_flag` is the UTC time of the first
+check that observes the HSDir flag in that relay's current valid consensus;
 record that consensus's validity times separately.
 A periodically checked flag time is an observation, not an exact transition
 timestamp. Preserve the check interval or transition bounds as uncertainty.
 
 The uptime/eligibility recovery period is **not** part of the requested
-7–14-day observation. A usable period requires the flag, known inactive
+7–14-day observation **for each patched relay**. Staged restarts mean these
+clocks need not start or finish together; the pilot's completed exposure does
+not satisfy a later member's observation requirement. Record each relay's
+eligible exposure and the matched simultaneous coverage separately. For a
+stock control that was not restarted, deployment/recovery fields are null
+with a reason, and its observed eligibility/continuity is recorded directly.
+A usable patched observation period requires the flag, known inactive
 mode, continuity evidence, and accepted telemetry. **Observed zero traffic is
 valid data**, not a reason to exclude a quiet interval or extend collection.
 Flag presence alone does not prove current ring traffic. Record eligible
@@ -174,7 +272,10 @@ elapsed time separately from wall-clock elapsed time and exclude intervals
 that fail the declared eligibility or quality gates. Before deployment, agree a calendar deadline and
 whether gaps may extend collection; do not wait indefinitely if eligibility
 or telemetry never becomes usable. Absent qualifying traffic is an outcome,
-not an automatic extension.
+not an automatic extension. Stock controls need the common eligibility and
+quality gates but have no patched enforcement state to verify. Retain stock
+observations contemporaneously with the matched patched observation rather
+than treating the pilot's predeployment history as the only control.
 
 ### 4.1 Baseline
 
@@ -184,7 +285,9 @@ established. A measured zero-traffic baseline is allowed; its relative rate
 multiples are undefined. Predeclare how “clean” is assessed. Retain additional comparable
 quiet windows across the eligible observation when available; traffic can vary
 with time and HSDir assignment. Use same-build, both-controls-off data for the
-main baseline.
+main patched baseline. Register stock quiet/reference windows using its
+available common metrics. A stock reference and a patched reference remain
+separate; do not infer stock HS-request counts from the patched baseline.
 
 If no qualifying quiet baseline exists, do not manufacture one from the lowest
 observed hour. Report `no_clean_baseline`, provide the qualified episode or
@@ -205,6 +308,12 @@ If the baseline is zero or unavailable, the relative criterion is undefined.
 Use only a separately predeclared absolute/corroboration criterion and identify
 the resulting classification as such; do not claim an infinite or fivefold
 increase. BEGIN_DIR alone is not sufficient to label the event an HS flood.
+For stock controls the custom HS corroboration is unavailable. Label their
+events as BEGIN_DIR/traffic episodes under the declared common-metric rule;
+do not claim a confirmed HS predicate or copy a neighbor's classification.
+Carry stock data through the same predeclared UTC comparison blocks even if
+that relay has no corresponding episode. Selecting controls only when they
+also look flooded would condition the comparison on a later outcome.
 
 Use an explicitly lower exit threshold and a declared below-threshold dwell
 time to define episode ends. Record onset as the beginning of the sustained
@@ -229,9 +338,9 @@ Any extension or later enforcement remains a human decision.
 
 ## 5. Reproducible computation
 
-For each accepted window `[S,E]`, let `W=E-S` in seconds. Query the HTTP API
+For each relay's accepted window `[S,E]`, let `W=E-S` in seconds. Query the HTTP API
 with **`time=E` for every instant query**. Expand `W` to a literal duration in
-PromQL (for example, `[3600s]`) and add the exact private canary selector to
+PromQL (for example, `[3600s]`) and add that relay's exact private selector to
 every series. Keep endpoint, credentials, queries with identifying labels, and
 raw API responses private. Require API success, expected result cardinality,
 and review any warnings or informational annotations.
@@ -242,20 +351,21 @@ its samples and invalidate its temporal quantiles.
 
 ### 5.1 Counter estimates
 
-The following are query templates: replace `<canary>` and `Ws`; do not submit
-the placeholders. Each selected series must independently pass §3.
+The following are per-relay query templates: replace `<relay>` and `Ws`; do not
+submit the placeholders. Each selected series must independently pass §3.
+Apply only that build's required metric set; skip T/R/K/U on stock (§2.3).
 
 ```promql
-B  = increase(tor_relay_streams_total{type="BEGIN_DIR",<canary>}[Ws])
-C  = increase(tor_relay_congestion_control_total{state="cc_circuits",action="circs_created",<canary>}[Ws])
-T  = increase(tor_relay_dos_total{type="hsdir_request_total",<canary>}[Ws])
-R  = increase(tor_relay_dos_total{type="hsdir_req_reused",<canary>}[Ws])
-K  = increase(tor_relay_dos_total{type="hsdir_circ_reused",<canary>}[Ws])
-U  = increase(tor_relay_dos_total{type="hsdir_unknown_prev_hop",<canary>}[Ws])
-BW = increase(tor_relay_traffic_bytes{direction="written",<canary>}[Ws])
-BR = increase(tor_relay_traffic_bytes{direction="read",<canary>}[Ws])
-OP = increase(tor_relay_load_onionskins_total{type="ntor_v3",action="processed",<canary>}[Ws])
-OD = increase(tor_relay_load_onionskins_total{type="ntor_v3",action="dropped",<canary>}[Ws])
+B  = increase(tor_relay_streams_total{type="BEGIN_DIR",<relay>}[Ws])
+C  = increase(tor_relay_congestion_control_total{state="cc_circuits",action="circs_created",<relay>}[Ws])
+T  = increase(tor_relay_dos_total{type="hsdir_request_total",<relay>}[Ws])
+R  = increase(tor_relay_dos_total{type="hsdir_req_reused",<relay>}[Ws])
+K  = increase(tor_relay_dos_total{type="hsdir_circ_reused",<relay>}[Ws])
+U  = increase(tor_relay_dos_total{type="hsdir_unknown_prev_hop",<relay>}[Ws])
+BW = increase(tor_relay_traffic_bytes{direction="written",<relay>}[Ws])
+BR = increase(tor_relay_traffic_bytes{direction="read",<relay>}[Ws])
+OP = increase(tor_relay_load_onionskins_total{type="ntor_v3",action="processed",<relay>}[Ws])
+OD = increase(tor_relay_load_onionskins_total{type="ntor_v3",action="dropped",<relay>}[Ws])
 ```
 
 These are notation assignments, not executable PromQL assignment syntax.
@@ -306,9 +416,9 @@ subquery step `d=max(15 seconds,i)`, substituting literal durations. For X
 equal to BEGIN_DIR or HS request total, evaluate at E:
 
 ```promql
-quantile_over_time(0.5, rate(X{<canary>}[Ls])[Ws:ds])
-quantile_over_time(0.95, rate(X{<canary>}[Ls])[Ws:ds])
-max_over_time(rate(X{<canary>}[Ls])[Ws:ds])
+quantile_over_time(0.5, rate(X{<relay>}[Ls])[Ws:ds])
+quantile_over_time(0.95, rate(X{<relay>}[Ls])[Ws:ds])
+max_over_time(rate(X{<relay>}[Ls])[Ws:ds])
 ```
 
 These are time-quantiles and the maximum of **smoothed rate estimates**, not
@@ -329,6 +439,38 @@ Do not divide a peak by a mean and label it this multiple. State which flood
 window supplies the top-level comparison, and retain per-episode comparisons
 when several episodes are reported.
 
+### 5.4 Cohort summaries without hiding individual outcomes
+
+Per-relay windows and matched UTC contrasts are the primary evidence. A cohort
+summary may pool **accepted exposures that do not overlap within each relay,
+from one exact build and one verified mode**, with a declared selection rule.
+Simultaneous windows on different relays are distinct exposures and may be
+included. Never mix stock with
+patched, patched off with on, native artifact revisions, or incompatible
+metric definitions. Do not count a peak hour again when it is already inside
+an included full episode. Include every assigned member's status and missing
+matched exposure, not just members that displayed the desired response.
+
+Compute pooled ratios from pooled numerators and denominators: for example,
+`sum(R)/sum(T)`, `sum(U)/sum(T)`, `sum(T)/sum(T-R)`, `sum(K)/sum(T-R)`,
+`sum(T)/sum(B)` and `sum(BW)/sum(BR)`. Use the same valid exposure set for both
+sides. These are volume-weighted pooled quantities, **not the mean relay**;
+never average individual ratios to obtain them. The transition and
+whole-relay caveats still apply. All HS-dependent pooled ratios for stock
+remain null.
+
+For a pooled average per-relay rate, divide summed increments by **summed
+relay-seconds**. A sum-of-relays rate over a shared UTC interval instead
+divides by that interval's duration; label the estimand and do not confuse
+the two. Compare treatment groups only over the registered matched coverage,
+reporting missing exposure and the per-relay effects alongside any pooled
+summary. A pooled p95 cannot be obtained by averaging relay p95 values;
+either recompute it from declared comparable samples or leave it null.
+
+Keep the opaque per-relay results visible so opposing effects, outliers and
+unequal attack exposure remain apparent. Aggregation does not remove the
+same-host interference, selection or hash-ring limitations in §1.1 and §6.
+
 ## 6. Later enforcement: separate approval and limited claims
 
 ### 6.1 Rule selection from observation
@@ -339,11 +481,23 @@ observed request population matched those predicates. They do not establish
 whether the remaining population is legitimate, what would happen after
 adaptation, or the amount of resources a rule would save.
 
-The human reviewer receives the observation report before any trial. Initial
-trial candidates are **one rule at a time**, on the same fixed build and same
-canary, with both-off intervals for comparison. Combined enforcement is
-excluded from the initial trial. Do not change consensus parameters or other
-relays. The runbook owns the exact control procedure and rollback behavior.
+The human reviewer receives the per-relay and matched observation report
+before any trial. Initial trial candidates are **one rule at a time**, on a
+preassigned subset of the patched cohort, using the same fixed native build.
+Retain a contemporaneous patched-off subset with both controls explicitly
+zero for every trial block. Never enable every patched relay at once.
+Combined enforcement is excluded from the initial trial. Do not change
+consensus parameters, stock controls, or relays outside the approved cohort.
+The runbook owns the exact control procedure and rollback behavior.
+
+Prespecify matched blocks, assignment, criteria for comparability and stopping
+limits. Randomize which comparable patched members receive the rule where
+practical, recording any operational constraints. Use features recorded
+before that trial, not post-toggle traffic, to define the matches. Optional
+later crossover may exchange assignments only under an approved schedule,
+while preserving a concurrent patched-off group and the settling/lookback
+exclusions below. Neither a fixed assignment nor a crossover guarantees
+causal identification under shared-resource interference or unequal attacks.
 
 ### 6.2 Mode windows, transitions, and causal limits
 
@@ -386,7 +540,12 @@ responses, and can provoke retries or adaptation. A lower T, R/T, byte rate,
 CPU, or RSS after a toggle does not alone prove benefit. Use comparable
 episodes, preserve time trends and pressure signals, and explicitly distinguish
 an observational association from a causal estimate. A quiet later week is not
-an enforcement control for a flooded earlier week.
+an enforcement control for a flooded earlier week. A quieter patched-on
+relay is also not sufficient evidence of benefit if its hash-ring exposure
+differs from the patched-off member. Host relief/spillover can change control
+performance, so report host pressure and per-relay changes together. The
+stock-versus-patched-off contrast and the patched-off-versus-on contrast
+answer different questions and must remain separately labeled.
 
 ### 6.3 Client checks and outcome limits
 
@@ -407,180 +566,272 @@ success. Return only approved aggregate probe results and limitations.
 
 ## 7. Report contract
 
-Return exactly: **(1) one fenced JSON report, (2) one CSV of at most 40 data
-rows, (3) a six-to-ten-line plain-language summary**. No raw captures, selectors,
+Return exactly: **(1) one fenced JSON report, (2) one combined CSV of at most
+40 data rows total, (3) a six-to-ten-line plain-language summary**. No raw captures, selectors,
 endpoint URLs, fingerprints, nicknames, IPs, hostnames, ContactInfo, onion
 addresses, descriptor IDs, Prometheus job/instance labels, or fleet counts.
-Call the relay “canary.” Private UTC window times are allowed in this report;
+Identify participating relays only by their stable opaque manifest IDs;
+do not return the identity mapping or actual fleet/host-roster counts. The
+example IDs in this specification do not assert a populated cohort. Private
+UTC window times are allowed in this report;
 public redistribution requires a separate confidentiality review because
 precise timing can aid correlation.
 
 ### 7.1 JSON fields and missing-data policy
 
+Schema version **2** wraps the existing per-relay report in `relay_reports`.
 The following is a **valid JSON template, not a measured result**. Populate
 only from accepted evidence. Null means unknown/not applicable and requires
 an explanation in `gaps`; zero means an observed zero. Boolean fields must
 also remain null when unverified. Replace the template status and criteria
-with the registered values and actual outcome.
+with the registered values and actual outcome. `phase` is
+`pilot_observation`, `cohort_observation`, or `isolated_rule_trial`. Each
+participating relay gets its own report, status and gaps, including assigned
+controls with missing comparison data. `build_cohort` is `stock` or `patched`;
+the fixed manifest ID does not change with treatment. The rollout object
+references the private roster and native artifact acceptance without exposing
+the roster size or claiming that this template is deployment evidence.
 
-Each entry in `flood_windows` and `mode_windows` contains **every measurement
-field in `baseline_window`** below. Flood entries additionally contain
+Within each relay report, each entry in `flood_windows` and `mode_windows`
+contains **every measurement field in `baseline_window`** below, including
+its unique `window_id`, build and condition. Flood entries additionally contain
 `episode_start_utc`, `episode_end_utc`, `episode_right_censored`, `window_kind`
 (`full_episode` or `peak_hour`), `mode`, and its baseline rate multiples.
 Mode entries additionally contain `mode`, `mode_confirmed_utc`,
 `settled_after_utc`, `rate_support_start_utc`, and interpretation limits.
-Observation mode is `observe`; isolated trial modes are `reuse_only` and
-`unknown_prev_hop_only`. Do not omit a missing value from an otherwise valid
+Patched observation mode is `observe`; isolated trial modes are `reuse_only`
+and `unknown_prev_hop_only`; stock mode is `stock`. The window's `cohort` is
+`stock`, `patched_off`, `patched_reuse_on`, or `patched_unknown_prev_hop_on`.
+Do not omit a missing value from an otherwise valid
 window just to make it look complete. If no baseline exists, set
 `baseline_window` to null and retain its reason.
 
+For stock reports, set custom-counter-dependent fields to null as specified
+in §2.3 and populate `metric_unavailability` with the affected fields and
+`not_available_on_stock_build`. Stock has no patched toggle history, and its
+unused patched-deployment/restart fields remain null with an explanation.
+Coverage is assessed against that report's declared required metric set.
+
 ```json
 {
+  "schema_version": 2,
   "status": "inconclusive",
-  "deployment": {
-    "install_path": "per-instance drop-in (DEPLOY section 1.1)",
-    "package_version": null,
-    "source_commit": null,
-    "artifact_sha256": null,
-    "restart_command_start_utc": null,
-    "restart_command_end_utc": null,
-    "t0_process_start_utc": null,
-    "t0_restart_utc": null,
-    "t_flag_utc": null,
-    "flag_last_observed_absent_utc": null,
-    "flag_consensus_valid_after_utc": null,
-    "flag_consensus_valid_until_utc": null,
-    "flag_check_interval_s": null,
-    "hours_t0_to_flag": null,
-    "restarts_during_measurement": null,
-    "restart_seconds": null,
-    "execstart_matched_stock": null,
-    "verify_config_ok": null,
-    "pid_changed": null,
-    "counters_present": [],
-    "enforcement": null,
-    "sandbox_1": null,
-    "scrape_interval_s": null
+  "phase": "pilot_observation",
+  "rollout": {
+    "roster_reference": "operator-private manifest",
+    "native_artifact_id": null,
+    "allocation_method": null,
+    "expansion_gate_status": null
   },
-  "observation": {
-    "planned_eligible_days": 14,
-    "eligible_days_observed": null,
-    "calendar_deadline_utc": null,
-    "coverage_fraction_minimum": null,
-    "maximum_allowed_gap_s": null,
-    "begin_dir_absolute_floor_per_s": null,
-    "relative_onset_multiple": 5,
-    "onset_persistence_s": 900,
-    "hs_corroboration_rule": null,
-    "exit_threshold_rule": null,
-    "exit_persistence_s": null,
-    "baseline_selection_rule": null,
-    "peak_selection_rule": null,
-    "retained_through_utc": null
-  },
-  "method": {
-    "counts": "Prometheus increase estimates from scraped counters",
-    "instant_query_time": "window end E",
-    "rate_lookback_s": null,
-    "rate_subquery_step_s": null,
-    "reused_circ_share_meaning": "window second-request/first-request transition ratio, not bounded share"
-  },
-  "baseline_window": {
-    "start_utc": null,
-    "end_utc": null,
-    "duration_s": null,
-    "rate_support_start_utc": null,
-    "coverage_fraction": null,
-    "maximum_gap_s": null,
-    "restart_evidence_complete": null,
-    "B": null,
-    "C": null,
-    "T": null,
-    "R": null,
-    "K": null,
-    "U": null,
-    "BW": null,
-    "BR": null,
-    "OP": null,
-    "OD": null,
-    "begin_dir_per_s": {"median": null, "p95": null, "peak": null},
-    "hs_req_per_s": {"median": null, "p95": null, "peak": null},
-    "r_hs": null,
-    "rho_hs": null,
-    "reused_circ_share": null,
-    "phi": null,
-    "hs_share": null,
-    "rho": null,
-    "write_read_ratio": null,
-    "bytes_per_begin_dir": null,
-    "onionskins_processed_per_s": null,
-    "onionskins_dropped_per_s": null,
-    "output_queue_circuit_kills": null,
-    "hsdir_oom_reclaimed_bytes": null
-  },
-  "flood_windows": [],
-  "mode_windows": [],
-  "flood_vs_baseline": {
-    "flood_window_index": null,
-    "begin_dir_rate_multiple": null,
-    "hs_request_rate_multiple": null
-  },
-  "csv_window": {
-    "start_utc": null,
-    "end_utc": null,
-    "duration_s": null,
-    "flood_window_index": null,
-    "selection_reason": null
-  },
-  "resources": {
-    "scope": "canary process",
+  "relay_reports": [
+    {
+      "relay_id": "pilot",
+      "build_cohort": "patched",
+      "required_metric_set": "patched",
+      "metric_unavailability": [],
+      "status": "inconclusive",
+      "deployment": {
+        "install_path": "per-instance drop-in (DEPLOY section 1.1)",
+        "package_version": null,
+        "source_commit": null,
+        "artifact_sha256": null,
+        "restart_command_start_utc": null,
+        "restart_command_end_utc": null,
+        "t0_process_start_utc": null,
+        "t0_restart_utc": null,
+        "t_flag_utc": null,
+        "flag_last_observed_absent_utc": null,
+        "flag_consensus_valid_after_utc": null,
+        "flag_consensus_valid_until_utc": null,
+        "flag_check_interval_s": null,
+        "hours_t0_to_flag": null,
+        "restarts_during_measurement": null,
+        "restart_seconds": null,
+        "execstart_matched_stock": null,
+        "verify_config_ok": null,
+        "pid_changed": null,
+        "counters_present": [],
+        "enforcement": null,
+        "sandbox_1": null,
+        "scrape_interval_s": null,
+        "target_os": "Ubuntu 26.04",
+        "build_id": null
+      },
+      "observation": {
+        "planned_eligible_days": 14,
+        "eligible_days_observed": null,
+        "calendar_deadline_utc": null,
+        "coverage_fraction_minimum": null,
+        "maximum_allowed_gap_s": null,
+        "begin_dir_absolute_floor_per_s": null,
+        "relative_onset_multiple": 5,
+        "onset_persistence_s": 900,
+        "hs_corroboration_rule": null,
+        "exit_threshold_rule": null,
+        "exit_persistence_s": null,
+        "baseline_selection_rule": null,
+        "peak_selection_rule": null,
+        "retained_through_utc": null,
+        "matched_eligible_duration_s": null
+      },
+      "method": {
+        "counts": "Prometheus increase estimates from scraped counters",
+        "instant_query_time": "window end E",
+        "rate_lookback_s": null,
+        "rate_subquery_step_s": null,
+        "reused_circ_share_meaning": "window second-request/first-request transition ratio, not bounded share"
+      },
+      "baseline_window": {
+        "window_id": null,
+        "build_id": null,
+        "cohort": "patched_off",
+        "mode": "observe",
+        "start_utc": null,
+        "end_utc": null,
+        "duration_s": null,
+        "rate_support_start_utc": null,
+        "coverage_fraction": null,
+        "maximum_gap_s": null,
+        "restart_evidence_complete": null,
+        "B": null,
+        "C": null,
+        "T": null,
+        "R": null,
+        "K": null,
+        "U": null,
+        "BW": null,
+        "BR": null,
+        "OP": null,
+        "OD": null,
+        "begin_dir_per_s": {
+          "median": null,
+          "p95": null,
+          "peak": null
+        },
+        "hs_req_per_s": {
+          "median": null,
+          "p95": null,
+          "peak": null
+        },
+        "r_hs": null,
+        "rho_hs": null,
+        "reused_circ_share": null,
+        "phi": null,
+        "hs_share": null,
+        "rho": null,
+        "write_read_ratio": null,
+        "bytes_per_begin_dir": null,
+        "onionskins_processed_per_s": null,
+        "onionskins_dropped_per_s": null,
+        "output_queue_circuit_kills": null,
+        "hsdir_oom_reclaimed_bytes": null
+      },
+      "flood_windows": [],
+      "mode_windows": [],
+      "flood_vs_baseline": {
+        "flood_window_index": null,
+        "begin_dir_rate_multiple": null,
+        "hs_request_rate_multiple": null
+      },
+      "csv_window": {
+        "start_utc": null,
+        "end_utc": null,
+        "duration_s": null,
+        "flood_window_index": null,
+        "selection_reason": null
+      },
+      "resources": {
+        "scope": "relay process",
+        "source_description_without_identifiers": null,
+        "sampling_interval_s": null,
+        "normal_statistic": null,
+        "normal_period_start_utc": null,
+        "normal_period_end_utc": null,
+        "rss_unit": "MiB",
+        "rss_mib_normal": null,
+        "rss_mib_flood_peak": null,
+        "cpu_pct_basis": "100 percent per logical CPU",
+        "cpu_pct_normal": null,
+        "cpu_pct_flood_peak": null,
+        "registered_stop_thresholds": null,
+        "threshold_breaches": []
+      },
+      "probe_aggregates": {
+        "performed": false,
+        "audit_totals": {
+          "attempted_submissions": null,
+          "acknowledged_commands": null,
+          "verified_received": null,
+          "verified_failed": null,
+          "command_rejected": null,
+          "timeouts": null,
+          "submission_indeterminate": null,
+          "protocol_or_io_indeterminate": null,
+          "aborted_indeterminate": null
+        },
+        "by_mode": [],
+        "excluded_transition_attempts": null,
+        "recovery_gaps": [],
+        "limitations": "No authorized probe phase represented in this template"
+      },
+      "mode_history": [],
+      "gaps": [
+        "Template only; replace with measured evidence and specific limitations"
+      ]
+    }
+  ],
+  "matched_comparisons": [],
+  "cohort_summaries": [],
+  "host_pressure": {
     "source_description_without_identifiers": null,
-    "sampling_interval_s": null,
-    "normal_statistic": null,
-    "normal_period_start_utc": null,
-    "normal_period_end_utc": null,
-    "rss_unit": "MiB",
-    "rss_mib_normal": null,
-    "rss_mib_flood_peak": null,
-    "cpu_pct_basis": "100 percent per logical CPU",
-    "cpu_pct_normal": null,
-    "cpu_pct_flood_peak": null,
     "registered_stop_thresholds": null,
-    "threshold_breaches": []
+    "threshold_breaches": [],
+    "shared_resource_limitations": "Relays share host resources and may affect their controls"
   },
-  "probe_aggregates": {
-    "performed": false,
-    "audit_totals": {
-      "attempted_submissions": null,
-      "acknowledged_commands": null,
-      "verified_received": null,
-      "verified_failed": null,
-      "command_rejected": null,
-      "timeouts": null,
-      "submission_indeterminate": null,
-      "protocol_or_io_indeterminate": null,
-      "aborted_indeterminate": null
-    },
-    "by_mode": [],
-    "excluded_transition_attempts": null,
-    "recovery_gaps": [],
-    "limitations": "No authorized probe phase represented in this template"
+  "csv_selection": {
+    "maximum_total_data_rows": 40,
+    "selection_rule": null,
+    "represented_windows": []
   },
-  "mode_history": [],
-  "gaps": ["Template only; replace with measured evidence and specific limitations"]
+  "gaps": [
+    "Template only; cohort allocation, native artifact acceptance and observations are not asserted"
+  ]
 }
 ```
 
-`counters_present` lists only the verified type names
+For patched reports, `counters_present` lists only the verified type names
 `hsdir_circ_reused`, `hsdir_req_reused`, `hsdir_request_total`, and
-`hsdir_unknown_prev_hop`. Record the actual effective configuration in
+`hsdir_unknown_prev_hop`. It is an empty array on stock, with structural
+unavailability recorded; do not present that as failed verification. Record
+the actual effective patched configuration in
 `enforcement`, rather than assuming `auto` means off. `mode_history` entries
 contain UTC boundaries, intent, acknowledged and confirmed state for both
 controls, and any uncertainty, without control endpoints or identities.
 The compatibility field `t0_restart_utc` is an alias of
 `t0_process_start_utc`, not the restart-command start. Compute
 `hours_t0_to_flag` from that process timestamp and the first-observed flag
-timestamp, preserving its stated uncertainty.
+timestamp, preserving its stated uncertainty. On an untouched stock control,
+the experiment's restart/recovery timestamps are not applicable; retain its
+continuity evidence without inventing a deployment event.
+
+Each `matched_comparisons` entry names the contrast
+(`stock_vs_patched_off`, `patched_off_vs_reuse_only`, or
+`patched_off_vs_unknown_prev_hop_only`), opaque `matched_block_id`, shared UTC
+start/end, assigned relay IDs and referenced `window_id` values, build/mode
+identities, accepted simultaneous coverage, common measured outcomes and
+limitations. State whether each contrast is accepted, missing or
+inconclusive and why. HS-dependent stock contrasts are unavailable. Compare
+mean rates or other preregistered outcomes, not unnormalized counts from
+unequal exposures; preserve individual contrasts instead of only reporting
+the favorable aggregate.
+
+Each `cohort_summaries` entry declares one exact build, one mode, included
+nonoverlapping `window_id` references, exposure units/denominator, selection
+rule, pooled numerators/denominators and resulting estimates. Apply §5.4;
+do not hide individual results or pool overlapping episode/peak windows.
+Host pressure is contextual evidence, not a replacement for per-process
+metrics. Report its thresholds, breaches and shared-resource limitations
+without host identity, unrelated process details or fleet counts.
 
 The window's `coverage_fraction` is the minimum across its required series;
 `maximum_gap_s` is the maximum across them. Preserve per-series quality details
@@ -606,47 +857,63 @@ stable-mode comparisons. Preflight failures and missed schedule slots belong
 in coverage/recovery gaps, not invented attempts. A single pooled success
 rate is insufficient for an off/on comparison.
 
-### 7.2 CSV: five-minute bins in the selected main window
+### 7.2 Combined CSV: five-minute bins in selected matched windows
 
-Choose a complete main hour where possible. The CSV covers a declared window
-of at most **200 minutes**, even when the full episode is longer. Preserve full
-episode statistics in JSON. Use `query_range`, step 300 seconds, with
+Choose a complete main hour where possible and preregister a representative
+matched subset for this compact extract. Preserve both comparison conditions
+where available; do not choose members only because their outcome supports a
+hypothesis. The combined CSV is limited to **40 data rows across all relays
+and windows**, not 40 per relay. Each represented window is at most 200
+minutes, but its allowed rows also depend on the other included windows.
+Record the selection and omitted windows in top-level `csv_selection`, and
+retain complete per-relay/full-episode statistics in JSON. Do not change the
+five-minute resolution or average away heterogeneity to fit the row limit.
+
+Use `query_range`, step 300 seconds, with
 evaluation timestamps **S+300, S+600, ..., E** for a window whose duration is
 an integer number of five-minute bins. A row is labeled by its end offset.
 Do not evaluate at S and present the preceding five minutes as part of this
-window. Align the chosen endpoints explicitly and report any omitted edges.
+window. Align matched endpoints explicitly and report any omitted edges.
+Every row carries `relay_id`, current `cohort`, `mode`, and `window_id`, so its
+offset resolves to that relay's declared JSON window; no identifying labels
+appear in the CSV.
 
 Use five-minute `rate()` values for BEGIN_DIR, HS request total and written
-bytes, and the following ratio templates with the same fixed canary selector:
+bytes, and the following ratio templates with that relay's fixed selector:
 
 ```promql
-rate(tor_relay_dos_total{type="hsdir_req_reused",<canary>}[5m])
+rate(tor_relay_dos_total{type="hsdir_req_reused",<relay>}[5m])
 / ignoring(type)
-rate(tor_relay_dos_total{type="hsdir_request_total",<canary>}[5m])
+rate(tor_relay_dos_total{type="hsdir_request_total",<relay>}[5m])
 
-rate(tor_relay_dos_total{type="hsdir_unknown_prev_hop",<canary>}[5m])
+rate(tor_relay_dos_total{type="hsdir_unknown_prev_hop",<relay>}[5m])
 / ignoring(type)
-rate(tor_relay_dos_total{type="hsdir_request_total",<canary>}[5m])
+rate(tor_relay_dos_total{type="hsdir_request_total",<relay>}[5m])
 ```
 
 Require exactly one matching series on each side after ignoring `type` and
 accepted quality in each bin. If the scrape cadence/coverage is insufficient
 for reliable five-minute estimates, report that gap rather than substitute
 unlabeled longer-lookback rates. Write `null` in missing or undefined numeric
-CSV fields; include the reason in JSON. No event or no usable main window means
+CSV fields; include the reason in JSON. Stock rows retain the common rates but
+use null for `hs_req_per_s`, `r_hs` and `phi`, identifying structural
+unavailability in JSON. No event or no usable selected window means
 a **header-only CSV**, not invented zero rows:
 
 ```csv
-t_offset_min,begin_dir_per_s,hs_req_per_s,r_hs,phi,bytes_written_per_s
+relay_id,cohort,mode,window_id,t_offset_min,begin_dir_per_s,hs_req_per_s,r_hs,phi,bytes_written_per_s
 ```
 
 ### 7.3 Six-to-ten-line summary
 
-State the observation status, covered eligible time and episode count; the
+State the phase and per-relay/matched coverage, without fleet counts; the
 mean-rate increase above baseline or why it is unavailable; r_hs and phi;
 the qualified rho_hs/transition ratio and hs_share; observed ntor_v3 drops and
 resource/pressure evidence; which rule matches the observed pattern; and the
-main gaps or surprising observations. If a later trial was authorized, state
+main gaps, heterogeneous results or surprising observations. Distinguish the
+full-build comparison from the incremental enforcement comparison, and state
+stock custom-metric unavailability and shared-host/unequal-exposure limits.
+If a later trial was authorized, state
 its modes, controlled-probe scope and limits, and distinguish association from
 causal evidence. Zero drops means “no observed ntor_v3 handshake drops,” not
 “the relay was not overloaded.” No data means unknown, not success.
@@ -666,6 +933,6 @@ record its identity or address.
 Use the existing MetricsPort and access controls. Keep notice logging and
 SafeLogging enabled. No load generation, probing of other relays, or optional
 client checks are authorized by the observation specification. Follow the
-deployment runbook for safety stops, the canary's maintenance controls, and
+deployment runbook for pilot/cohort safety stops, each relay's maintenance controls, and
 post-observation state. Reporting completion does not authorize a reload,
 restart, uninstall, unhold, enforcement toggle, or indefinite extension.

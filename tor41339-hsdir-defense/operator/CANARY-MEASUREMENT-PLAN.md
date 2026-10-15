@@ -1,200 +1,263 @@
-# Final canary measurement and optional enforcement plan
+# Final measurement plan: vipopen pilot, half-host rollout, and controlled trials
 
-Agreed design, 2026-10-14. **Documentation only: no deployment, build, probe,
-helper implementation, scheduled monitoring, or enforcement is authorized by
-this document's creation.** Runtime work starts only on a later instruction.
+Revised agreed design, 2026-10-14. **This revision authorizes documentation
+changes and their commit/push only. It does not authorize deployment, service
+changes, probes, helper implementation, scheduling, or enforcement.** Another
+agent is responsible for building the native Ubuntu 26.04 artifact and pushing
+its evidence to the repository. This task does not perform or certify that build.
 
 ## Outcome and fixed scope
 
-Run one pinned binary on **one canary** to characterize received HS directory
-traffic, inform a human decision about enforcement, and, if separately
-approved, measure the operational effects of a live enforcement trial.
+Characterize received HS directory traffic, inform a human decision about
+enforcement, then optionally measure its incremental effect. The selected host
+is **vipopen**, Ubuntu 26.04 amd64. Start with **one pilot**, then expand in
+small batches toward **half of the host's relays**, retaining stock references.
+This supersedes the previous experiment-wide one-relay limit; the one-pilot
+limit still applies to the initial deployment stage.
 
-- Retain patches **0001–0007 and the four existing HS counters unchanged**.
-  Do not add handoff, outcome, histogram, overlap, or enforcement-action C
-  counters for this experiment. GET/POST outcome telemetry is deferred.
-- The candidate artifact is
-  `tor_0.4.9.14-1~noble+1+tor41339.3_amd64.deb` for Ubuntu 24.04 amd64.
-  Pin the actual source commit, package digest, and binary digest before use;
-  branch names and `--version` alone do not identify the experiment's build.
-- Accept the **full seven-patch build as the baseline**. Patches 0003–0007
-  remain active with the two optional defenses off. This is not a promise of
-  unchanged stock behavior. Compare inactive/active defenses on the same build.
-- One planned canary restart activates the binary. Keep the identity,
-  DataDirectory, normal memory limit, and security confinement. Later mode
-  changes use ControlPort `SETCONF`, followed by `GETCONF`, with no restart.
-- Codex collects and analyzes through an explicitly configured persistent
-  collection/check-in arrangement; the human operator reviews the results and
-  decides phase transitions. A chat turn is not continuous monitoring.
-- No fleet changes, live load generation, identifying clients/services,
-  per-request payload logging, or public reporting of private identifiers.
+- Keep patches **0001–0007 and the four existing HS counters unchanged**.
+  No handoff, outcome, histogram, overlap, or enforcement-action C additions.
+- Require a **native Ubuntu 26.04 amd64 build of Tor 0.4.9.14**, delivered by
+  the other builder agent under [the build handoff](NATIVE-26.04-BUILD-HANDOFF.md).
+  The exact filename, package version, source commit and hashes are taken from
+  the published artifact manifest after review; none is invented here.
+- The earlier Noble package is historical evidence, not the selected vipopen
+  deployment artifact. Its static ABI checks passed, but this design deliberately
+  selects a native 26.04 build. Do not silently substitute it for a pending build.
+- Use **the same pinned native artifact for every patched member**. Freeze it
+  before the pilot and do not rebuild or replace it between observation and
+  enforcement. If a later artifact is necessary, stop and replan the comparison.
+- Accept the full seven-patch build as the patched baseline. Patches 0003–0007
+  remain active with the two optional defenses off; patched-off is not stock.
+- One planned process restart is required **per converted relay**. No restart
+  is planned for retained stock references. Keep each relay's identity,
+  DataDirectory, allocator, memory limits and security configuration unchanged.
+- Codex collects/analyzes through a configured persistent arrangement; the
+  human operator reviews findings and phase decisions. A chat turn is not a
+  monitoring daemon. No runtime collector or schedule exists merely because
+  this plan describes one.
 
-## Phase sequence and decision gates
+The host alias above is an explicit scope identifier requested by the operator.
+Keep actual relay identities, endpoints, credentials and host/fleet inventory
+counts in a private manifest; use stable opaque member IDs in reports.
 
-| Phase | Work after its separate authorization | Exit condition |
+## Private roster, rollout size, and comparison groups
+
+Before deployment, freeze the operator-approved vipopen roster. Record the
+host's eligible instance population N privately. The planned patched population
+is **floor(N/2), including the pilot**; the remainder stays stock. Do not infer
+permission to modify other hosts, silently change N, round upward, or recruit
+additional instances to replace failed/missing observations. Record exclusions,
+resource capacity and any approved change to the roster.
+
+Choose the pilot and future members using prior traffic, HSDir history, role,
+capacity and administrative reachability. Match stock references using the
+same predeployment evidence; select/randomize within comparable candidates
+where practical. Do not choose controls using their eventual treatment outcome.
+The pilot may be a convenience choice; identify that limitation.
+
+| Group | Binary / mode | What it can tell us |
 |---|---|---|
-| Preparation | Pin artifact; read reviews; complete private preflight, rollback inventory, monitoring, retention, health limits, and ownership | Operator reviews concrete preflight; all required fields complete |
-| Deployment | Unpack to `/opt`; override one instance; validate exact configuration; restart only that instance; verify binary, counters, confinement, and inactive defenses | Deployment check-in passes, or incident procedure applies |
-| HSDir recovery | Monitor health and continuity from startup; check fresh consensus for HSDir | Flag observed and documented, or predeclared recovery deadline reached |
-| Passive collection | Gather **7–14 usable HSDir days**, multiple quiet/flood episodes and resource data; no synthetic probes and no enforcement | Planned observation duration reached; human receives report |
-| Human review | Assess observed predicates, data quality, overload, and evidence limits | Continue observation, stop collection, or explicitly authorize a bounded trial |
-| Probe preparation | Implement helper and pass its deterministic/loopback lab acceptance tests; prepare a dedicated stock client and owned descriptor | Evidence reviewed; not implied by observation approval |
-| Optional trial | Low-rate controlled fetch checks in comparison and active windows; test one defense at a time; live disable on agreed failure criteria | Bounded trial complete or stopped; report outcomes and uncertainty |
-| Handoff | Leave defenses inactive and retain the binary pending operator instruction; set a dated maintenance/continuation review | Human decides continued observation or planned removal |
+| Stock reference | Existing stock binary, unchanged | Context and comparison with the full seven-patch build using common metrics; it has no four custom HS counters |
+| Patched-off | Pinned native 26.04 build, both defenses inactive | Instrumented observation and the contemporaneous control for an enforcement trial |
+| Patched-on | Same pinned native build, exactly one approved defense enabled | Incremental effect of that defense relative to patched-off |
 
-Proposed planning defaults are **14 usable days** (operator may select 7–14),
-daily summaries, and a recovery review at T0 + 7 days if HSDir has not returned.
-These are choices to confirm in preflight, not already running schedules. The
-~96-hour HSDir delay is an expectation, not a guaranteed return time. Do not
-count this warmup or unusable gaps toward the observation duration; record both
-usable duration and wall-clock duration. Set an absolute observation deadline
-and extension policy so missing data cannot create an indefinite task.
+Initially **every patched relay stays off**. During any trial, retain a
+contemporaneous patched-off group; never enable the entire patched cohort at
+once. Stock-versus-patched-on alone cannot isolate enforcement because the
+seven-patch baseline also differs. The approved roster must support both
+patched comparison groups; if it cannot, revise the trial design before testing
+rather than silently expanding the rollout. One member per group remains
+limited descriptive evidence; replication improves confidence.
 
-## Deployment and observation requirements
+Use stable IDs such as `pilot`, `patched_01`, and `stock_01`. The pilot keeps its
+ID throughout; build group and runtime mode are separate fields with histories.
+Each query must select one specific member; aggregate only after per-member
+checks. Do not publish the private N or a total host/fleet inventory.
 
-Follow [DEPLOY-AND-MEASURE.md](DEPLOY-AND-MEASURE.md). In particular:
+## Milestones and gates
 
-1. Preserve the original package holds, maintenance exclusions, service files,
-   loaded unit configuration, security settings, and rollback target privately.
-   Shared host maintenance changes need explicit scope agreement. Read-only
-   Prometheus access does not authorize changes to scrape or retention config.
-2. Never install this package host-wide on a multi-instance host or operate on
-   the unqualified master `tor` service. Unpacking runs no maintainer scripts.
-3. Keep both new options out of torrc and its includes. The stock pre-start
-   verifier does not recognize them. Preserve the current MetricsPort access
-   restrictions, notice logging, SafeLogging, and normal `MaxMemInQueues`.
-4. Initial `auto` is accepted when runtime configuration is `auto` and the
-   canary's current validated consensus lacks both parameters. Recheck at
-   every scheduled check-in. Log consensus validity and state privately.
-5. Verify each of the four counters individually, freshness, coverage, and
-   selector uniqueness. A total cardinality of four is insufficient by itself.
-   Counter values need not remain zero before the flag returns.
-6. Preserve at least 30 days of relevant data, or export validated daily/window
-   captures before expiry. Four-day warmup + fourteen observation days + a
-   possible trial exceeds the default fifteen-day horizon.
-7. Verify continuity using process start/activation history, boot history,
-   scrape coverage, and counter behavior. `resets() = 0` alone is not proof of
-   no restart. Missing evidence is reported as unknown.
-8. Predeclare sustained resource/service-health limits, alert recipients,
-   response times, and emergency actions. Expected flood-related CPU increases
-   are not automatic rollback triggers; distinguish a relay fault from a
-   scrape/analysis fault.
+| Milestone | Future authorized work | Completion condition |
+|---|---|---|
+| Native artifact handoff | Other agent builds/pushes the 26.04 package, manifest and actual lab evidence | Reviewer accepts the immutable artifact and evidence; an uploaded file alone is insufficient |
+| Preflight and collection preparation | Freeze roster/roles, privileges, exact configurations, rollback state, health limits, collection and retention | Concrete private preflight complete, including target-specific scrape capacity |
+| One pilot | Stage once, validate, restart only the selected pilot, verify its binary/configuration/metrics | Pilot startup and ordinary-load checks pass; operator receives check-in |
+| Bounded expansion | After pilot review and later expansion authorization, convert the remaining approved patched members in small batches | Up to the agreed half-host target reached, each member verified; stock references untouched |
+| HSDir recovery and passive observation | Track each converted member's own uptime/flag recovery, then gather 7–14 usable days with controls inactive | Observation/report criteria satisfied, or deadline/incident outcome reported |
+| Human review | Review patterns, quality, resources, and comparison limitations | Continue, finish, or explicitly approve a bounded enforcement/probe trial |
+| Probe preparation | Implement and validate the external helper in mock/isolated lab tests under its own authorization | Acceptance evidence reviewed; no relay C changes |
+| Optional trial | Matched patched-off/on groups, one defense at a time, controlled-client checks if approved | Bounded trial completed or stopped, all patched members returned inactive |
+| Handoff | Retain fixed binaries inactive pending instruction; dated maintenance review | Human decides continuation or planned removal |
 
-At 2026-10-14 21:49 UTC the public consensus valid after 21:00 UTC contained
-neither `hsdir_one_request_per_circ` nor `hsdir_refuse_unknown_prev_hop`.
-[Historical snapshot](https://collector.torproject.org/recent/relay-descriptors/consensuses/2026-10-14-21-00-00-consensus).
-This is historical evidence, not a substitute for the live preflight/check-in.
-Authorities can vote for names using generic consensus-parameter configuration;
-absence today does not make future inclusion impossible. An unexpected active
-state invalidates the affected observational interval and invokes the agreed
-live-disable procedure.
+Pilot success during the ~96-hour eligibility recovery only tests startup and
+ordinary load; it is **not evidence of stability under an HSDir flood**. A small
+expansion before the first flood is possible only with that uncertainty explicit
+in the operator's rollout decision. Set batch sizes, review cadence, serving
+capacity floor, and per-relay **and host-level** stop criteria in preflight.
+Do not restart the whole patched cohort together or use a host-wide Tor action.
+A failure pauses further expansion; do not spend the remaining rollout budget
+trying new members automatically.
 
-## Measurement and interpretation
+A later deployment instruction must distinguish pilot-only from pilot plus
+bounded expansion. Within an approved expansion, proceed only through its
+predeclared batch gates. This documentation push authorizes neither.
 
-Use [capture-and-validate-playbook.md](capture-and-validate-playbook.md) for
-counter definitions, window selection, queries, and the JSON/CSV/summary output.
+## Timing, eligibility, and observation
 
-- `T`: anonymous HS requests reaching the guard, including GET and POST.
-  `R`: requests after the first on a circuit. `K`: circuits reaching their
-  second HS request, counted once. `U`: requests whose previous hop is not
-  known through the consensus/descriptor lookup.
-- `R/T` and `U/T` describe observed predicates, not proven attack fractions or
-  legitimate-client failure rates. Their overlap is not measured.
-- `T/(T-R)` and `K/(T-R)` are secondary window-based proxies. Circuit histories
-  cross boundaries; `T-R` may be zero with positive `T`, and `K/(T-R)` may
-  exceed one. Undefined/missing/nonfinite results are null, never invented.
-- Prespecify quiet-window rules, a sustained relative flood trigger with an
-  absolute rate floor and HS-request corroboration, and episode-end criteria.
-  Preserve representative episodes; peak-hour comparisons are secondary.
-- Whole-relay bandwidth, CPU/RSS, handshake drops, and queue/OOM indicators
-  measure operational effects. They do not isolate HS response delivery.
-  HSDir OOM bytes describe reclaimed descriptor-cache memory.
-- No qualifying flood is an inconclusive observation, not proof of no attack
-  or that a defense is ineffective. One canary does not establish fleet-wide
-  effects. Aggregate receipt rates do not identify individual users.
+Budget about four days of HSDir recovery **after each member's own restart**;
+consensus/distribution delays and other eligibility conditions can add time.
+Record T0, first-observed T_flag and uncertainty per member. Do not align all
+members to the pilot's clock or compare still-ineligible members with active
+HSDirs as if exposure were equal.
 
-## Optional enforcement trial
+Historical HSDir eligibility can qualify a healthy candidate whose flag is
+currently absent because of a recent restart, if the operator approves that
+selection explicitly. There is no need to wait for recovery merely to reset
+uptime again; doing the swap during recovery starts a fresh ~96-hour interval.
+Useful subsequent traffic is still not guaranteed.
 
-The human approves a concrete schedule, tested helper, test fixture, mode order,
-comparison durations, probe cadence, settling criteria, stop limits, and
-rollback response before any live trial. A flood alert never enables a defense
-automatically. Keep this binary throughout; do not turn both defenses on in the
-initial trial.
+Proposed defaults are **14 usable HSDir days per patched member**, with 7–14
+selected in preflight, daily summaries, and a recovery review at each T0 + 7
+days without a flag. Preserve common-time eligible windows for comparisons.
+Valid zero traffic counts as observation; quality failures/warmup do not. Set
+an absolute study end and extension policy before deployment. Members that
+miss the deadline are reported as incomplete, not silently excluded or replaced.
 
-| Phase | `HSDirRefuseUnknownPrevHop` | `HSDirOneRequestPerCircuit` |
+Preserve multiple quiet/flood episodes. Use preregistered baseline, absolute
+and relative onset, HS corroboration, and episode-end rules. Peak-hour
+contrasts are secondary. No qualifying flood is an inconclusive exposure
+outcome, not proof of no attack or ineffective defenses.
+
+## Deployment, access, and collection
+
+Follow [DEPLOY-AND-MEASURE.md](DEPLOY-AND-MEASURE.md) for the exact per-instance
+procedure. Stage the reviewed native artifact once, keep it immutable, and
+repeat the validated switch separately for each approved patched member.
+Never install the package host-wide. Preserve the prior unit/drop-in,
+confinement, allocator, holds and maintenance-exclusion state privately.
+Shared maintenance changes need explicit scope agreement even if stock relay
+processes remain untouched. Preserve stock rollback verification by keeping
+the new options out of torrc/includes/defaults.
+
+The four traffic counters come from **Tor MetricsPort**. Existing Prometheus
+on the monitoring host scrapes them; a future reporting collector reads its
+API for history and exports. ControlPort **GETCONF is only for configuration
+state**, and SETCONF changes approved trial modes. The cookie is an admin
+authentication credential, not a requirement for MetricsPort reads. Establish
+an authenticated, narrowly scoped state-check/control path before deployment;
+do not expose the ControlPort or share its credential with report output.
+
+Initial `auto` is acceptable when verified inactive with both parameters absent
+from the locally accepted current consensus. A dated public check is historical
+context only. Recheck each member at scheduled check-ins; an unexpected active
+state invokes verified `0,0` under the incident policy and invalidates that
+member's affected interval. Explicit off is valid and must be reported as such.
+
+Arrange **15-second scraping with a 10-second timeout for each approved
+experiment target**, including the selected stock references, through the
+monitoring owner's authorized configuration path. The supported approach is
+exact-address target relabel overrides within the existing job, preserving
+static groups and public labels, not duplicate jobs. Check aggregate collection
+cost before expanding the target list; a successful one-target preflight does
+not establish capacity for the full roster. Prometheus access remains read-only
+until a configuration change is explicitly authorized to its owner.
+
+Verify each required series individually, freshness/coverage, per-process CPU
+and RSS, and process/service/boot continuity. `resets() = 0` alone is not proof
+of no restart. Stock references structurally lack the four custom counters;
+record those fields as unavailable, never zero. Keep notice logging,
+SafeLogging, normal memory limits and existing access restrictions.
+
+Use persistent incident alerts plus bounded scheduled state/coverage checks
+and daily private exports, with named operator ownership. A five-minute check
+cadence is a proposed preflight choice, not an installed schedule. Retain at
+least 30 days or export before expiry, and extend preservation to cover the
+last member's observation, review and trial. Report recovery and collector
+gaps; do not imply that an open chat provides unattended incident coverage.
+
+## Enforcement comparisons and limits
+
+The operator approves matched assignments, mode order, time blocks, probe
+cadence, settling limits and safety stops after observation. Match using
+**pretreatment** load/role/capacity, not request rates already changed by the
+defense. Randomize within matched patched candidates where practical. Retain
+patched-off controls in every active block. A later crossover may help if its
+carryover/settling assumptions are demonstrated; it is not an instant reset.
+
+| Mode | HSDirRefuseUnknownPrevHop | HSDirOneRequestPerCircuit |
 |---|---:|---:|
-| Comparison / live disable | 0 | 0 |
-| Previous-hop defense only | 1 | 0 |
-| Reuse defense only | 0 | 1 |
+| Patched comparison / live disable | 0 | 0 |
+| Previous-hop-only treatment | 1 | 0 |
+| Reuse-only treatment | 0 | 1 |
 
-Send both values in one authenticated `SETCONF`, require successful reply,
-query both with `GETCONF`, and record submission/verification times. Keep
-observation `auto` separate from these explicit trial states. Changes or
-reloads invalidate unverified state; never use `SAVECONF` to persist them.
+Set both values in one authenticated SETCONF on the **explicitly selected
+patched instance**, require successful reply, GETCONF both, and log submission
+and verification times per member. Do not send new options to stock binaries.
+No torrc edits, SAVECONF, SIGHUP, or restarts for phase changes. Combined
+enforcement is outside the initial trial; flood alerts never enable a rule.
 
-Exclude the full rate lookback after every toggle (at least five minutes for
-five-minute rates), plus a documented settling period supported by the data.
-No fixed 30–60-second delay guarantees that prior circuits/queues have drained.
-Old circuit history persists; disabling enforcement does not restore closed
-circuits. Do not allow any analysis lookback to straddle a transition.
+Exclude the full rate lookback plus documented settling after each member's
+mode transition. Five-minute rates need at least five minutes; 30–60 seconds
+does not establish drained circuits. Circuit history persists and disabling a
+defense does not restore closed circuits. Native artifacts, allocator and other
+settings remain constant across patched-off/on comparisons.
 
-Compare matched windows under comparable flood conditions, with repeated
-comparisons where safe. A quiet later week is not evidence of mitigation.
-Changing enforcement changes which requests can reach the counters: circuit
-closure prevents later requests and may interrupt a first response, while
-retries/adaptation change demand. Report resource effects alongside the
-predicates, not a reduction in predicates alone as prevented traffic.
+Same-host controls share CPU, RAM, network and failure risk. Relieving treated
+relays can benefit their controls. Monitor host pressure as well as per-process
+resources, and do not treat the members as independent hosts. Different HSDir
+positions and rotating attacks also create unequal exposure. Shared hardware
+and simultaneous sampling help comparison but do not make workload identical
+or eliminate temporal/adaptation confounding.
 
-Under continuous isolated reuse enforcement, `delta R` is an inferred count
-of reuse-triggered circuit-close decisions, not a delivered-response metric.
-`delta K` can miss closures on circuits already reused before the toggle.
-Under isolated previous-hop enforcement, `delta U` counts 503-refusal decisions,
-not delivered 503s. Combined-mode attribution is unresolved without overlap or
-action telemetry and is outside the initial trial.
+T/R/K/U retain the definitions and caveats in the
+[capture playbook](capture-and-validate-playbook.md). R/T and U/T are observed
+predicates, not attack fractions or prevented-resource percentages; T/(T-R)
+and K/(T-R) are window proxies with boundary limitations. Keep missing and
+undefined results null. Whole-relay bytes are not HS-only bytes.
 
-## Probe helper and client-impact evidence
+Under isolated reuse enforcement, delta R is an inferred count of close
+**decisions**; delta K can miss circuits already reused before a toggle. Under
+isolated previous-hop enforcement, delta U is a count of 503-refusal decisions,
+not delivered responses. The counters cannot attribute overlapping decisions
+when both rules are on. Enforcement also changes which future requests reach
+the counters and can cause retries or interrupted earlier responses.
 
-The current [hsfetch.py](../engineering/tools/hsfetch.py) is a lab helper, not
-an accepted measurement collector. Its future requirements and full acceptance
-matrix are in [probe-helper-acceptance.md](probe-helper-acceptance.md).
+## Probe acceptance, reporting, and completion
 
-Use a dedicated stock client, a valid descriptor belonging to an owned service
-and known to be available on the canary, and one outstanding request. Measure
-from submission using one monotonic overall deadline. Verify replies/events;
-matching service/server alone does not distinguish late repeated requests.
+The existing [hsfetch.py](../engineering/tools/hsfetch.py) remains a lab helper.
+Its [acceptance specification](probe-helper-acceptance.md) is not an implemented
+or passing test suite. Any later probe phase uses dedicated stock clients and
+owned valid fixtures on explicitly approved targets, with no automatic fallback
+to other HSDirs. Keep one outstanding request per client and a total experiment
+probe budget; adding targets does not multiply the allowed traffic silently.
 
-On ambiguous timeout: record it, stop the batch, and reset only the dedicated
-probe client before a new batch if needed. Do not wait forever for a terminal
-event: 503 and circuit closure need not emit `HS_DESC FAILED`. Neither
-ControlPort reconnection, `NEWNYM`, nor `CLOSECIRCUIT` is a guaranteed completed
-cleanup acknowledgement. Test actual isolation and readiness after reset;
-never restart the canary for probe recovery.
+Use a monotonic overall deadline from submission, correlate the available
+context without inventing a request ID, and stop an ambiguous/non-success batch.
+Verified client-process reset/readiness is required before recovery where
+specified. Never restart a relay for helper recovery. Neither reconnect,
+NEWNYM, CLOSECIRCUIT nor indefinite terminal-event waiting proves cleanup.
+Report timeouts in denominators and recovery gaps separately. Controlled
+receipt/latency does not establish uploads, application availability or all
+legitimate clients' experience. No internal handoff counters are added.
 
-Probe results establish controlled descriptor receipt and latency, not general
-application availability, upload success, or all legitimate users' experience.
-`RECEIVED` can coexist with missing/bad client authorization. Handoff counters
-would only measure an internal buffer transfer, so they are deliberately omitted.
-Count timeouts in outcomes and report recovery gaps separately. Use the same
-low-rate checks in the later comparison and active windows; initial collection
-stays entirely passive.
+Use the capture playbook's cohort report contract: one JSON containing per-member
+and comparison records, one bounded CSV with opaque member IDs, and a 6–10-line
+summary. Separate stock-reference/full-build observations from patched-off/on
+enforcement evidence. Preserve individual results and heterogeneity; do not
+replace them with an average of per-relay ratios or count overlapping windows
+twice. Raw target manifests, source labels, credentials, descriptors and
+identities remain private. Exact-time operator reports require separate
+redaction/coarsening before public release.
 
-## Reporting, privacy, and completion
-
-Deliver the de-identified JSON, at most 40 CSV rows for the selected main flood
-window, and a 6–10-line summary specified in the capture playbook. Include
-baseline-only, inconclusive, aborted, missing-data, and unknown-state outcomes.
-Separate observational evidence, controlled-client evidence, and inferred
-enforcement decisions. Preserve exact private provenance and mode history.
-
-Call the relay **canary**. Never return fingerprints, nicknames, addresses,
-hostnames, ContactInfo, descriptor IDs, Prometheus job/instance labels or URLs,
-or fleet counts. Keep raw source material private. Exact UTC times and traffic
-patterns can be correlated: this is a private operator report, and publication
-requires a separately redacted/coarsened copy.
-
-At collection/trial end, leave the same binary running with inactive defenses
-until instructed otherwise. Do not automatically unhold packages, remove the
-drop-in, or roll back. Record a dated human review of the continuing maintenance
-exception; an indefinite hold is not the default. Safety faults invoke the
-pre-agreed incident procedure. These documents neither certify PR merge
-readiness nor claim future helper tests or production checks have passed.
+At study/trial end, leave every patched member on the same binary with verified
+inactive defenses until instructed otherwise. Do not automatically unhold,
+remove drop-ins, roll back, or convert stock references. Keep a dated human
+maintenance review and emergency maintenance exception. On trouble, live-disable
+the affected treatment first where appropriate, pause the cohort trial/expansion,
+and use only the per-instance binary rollback required by the incident policy.
+A member's rollback does not release shared holds, reboot exceptions, profile
+changes or the staged binary still required by other patched members. Track
+those dependencies privately and restore shared state only after its final
+dependency is retired and the operator authorizes restoration.
+These documents do not certify PR readiness or claim new build/helper/runtime
+checks have passed.
