@@ -2,7 +2,7 @@
 
 **Scope.** Native amd64 build and unit tests, the upstream CI matrix
 (patched vs unpatched), the seccomp sandbox check, the deb.torproject.org
-noble `.deb`, and the mechanical finalization of the series and the torspec
+noble (24.04) and resolute (26.04) `.deb`s, and the mechanical finalization of the series and the torspec
 text.
 
 **Environment.**
@@ -38,7 +38,7 @@ unit tests and independent security review summarized in
 | A.1 `make check` scripts | equal on both sides (see the note on `test_practracker.sh` below) |
 | CI matrix (ci-driver.sh) | **No regressions** (nothing passes unpatched and fails patched). Green on both sides: minimal, distcheck, disable-dirauth, gpl, nss, docs, tracing. disable-relay: green patched; the unpatched run failed `test_cbt_mvp` (tor#41148). Environmental failures identical on both sides: hardened LSan in `sandbox/*`; integration IPv6 flavours and stem (no IPv6 in the container). See `ci-matrix/` |
 | Seccomp (`Sandbox 1`, amd64) | 33/33 processes in seccomp filter mode (`Seccomp: 2`); 0 "Caught a bad syscall". Stock HS GET/POST and DirPort parser paths behave identically to unpatched (0004 visible). **EPERM audit** (the filter's default action is EPERM, not SIGSYS; strace on every thread of every sandboxed relay/authority): patched-default and patched-enforce return EPERM only for OpenSSL's kTLS probe `setsockopt(SOL_TCP, TCP_ULP, "tls")`. The unpatched control shows the same probe plus glibc's `/proc/sys/vm/overcommit_memory` read. So the patched EPERM set is a subset of stock: **no new denied syscall**. See `seccomp/out-strace-audit/` |
-| `.deb` `+tor41339.3` (deb.torproject.org noble 0.4.9.14-1~noble+1 + the **current** series) | Built in a fresh 24.04 container: `dh_auto_test` 1613 ok / 24 skipped / 0 failed; no compiler warnings in files the series touches. Installed (`tor` package only) in a fresh 24.04 container: `--verify-config` passes; private-net relay under `Sandbox 1` (`Seccomp: 2`, 0 bad syscalls) reaches Bootstrapped 100%; all four `hsdir_*` counters present; enforcement `auto` (off). See `deb/` |
+| `.deb` `+tor41339.3` for 24.04 and 26.04 (deb.torproject.org 0.4.9.14-1~noble+1 and ~resolute+1 + the **current** series) | Each built in a fresh container of its release: `dh_auto_test` 1613 ok / 24 skipped / 0 failed on both; no compiler warning on any line the series adds. Feature parity checked: identical configure summary, file list, dependencies, sonames, units, modules and option defaults. Each installed (`tor` package only) in a fresh container of its release: `--verify-config` passes; private-net relay under `Sandbox 1` (`Seccomp_filters: 2`, 0 bad syscalls) reaches Bootstrapped 100%; all four `hsdir_*` counters present; enforcement `auto` (off). See `deb/` |
 | Reordered series (known-previous-hop rule first) | final tree identical to v3 plus 3 practracker exception lines (since removed by the polish refactor). **All 7 commits** build with 0 warnings and pass `make check`, `check-spaces` and `check-changes` (unit ok 1603 → 1613). See `series-reordered/` |
 | torspec | ready-to-apply patch in `../patches/torspec-param-spec.patch`; placement appended to `../patches/torspec-draft.txt` |
 

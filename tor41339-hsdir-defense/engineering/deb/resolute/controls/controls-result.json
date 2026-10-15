@@ -1,0 +1,218 @@
+{
+ "target": "004r",
+ "phase_seconds": 40,
+ "reuse_n": 5,
+ "target_pid": 110,
+ "phases": [
+  {
+   "phase": "P0 default (auto)",
+   "setconf": "(none: defaults)",
+   "getconf": [
+    "HSDirOneRequestPerCircuit=auto",
+    "HSDirRefuseUnknownPrevHop=auto",
+    "Sandbox=1"
+   ],
+   "counter_delta": {
+    "hsdir_request_total": 163,
+    "hsdir_req_reused": 118,
+    "hsdir_circ_reused": 2,
+    "hsdir_unknown_prev_hop": 20
+   },
+   "reuse_load": {
+    "load_issued": 100,
+    "load_recv": 100,
+    "load_fail": 0,
+    "load_groups": 20
+   },
+   "onehop_load": {
+    "load_issued": 20,
+    "load_recv": 20,
+    "load_fail": 0
+   },
+   "legit": {
+    "legit_attempts": 43,
+    "legit_ok": 43,
+    "legit_success_rate": 1.0,
+    "legit_mean_latency_s": 0.091,
+    "legit_p95_latency_s": 0.13
+   },
+   "target_pid_unchanged": true
+  },
+  {
+   "phase": "P1 explicit off",
+   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0",
+   "getconf": [
+    "HSDirOneRequestPerCircuit=0",
+    "HSDirRefuseUnknownPrevHop=0",
+    "Sandbox=1"
+   ],
+   "counter_delta": {
+    "hsdir_request_total": 163,
+    "hsdir_req_reused": 120,
+    "hsdir_circ_reused": 0,
+    "hsdir_unknown_prev_hop": 20
+   },
+   "reuse_load": {
+    "load_issued": 100,
+    "load_recv": 100,
+    "load_fail": 0,
+    "load_groups": 20
+   },
+   "onehop_load": {
+    "load_issued": 20,
+    "load_recv": 20,
+    "load_fail": 0
+   },
+   "legit": {
+    "legit_attempts": 43,
+    "legit_ok": 43,
+    "legit_success_rate": 1.0,
+    "legit_mean_latency_s": 0.087,
+    "legit_p95_latency_s": 0.131
+   },
+   "target_pid_unchanged": true
+  },
+  {
+   "phase": "P2 0002 on",
+   "setconf": "HSDirOneRequestPerCircuit=1 HSDirRefuseUnknownPrevHop=0",
+   "getconf": [
+    "HSDirOneRequestPerCircuit=1",
+    "HSDirRefuseUnknownPrevHop=0",
+    "Sandbox=1"
+   ],
+   "counter_delta": {
+    "hsdir_request_total": 103,
+    "hsdir_req_reused": 30,
+    "hsdir_circ_reused": 28,
+    "hsdir_unknown_prev_hop": 20
+   },
+   "reuse_load": {
+    "load_issued": 100,
+    "load_recv": 0,
+    "load_fail": 0,
+    "load_groups": 20
+   },
+   "onehop_load": {
+    "load_issued": 20,
+    "load_recv": 10,
+    "load_fail": 0
+   },
+   "legit": {
+    "legit_attempts": 42,
+    "legit_ok": 42,
+    "legit_success_rate": 1.0,
+    "legit_mean_latency_s": 0.194,
+    "legit_p95_latency_s": 1.011
+   },
+   "target_pid_unchanged": true
+  },
+  {
+   "phase": "P3 0002 off live",
+   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0",
+   "getconf": [
+    "HSDirOneRequestPerCircuit=0",
+    "HSDirRefuseUnknownPrevHop=0",
+    "Sandbox=1"
+   ],
+   "counter_delta": {
+    "hsdir_request_total": 161,
+    "hsdir_req_reused": 119,
+    "hsdir_circ_reused": 2,
+    "hsdir_unknown_prev_hop": 20
+   },
+   "reuse_load": {
+    "load_issued": 100,
+    "load_recv": 100,
+    "load_fail": 0,
+    "load_groups": 20
+   },
+   "onehop_load": {
+    "load_issued": 20,
+    "load_recv": 20,
+    "load_fail": 0
+   },
+   "legit": {
+    "legit_attempts": 41,
+    "legit_ok": 41,
+    "legit_success_rate": 1.0,
+    "legit_mean_latency_s": 0.178,
+    "legit_p95_latency_s": 0.998
+   },
+   "target_pid_unchanged": true
+  },
+  {
+   "phase": "P4 0001 on",
+   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=1",
+   "getconf": [
+    "HSDirOneRequestPerCircuit=0",
+    "HSDirRefuseUnknownPrevHop=1",
+    "Sandbox=1"
+   ],
+   "counter_delta": {
+    "hsdir_request_total": 163,
+    "hsdir_req_reused": 120,
+    "hsdir_circ_reused": 0,
+    "hsdir_unknown_prev_hop": 20
+   },
+   "reuse_load": {
+    "load_issued": 100,
+    "load_recv": 100,
+    "load_fail": 0,
+    "load_groups": 20
+   },
+   "onehop_load": {
+    "load_issued": 20,
+    "load_recv": 0,
+    "load_fail": 0
+   },
+   "legit": {
+    "legit_attempts": 43,
+    "legit_ok": 43,
+    "legit_success_rate": 1.0,
+    "legit_mean_latency_s": 0.088,
+    "legit_p95_latency_s": 0.14
+   },
+   "target_pid_unchanged": true
+  },
+  {
+   "phase": "P5 0001 off live",
+   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0",
+   "getconf": [
+    "HSDirOneRequestPerCircuit=0",
+    "HSDirRefuseUnknownPrevHop=0",
+    "Sandbox=1"
+   ],
+   "counter_delta": {
+    "hsdir_request_total": 163,
+    "hsdir_req_reused": 120,
+    "hsdir_circ_reused": 0,
+    "hsdir_unknown_prev_hop": 20
+   },
+   "reuse_load": {
+    "load_issued": 100,
+    "load_recv": 100,
+    "load_fail": 0,
+    "load_groups": 20
+   },
+   "onehop_load": {
+    "load_issued": 20,
+    "load_recv": 20,
+    "load_fail": 0
+   },
+   "legit": {
+    "legit_attempts": 43,
+    "legit_ok": 43,
+    "legit_success_rate": 1.0,
+    "legit_mean_latency_s": 0.087,
+    "legit_p95_latency_s": 0.131
+   },
+   "target_pid_unchanged": true
+  }
+ ],
+ "final_getconf": [
+  "HSDirOneRequestPerCircuit=auto",
+  "HSDirRefuseUnknownPrevHop=auto",
+  "Sandbox=1"
+ ],
+ "target_status": "Name:\ttor\nUmask:\t0022\nState:\tS (sleeping)\nTgid:\t110\nNgid:\t0\nPid:\t110\nPPid:\t1\nTracerPid:\t0\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\nFDSize:\t64\nGroups:\t0 \nNStgid:\t110\nNSpid:\t110\nNSpgid:\t109\nNSsid:\t109\nKthread:\t0\nVmPeak:\t  609024 kB\nVmSize:\t  347344 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t  129816 kB\nVmRSS:\t  129684 kB\nRssAnon:\t  117924 kB\nRssFile:\t   11760 kB\nRssShmem:\t       0 kB\nVmData:\t  183168 kB\nVmStk:\t     132 kB\nVmExe:\t    2400 kB\nVmLib:\t    8940 kB\nVmPTE:\t     380 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t5\nSigQ:\t0/64299\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t00019cebd9d0ac37\nSigIgn:\t0000000180000000\nSigCgt:\t0000000051015ecb\nCapInh:\t0000000000000000\nCapPrm:\t00000000a80425fb\nCapEff:\t00000000a80425fb\nCapBnd:\t00000000a80425fb\nCapAmb:\t0000000000000000\nNoNewPrivs:\t1\nSeccomp:\t2\nSeccomp_filters:\t2\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tf\nCpus_allowed_list:\t0-3\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t7766\nnonvoluntary_ctxt_switches:\t226\n"
+}

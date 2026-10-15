@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runs inside a FRESH ubuntu:24.04 container (docker --network host).
+# Runs inside a FRESH ubuntu:24.04 or ubuntu:26.04 container (docker --network host).
 # /debs = built packages (ro), /lab = private-net torrc fragment (ro).
 set -x
 export DEBIAN_FRONTEND=noninteractive

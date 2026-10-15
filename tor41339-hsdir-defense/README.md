@@ -111,8 +111,9 @@ delta 0). This sample and the model do not establish the live canary's
 legitimate-client failure rate; report controlled-client evidence separately.
 
 **amd64 build + seccomp (`engineering/`, `simulator/results/seccomp-*`).**
-Native amd64 build, full unit suite, upstream CI matrix, and an installable
-noble `.deb`. Under `Sandbox 1` the new enforcement branches (circuit close /
+Native amd64 build, full unit suite, upstream CI matrix, and installable
+`.deb`s for Ubuntu 24.04 and 26.04 (same patches and build configuration).
+Under `Sandbox 1` the new enforcement branches (circuit close /
 503 refusal) add **no sandbox-denied syscall** — confirmed by an strace EPERM
 audit, with the method validated against a known startup EPERM and the
 pre-existing tor#41060 SIGTERM bug.
@@ -169,7 +170,7 @@ operator/      count-only canary + capture playbook + crash-at-scale review
 analysis/      claim ledger, 0002 FP measurement, live-capture interpretation
 data/          de-identified live-relay flood capture (JSON)
 engineering/   amd64 build-check, CI matrix, seccomp audit, .deb build + install
-packages/      the built noble .deb (+ geoipdb), SHA256SUMS, buildinfo/changes
+packages/      the built .debs for Ubuntu 24.04 and 26.04 (+ geoipdb), SHA256SUMS, buildinfo/changes
 ```
 
 ## Scope

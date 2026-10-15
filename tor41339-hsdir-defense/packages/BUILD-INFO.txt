@@ -1,15 +1,31 @@
-Provenance: tor 0.4.9.14-1~noble+1+tor41339.3 (amd64) and tor-geoipdb (all)
+Provenance: tor 0.4.9.14 + the tor#41339 series, +tor41339.3, amd64, for
+  Ubuntu 24.04 (noble):    tor_0.4.9.14-1~noble+1+tor41339.3_amd64.deb
+  Ubuntu 26.04 (resolute): tor_0.4.9.14-1~resolute+1+tor41339.3_amd64.deb
+plus tor-geoipdb (all) for each. Checksums: SHA256SUMS.
 
-Source package (deb.torproject.org, noble):
-  tor_0.4.9.14.orig.tar.gz         sha256 182449ac1c8ff43278da27b69b02040e11d03d0327db6d9126e4190ec6235e4a
-                                   (identical to dist.torproject.org tor-0.4.9.14.tar.gz)
-  tor_0.4.9.14-1~noble+1.diff.gz   sha256 5dd5dd368a96a26206e22f310d8d3c4cef8517d3cd2e87d72e3262969b3a1b2f
-  tor_0.4.9.14-1~noble+1.dsc
+The two builds are the same code with the same features. They differ only in
+the system libraries each Ubuntu release ships (24.04: OpenSSL 3.0.13,
+zlib 1.3, liblzma 5.4.5, libzstd 1.5.5; 26.04: OpenSSL 3.5.5, zlib 1.3.1,
+liblzma 5.8.3, libzstd 1.5.7; libevent 2.1.12 on both) and the compiler.
+Identical: configure feature summary and configure line, package file list,
+Depends/Recommends, NEEDED sonames, compiled-in modules (relay, dirauth,
+dircache, pow), systemd units and default torrcs, option defaults
+(HSDirOneRequestPerCircuit auto, HSDirRefuseUnknownPrevHop auto), the four
+counters. Evidence: ../engineering/deb/resolute/parity-vs-noble.txt.
 
-Quilt series applied (debian/patches), from tor41339-hsdir-defense/patches/ at
-branch tor41339-hsdir-defense-clean commit 2b8ae1a (after the call-order /
-telemetry fix and the upstream-polish refactor), plus 0000 restoring
-doc/nofooter.conf:
+Source packages (deb.torproject.org; the Debian packaging of the two differs
+only in its changelog entry):
+  tor_0.4.9.14.orig.tar.gz             sha256 182449ac1c8ff43278da27b69b02040e11d03d0327db6d9126e4190ec6235e4a
+                                       (identical to dist.torproject.org tor-0.4.9.14.tar.gz)
+  tor_0.4.9.14-1~noble+1.diff.gz       sha256 5dd5dd368a96a26206e22f310d8d3c4cef8517d3cd2e87d72e3262969b3a1b2f
+  tor_0.4.9.14-1~resolute+1.diff.gz    sha256 3e9af7768b449c4808e8bfc504e66907c83e393c2e68e51cadc731c042f35804
+  tor_0.4.9.14-1~noble+1.dsc, tor_0.4.9.14-1~resolute+1.dsc (checksums above match them)
+
+Quilt series applied (debian/patches), identical for both builds, from
+tor41339-hsdir-defense/patches/ at branch tor41339-hsdir-defense-clean commit
+6ce9b53 (2b8ae1a before the branch was rebased onto main; same content; after
+the call-order / telemetry fix and the upstream-polish refactor), plus 0000
+restoring doc/nofooter.conf:
   312d1c4c207a458bae203ef3ab53d88e2815b1554163cafaa95320ba68ba3dfb  0000-restore-doc-nofooter.conf.patch
   1bf9653e1aa8203ee5077b9bbcf9d0458185ffbb776cf43a3abc7b995bbbd7b1  0001-hsdir-Refuse-HS-dir-requests-whose-previous-hop-is-n.patch
   451226b6adabe9e7d632602425efc528e2d939de4b826f212f33abd7c416ff1e  0002-hsdir-Serve-one-onion-service-directory-request-per-.patch
@@ -19,17 +35,28 @@ doc/nofooter.conf:
   2f8922346c15693ffec2961db68899f9081c04523e36bb2665a5752e22db52d7  0006-hs_desc-Check-signature-length-before-verifying-the-.patch
   dcfc08ca3c53551a26d74bfb7b64ad78c8850a1e2ae79ef736b24427eb6417f6  0007-hs_cache-Only-credit-HSDir-downloads-once-the-respon.patch
 
-Builder: fresh ubuntu:24.04 container (Canonical LTS image,
-  digest sha256:5ce7043d3beb84e91bfeecacb5fafc80602bf247a1dd6016bc0fe7d69d707eca),
-  driver ../engineering/deb/build-reordered/build-in-container-reordered.sh
-  (dpkg-buildpackage -b; set -o pipefail so a failed build cannot be masked).
+Builders (driver ../engineering/deb/build-reordered/build-in-container-reordered.sh,
+SUITE=noble or SUITE=resolute; dpkg-buildpackage -b; set -o pipefail so a
+failed build cannot be masked):
+  noble:    fresh ubuntu:24.04 container (Canonical LTS image,
+            digest sha256:5ce7043d3beb84e91bfeecacb5fafc80602bf247a1dd6016bc0fe7d69d707eca), gcc 13
+  resolute: fresh ubuntu:26.04 container (Canonical LTS image, Ubuntu 26.04.1,
+            digest sha256:51e35c02a42cf2a6646c5879f5752b38098ed0a20056a989f0af3a3c5e697c9a), gcc 15
 
-dh_auto_test (make test): 1613 tests ok, 24 skipped, 0 failed.
-Compiler warnings in files touched by the series: none.
-Binary contains all four count-only counters (hsdir_circ_reused,
+dh_auto_test (make test), both builds: 1613 tests ok, 24 skipped, 0 failed.
+Compiler warnings on lines the series adds: none in either build. Warnings
+in files the series touches are all in unchanged upstream test code:
+test_hs_descriptor.c:151 -Wmaybe-uninitialized (both builds), and, with
+gcc 15 only, test_dir_handle_get.c:2410 -Wmaybe-uninitialized.
+Each binary contains all four count-only counters (hsdir_circ_reused,
 hsdir_req_reused, hsdir_request_total, hsdir_unknown_prev_hop) and both
 options (HSDirOneRequestPerCircuit, HSDirRefuseUnknownPrevHop), default auto.
 
 Install: only the tor package is needed; tor-geoipdb is a Recommends
-(unchanged GeoIP data). Checksums: SHA256SUMS.
-Install-and-run check: ../engineering/deb/install-run-reordered/.
+(unchanged GeoIP data). Pick the package matching the host's release
+(. /etc/os-release; echo $VERSION_CODENAME -> noble or resolute).
+Install-and-run checks: ../engineering/deb/install-run-reordered/ (noble)
+and ../engineering/deb/resolute/ (resolute). The 26.04 delivery for the build
+handoff (package and extracted-binary SHA256s, comparison with the stock 26.04
+package, live-control lab, systemd/allocator/sibling checks, full make check):
+../engineering/deb/resolute/DELIVERY.md.

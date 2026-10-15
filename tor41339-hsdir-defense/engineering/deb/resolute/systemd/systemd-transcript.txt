@@ -1,0 +1,69 @@
+
+== host: Ubuntu 26.04.1 LTS, systemd 259, stock tor 0.4.9.11-0ubuntu0.26.04.1
+interfaces: lo 
+mimalloc: 5d8f2655c2f7be60689ca6e4630664dc4050ac699f0fc1144d6f78cfd63e85c3  /usr/local/lib/mimalloc/libmimalloc-2.0.9.so
+
+== stock start (both Sandbox 1 + mimalloc preload)
+CANARY pid=296 exe=/usr/bin/tor mimalloc_mapped=5 Seccomp_filters=4
+ActiveState=active SubState=running ActiveEnterTimestampMonotonic=4626558632 Type=notify NotifyAccess=all NRestarts=0 ExecMainStartTimestampMonotonic=4625885335 
+SIBLING pid=297 exe=/usr/bin/tor mimalloc_mapped=5 Seccomp_filters=4
+ActiveState=active SubState=running ActiveEnterTimestampMonotonic=4626559156 Type=notify NotifyAccess=all NRestarts=0 ExecMainStartTimestampMonotonic=4625885828 
+
+== §1 Path A: unpack (no maintainer scripts run)
+tor_0.4.9.14-1~resolute+1+tor41339.3_amd64.deb sha256 2bfc8e7012685d9d5d21a4b4fb4bc1174bef4544e6203eff868f9d1d90b973b7
+/opt/tor41339/usr/bin/tor sha256 b0df9de1fe27d125ebb64b2e2b80ba30b0aeb4c76f875ee598d49cb4421516b7
+Tor version 0.4.9.14.
+counter strings: 4
+
+== §1.1 steps 1-4 on CANARY
+apt hold: tor tor-geoipdb 
+effective ExecStart before: ExecStart=/usr/bin/tor --defaults-torrc /run/tor-instances/%i.defaults -f /etc/tor/instances/%i/torrc
+drop-ins: /etc/systemd/system/tor@CANARY.service.d/allocator.conf /etc/systemd/system/tor@CANARY.service.d/zz-tor41339.conf
+effective ExecStart after: ExecStart=/opt/tor41339/usr/bin/tor --defaults-torrc /run/tor-instances/%i.defaults -f /etc/tor/instances/%i/torrc
+Environment kept: LD_PRELOAD=/usr/local/lib/mimalloc/libmimalloc-2.0.9.so
+Configuration was valid
+SIBLING pid after daemon-reload: 297 (was 297)
+
+== §1.1 step 5: the one CANARY restart (Sandbox 1)
+restart tor@CANARY took 30577 ms
+CANARY pid 296 -> 410 exe=/opt/tor41339/usr/bin/tor user=_tor-CANARY mimalloc_mapped=5
+ActiveState=active SubState=running ActiveEnterTimestampMonotonic=4660500746 Type=notify NotifyAccess=all NRestarts=0 ExecMainStartTimestampMonotonic=4659989759 
+Type=notify unit reached active => tor sent READY=1 (it is never 'active' before READY for Type=notify)
+Bootstrapped 0% (starting): Starting
+Started tor@CANARY.service - Anonymizing overlay network for TCP (instance CANARY).
+Bootstrapped 0% (starting): Starting
+Started tor@CANARY.service - Anonymizing overlay network for TCP (instance CANARY).
+tor_relay_dos_total{type="hsdir_circ_reused"} 0
+tor_relay_dos_total{type="hsdir_req_reused"} 0
+tor_relay_dos_total{type="hsdir_request_total"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+250-HSDirOneRequestPerCircuit=auto
+250-HSDirRefuseUnknownPrevHop=auto
+250 Sandbox=1
+SIBLING pid: 297 (was 297) NRestarts=0
+
+== Tor Sandbox vs systemd/container filters on CANARY
+unit SystemCallFilter='~' NoNewPrivileges=yes PrivateDevices=yes
+Sandbox 1: Seccomp_filters=4
+restart tor@CANARY took 30524 ms
+Sandbox 0: Seccomp_filters=3 250 Sandbox=0
+restart tor@CANARY took 30612 ms
+Sandbox 1 again: Seccomp_filters=4 250 Sandbox=1 mimalloc_mapped=5
+=> the difference is tor's own filter; the remaining filters come from systemd's unit settings and the container
+
+== live controls on CANARY (no restart)
+250 HSDirOneRequestPerCircuit=1
+250 HSDirOneRequestPerCircuit=0
+250 HSDirRefuseUnknownPrevHop=1
+250 HSDirRefuseUnknownPrevHop=0
+after reload tor@CANARY: 250-HSDirOneRequestPerCircuit=auto  250 HSDirRefuseUnknownPrevHop=auto   pid=478 (was 478)
+SIBLING pid: 297 (was 297)
+
+== §6 rollback on CANARY
+restart tor@CANARY took 60725 ms
+CANARY exe=/usr/bin/tor active mimalloc_mapped=5
+unheld: ''
+
+== SIBLING across the whole run
+SIBLING pid start=297 end=297 NRestarts=0 active exe=/usr/bin/tor
+bad syscalls in journal: 0

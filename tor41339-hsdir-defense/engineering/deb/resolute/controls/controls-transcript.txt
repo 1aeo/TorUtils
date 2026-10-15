@@ -1,0 +1,29 @@
+os: Ubuntu 26.04.1 LTS; tor: 0.4.9.14-1~resolute+1+tor41339.3; Sandbox=1
+iface: lo:
+INFO:chutney:creating '/work/net/nodes.1792042828', linking to '/work/net/nodes'
+Creating identity key for test003a     with /usr/bin/tor-gencert
+INFO:chutney:Loading network from nodes dir: '/work/net/nodes'->'/work/net/nodes.1792042828
+Starting nodes
+
+Starting nodes
+
+torrc=/work/lc-reuse/torrc ctl=8020 role=client bin=/lc/tor EVIL_ISO_SESSIONGRP=1 EVIL_ONEHOP=unset
+torrc=/work/lc-onehop/torrc ctl=8022 role=onehop bin=/lc/tor EVIL_ISO_SESSIONGRP=unset EVIL_ONEHOP=1
+target HSDir 004r serves onion tcwpwye3...
+{"phase": "P0 default (auto)", "setconf": "(none: defaults)", "getconf": ["HSDirOneRequestPerCircuit=auto", "HSDirRefuseUnknownPrevHop=auto", "Sandbox=1"], "counter_delta": {"hsdir_request_total": 163, "hsdir_req_reused": 118, "hsdir_circ_reused": 2, "hsdir_unknown_prev_hop": 20}, "reuse_load": {"load_issued": 100, "load_recv": 100, "load_fail": 0, "load_groups": 20}, "onehop_load": {"load_issued": 20, "load_recv": 20, "load_fail": 0}, "legit": {"legit_attempts": 43, "legit_ok": 43, "legit_success_rate": 1.0, "legit_mean_latency_s": 0.091, "legit_p95_latency_s": 0.13}, "target_pid_unchanged": true}
+{"phase": "P1 explicit off", "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0", "getconf": ["HSDirOneRequestPerCircuit=0", "HSDirRefuseUnknownPrevHop=0", "Sandbox=1"], "counter_delta": {"hsdir_request_total": 163, "hsdir_req_reused": 120, "hsdir_circ_reused": 0, "hsdir_unknown_prev_hop": 20}, "reuse_load": {"load_issued": 100, "load_recv": 100, "load_fail": 0, "load_groups": 20}, "onehop_load": {"load_issued": 20, "load_recv": 20, "load_fail": 0}, "legit": {"legit_attempts": 43, "legit_ok": 43, "legit_success_rate": 1.0, "legit_mean_latency_s": 0.087, "legit_p95_latency_s": 0.131}, "target_pid_unchanged": true}
+{"phase": "P2 0002 on", "setconf": "HSDirOneRequestPerCircuit=1 HSDirRefuseUnknownPrevHop=0", "getconf": ["HSDirOneRequestPerCircuit=1", "HSDirRefuseUnknownPrevHop=0", "Sandbox=1"], "counter_delta": {"hsdir_request_total": 103, "hsdir_req_reused": 30, "hsdir_circ_reused": 28, "hsdir_unknown_prev_hop": 20}, "reuse_load": {"load_issued": 100, "load_recv": 0, "load_fail": 0, "load_groups": 20}, "onehop_load": {"load_issued": 20, "load_recv": 10, "load_fail": 0}, "legit": {"legit_attempts": 42, "legit_ok": 42, "legit_success_rate": 1.0, "legit_mean_latency_s": 0.194, "legit_p95_latency_s": 1.011}, "target_pid_unchanged": true}
+{"phase": "P3 0002 off live", "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0", "getconf": ["HSDirOneRequestPerCircuit=0", "HSDirRefuseUnknownPrevHop=0", "Sandbox=1"], "counter_delta": {"hsdir_request_total": 161, "hsdir_req_reused": 119, "hsdir_circ_reused": 2, "hsdir_unknown_prev_hop": 20}, "reuse_load": {"load_issued": 100, "load_recv": 100, "load_fail": 0, "load_groups": 20}, "onehop_load": {"load_issued": 20, "load_recv": 20, "load_fail": 0}, "legit": {"legit_attempts": 41, "legit_ok": 41, "legit_success_rate": 1.0, "legit_mean_latency_s": 0.178, "legit_p95_latency_s": 0.998}, "target_pid_unchanged": true}
+{"phase": "P4 0001 on", "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=1", "getconf": ["HSDirOneRequestPerCircuit=0", "HSDirRefuseUnknownPrevHop=1", "Sandbox=1"], "counter_delta": {"hsdir_request_total": 163, "hsdir_req_reused": 120, "hsdir_circ_reused": 0, "hsdir_unknown_prev_hop": 20}, "reuse_load": {"load_issued": 100, "load_recv": 100, "load_fail": 0, "load_groups": 20}, "onehop_load": {"load_issued": 20, "load_recv": 0, "load_fail": 0}, "legit": {"legit_attempts": 43, "legit_ok": 43, "legit_success_rate": 1.0, "legit_mean_latency_s": 0.088, "legit_p95_latency_s": 0.14}, "target_pid_unchanged": true}
+{"phase": "P5 0001 off live", "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0", "getconf": ["HSDirOneRequestPerCircuit=0", "HSDirRefuseUnknownPrevHop=0", "Sandbox=1"], "counter_delta": {"hsdir_request_total": 163, "hsdir_req_reused": 120, "hsdir_circ_reused": 0, "hsdir_unknown_prev_hop": 20}, "reuse_load": {"load_issued": 100, "load_recv": 100, "load_fail": 0, "load_groups": 20}, "onehop_load": {"load_issued": 20, "load_recv": 20, "load_fail": 0}, "legit": {"legit_attempts": 43, "legit_ok": 43, "legit_success_rate": 1.0, "legit_mean_latency_s": 0.087, "legit_p95_latency_s": 0.131}, "target_pid_unchanged": true}
+final: ['HSDirOneRequestPerCircuit=auto', 'HSDirRefuseUnknownPrevHop=auto', 'Sandbox=1']
+--- bad syscalls across all node logs: 0
+--- 'Refusing HS directory request' / 'Closing circuit after repeated' lines (need ProtocolWarnings; chutney sets it):
+      2 Closing circuit after repeated HS directory request from 127.0.0.1:58178 ID=E+1vmpYrfFZ4nQow1bas5lIvoaYvppLGFUem24cJwRs RSA_ID=39C7A1913EE9BEC72F6EE34189691B9FD695F386.
+      2 Refusing HS directory request from unknown previous hop 127.0.0.1:58178 ID=E+1vmpYrfFZ4nQow1bas5lIvoaYvppLGFUem24cJwRs RSA_ID=39C7A1913EE9BEC72F6EE34189691B9FD695F386.
+004r Sandbox=1 Seccomp_filters: 2
+005r Sandbox=1 Seccomp_filters: 2
+006r Sandbox=1 Seccomp_filters: 2
+007r Sandbox=1 Seccomp_filters: 2
+008r Sandbox=1 Seccomp_filters: 2
+009r Sandbox=1 Seccomp_filters: 2
