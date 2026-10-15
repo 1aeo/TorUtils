@@ -167,7 +167,8 @@ quantities the stock (unpatched) counters can and cannot establish.
 patches/       the 7-patch series (git am) + torspec text
 simulator/     closed-lab benchmark: design, harness (scripts/), results/
 operator/      count-only canary + capture playbook + crash-at-scale review
-analysis/      claim ledger, 0002 FP measurement, live-capture interpretation
+analysis/      claim ledger, 0002 FP measurement, live-capture interpretation,
+               flood cost on an HSDir and constrained hosts
 data/          de-identified live-relay flood capture (JSON)
 engineering/   amd64 build-check, CI matrix, seccomp audit, .deb build + install
 packages/      the built .debs for Ubuntu 24.04 and 26.04 (+ geoipdb), SHA256SUMS, buildinfo/changes
