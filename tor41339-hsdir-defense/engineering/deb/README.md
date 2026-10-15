@@ -87,7 +87,8 @@ and the same for both builds. `changelog` is the 24.04 build's
 
 - `dh_auto_test` (`make test`, the full unit binary), both builds: **1613 tests
   ok, 24 skipped (the same environment-conditional set), 0 failed.** Full
-  `make check` on 26.04: `resolute/make-check-summary.txt` (follow-up commit).
+  `make check` on 26.04: 34 tests, 33 pass, 1 skip, 0 fail; lint steps pass
+  (`resolute/make-check-summary.txt`).
 - No compiler warning on any line the series adds (gcc 13 and gcc 15). The
   only warnings in files the series touches are in unchanged upstream test
   code (`BUILD-INFO.txt` lists them).

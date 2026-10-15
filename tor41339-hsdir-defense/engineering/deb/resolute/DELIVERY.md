@@ -97,9 +97,12 @@ Compared with the official unpatched `tor_0.4.9.14-1~resolute+1_amd64.deb`
    - `util/load_win_lib`.
 
    No compiler warning on any line the series adds. Full `make check` (unit,
-   slow and script tests) on the same patched 26.04 tree: **running at the time
-   of this delivery commit**; its result is added as `make-check-summary.txt`
-   in a follow-up commit (the artifact does not change).
+   slow and script tests) on the same patched 26.04 tree: **34 tests, 33 pass,
+   1 skip, 0 fail**, and its lint steps pass once the release tarball's missing
+   `lintChanges.py` is supplied from the tag (its shellcheck step was skipped:
+   not installed). practracker, check-docs and
+   check-logs produce the same results as on the unpatched tarball; the
+   series adds no problem (`make-check-summary.txt`).
 2. **Dependencies, startup, readiness, counters.**
    - Dependencies: `apt-get install` of only the `tor` package resolved in a
      fresh 26.04 container (`install-run-transcript.txt`), with no missing
