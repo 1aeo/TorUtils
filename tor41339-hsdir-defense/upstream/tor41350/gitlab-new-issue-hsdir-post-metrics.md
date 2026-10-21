@@ -15,7 +15,7 @@ Outcomes in 0.4.9.14:
 | same | `hs_cache.c:182-193` | Valid, but the cached revision counter is ≥ the uploaded one |
 | `200 HS descriptor stored successfully.` | `dircache.c:1614-1621` | Stored |
 
-- **"Not newer" is a valid, signed descriptor.** One C Tor instance only ever uploads increasing counters: an OPE of the seconds since the period start, recomputed per upload (`hs_service.c:3248-3274`, `:3550`). So a "not newer" upload is a stale duplicate, for example from several instances sharing a key. The service logs it as "Malformed hidden service descriptor?" (`dirclient.c:2809-2817`).
+- **"Not newer" is a valid, signed descriptor.** One C Tor instance only ever uploads increasing counters: an OPE of the seconds since the start of the shared-random protocol run, recomputed per upload (`hs_service.c:3235-3274`, `:3550`). So a "not newer" upload is a stale duplicate, for example from several instances sharing a key. The service logs it as "Malformed hidden service descriptor?" (`dirclient.c:2809-2817`).
 - **The single-hop 503 isn't counted either.** `single_hop_refused` is only bumped at `rendmid.c:53`. C Tor services always upload with `DIRIND_ANONYMOUS` (`hs_service.c:4051`).
 
 **Proposal** (patch ready, about 90 lines plus a test):

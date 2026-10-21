@@ -47,7 +47,7 @@ Patches
 
 hsdir-series/0002-metrics-...patch
   The same commit, for stacking after patches/0001-0007 and 0001 above.
-  The only difference is two test includes, which patches/0007 already adds.
+  The only difference is two test includes, which patches/0002 already adds.
 
 Applying
 --------
