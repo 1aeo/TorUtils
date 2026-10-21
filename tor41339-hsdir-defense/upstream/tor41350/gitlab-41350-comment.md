@@ -33,7 +33,7 @@ Every accepted connection either reaches `note_connection()` or fails init (`con
 - `connection_mark_for_close_internal_()`: decrement only if the bit is set, then clear it.
 - `connection_ext_or_transition()`: if the bit is set, move the count from `EXT_OR` to `OR`.
 
-No (`from_listener`, type, family) snapshot is needed: `ext_orport.c:91` is the only post-count mutation. The new tests (`connection/opened_counter`, `extorport/handshake`) fail on 0.4.9.14 and pass with the fix.
+One bit is enough: once a connection is counted, its (`from_listener`, type, family) only change at `ext_orport.c:91`, which the transition hunk handles. The new `connection/opened_counter` test and three new assertions in the existing `extorport/handshake` test fail on 0.4.9.14 and pass with the fix.
 
 Questions before the MR (target `maint-0.4.9`; also applies to `main`):
 

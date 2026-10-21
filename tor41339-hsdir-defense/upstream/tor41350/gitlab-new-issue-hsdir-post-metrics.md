@@ -3,9 +3,9 @@
 
 **Title:** MetricsPort: count HS descriptor uploads on HSDirs by outcome
 
-HSDir `POST /tor/hs/3/publish` outcomes aren't counted anywhere. Every rejection that `handle_post_hs_descriptor()` makes returns the same `400 "Invalid HS descriptor. Rejected."` (`dircache.c:1617-1621`). Underneath, `hs_cache_store_as_dir()` returns −1 both for an invalid descriptor and for a valid one that isn't newer than the cached copy (`hs_cache.c:378-411`).
+HSDir `POST /tor/hs/3/publish` outcomes aren't on the MetricsPort. Successful stores only feed the unique-onion count in extra-info (`hidserv-dir-v3-onions-seen`, `hs_cache.c:216-219`); rejections aren't counted anywhere. Every rejection that `handle_post_hs_descriptor()` makes returns the same `400 "Invalid HS descriptor. Rejected."` (`dircache.c:1617-1621`). Underneath, `hs_cache_store_as_dir()` returns −1 both for an invalid descriptor and for a valid one that isn't newer than the cached copy (`hs_cache.c:378-411`).
 
-Outcomes in 0.4.9.14:
+Outcomes in 0.4.9.14 once the URL starts with `/tor/hs/`. The earlier `503 Not acting as a public relay` (`dircache.c:1591-1597`) and `400 Bad request` (`:1599-1602`) apply to every POST and aren't counted here.
 
 | Response | Where | Condition |
 |-|-|-|
@@ -15,7 +15,7 @@ Outcomes in 0.4.9.14:
 | same | `hs_cache.c:182-193` | Valid, but the cached revision counter is ≥ the uploaded one |
 | `200 HS descriptor stored successfully.` | `dircache.c:1614-1621` | Stored |
 
-- **"Not newer" is a valid, signed descriptor.** One C Tor instance only ever uploads increasing counters: an OPE of the seconds since the start of the shared-random protocol run, recomputed per upload (`hs_service.c:3235-3274`, `:3550`). So a "not newer" upload is a stale duplicate, for example from several instances sharing a key. The service logs it as "Malformed hidden service descriptor?" (`dirclient.c:2809-2817`).
+- **"Not newer" is a valid, signed descriptor.** One C Tor instance uploads increasing counters as long as its clock doesn't step back: an OPE of the seconds since the start of the shared-random protocol run, recomputed per upload (`hs_service.c:3235-3274`, `:3550`). So a "not newer" upload is usually a stale duplicate, for example from several instances sharing a key, or from a clock that stepped back. The service logs it as "Malformed hidden service descriptor?" (`dirclient.c:2809-2817`).
 - **The single-hop 503 isn't counted either.** `single_hop_refused` is only bumped at `rendmid.c:53`. C Tor services always upload with `DIRIND_ANONYMOUS` (`hs_service.c:4051`).
 
 **Proposal** (patch ready, about 90 lines plus a test):
@@ -31,7 +31,7 @@ tor_relay_hsdir_post_total{action="single_hop"}  # 503
 - Same shape as `tor_relay_intro1_total`: an enum, `relay_increment_hsdir_post_action()`, and a static array in `relay_metrics.c`.
 - All counting happens in `dircache.c`. It's built only with the relay module, so `--disable-module-relay` needs no `relay_stub.c` stub.
 - `hs_cache_store_as_dir()` returns −2 for "not newer". Its only caller checks `< 0`, and two test assertions change from −1 to −2.
-- Applies to `main`, and on top of the tor#41339 HSDir patches.
+- Applies to `main`. A variant that differs only in two test includes applies on top of the tor#41339 HSDir patches.
 
 Questions:
 
