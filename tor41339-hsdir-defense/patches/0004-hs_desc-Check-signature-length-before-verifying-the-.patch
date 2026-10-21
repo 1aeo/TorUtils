@@ -1,7 +1,7 @@
-From 0ff3717ef1656b8ee64580548e0e5561fdda3ae1 Mon Sep 17 00:00:00 2001
+From ea6def3182f6591966a61657e8a039f6bbf414a3 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 6/7] hs_desc: Check signature length before verifying the
+Subject: [PATCH 04/11] hs_desc: Check signature length before verifying the
  signing cert
 
 desc_decode_plaintext_v3() parsed and Ed25519-verified the descriptor
@@ -31,7 +31,7 @@ Related to 41339.
 
 diff --git a/changes/ticket41339_sigcheck b/changes/ticket41339_sigcheck
 new file mode 100644
-index 0000000000..3a6e762f5b
+index 0000000..3a6e762
 --- /dev/null
 +++ b/changes/ticket41339_sigcheck
 @@ -0,0 +1,9 @@
@@ -45,7 +45,7 @@ index 0000000000..3a6e762f5b
 +      padded signatures seen in August 2026, slightly cheaper to reject; an
 +      attacker can still send a valid-length signature. Part of ticket 41339.
 diff --git a/src/feature/hs/hs_descriptor.c b/src/feature/hs/hs_descriptor.c
-index 87baf40efd..3f47b0003e 100644
+index 87baf40..b6deec1 100644
 --- a/src/feature/hs/hs_descriptor.c
 +++ b/src/feature/hs/hs_descriptor.c
 @@ -2039,6 +2039,23 @@ decode_intro_points(const hs_descriptor_t *desc,
@@ -57,13 +57,13 @@ index 87baf40efd..3f47b0003e 100644
 +static int
 +desc_sig_len_is_valid(const char *b64_sig)
 +{
-+  if (strlen(b64_sig) != ED25519_SIG_BASE64_LEN) {
++  size_t sig_len = strlen(b64_sig);
++  if (sig_len != ED25519_SIG_BASE64_LEN) {
 +    static ratelim_t warning_limit = RATELIM_INIT(600);
 +    log_fn_ratelim(&warning_limit, LOG_WARN, LD_REND,
 +                   "Service descriptor has an invalid signature length. "
 +                   "Expected %d but got %lu",
-+                   ED25519_SIG_BASE64_LEN,
-+                   (unsigned long) strlen(b64_sig));
++                   ED25519_SIG_BASE64_LEN, (unsigned long) sig_len);
 +    return 0;
 +  }
 +  return 1;
@@ -121,7 +121,7 @@ index 87baf40efd..3f47b0003e 100644
      goto err;
    }
 diff --git a/src/test/test_hs_descriptor.c b/src/test/test_hs_descriptor.c
-index 89815f4858..716e53f128 100644
+index 89815f4..716e53f 100644
 --- a/src/test/test_hs_descriptor.c
 +++ b/src/test/test_hs_descriptor.c
 @@ -654,6 +654,7 @@ static void
