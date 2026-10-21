@@ -1,0 +1,414 @@
+From 7f06796b5e9ea000bb9153e736d53b40b9426b72 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Tue, 20 Oct 2026 21:34:26 -0700
+Subject: [PATCH 10/11] dos: Apply per-circuit stream rate and live-stream
+ limits to BEGIN_DIR
+
+Apply the per-circuit stream creation token bucket and a new
+concurrent live-stream ceiling (DoSStreamCreationMaxConcurrent,
+default 20) to BEGIN_DIR cells in connection_exit_begin_conn() before
+allocating internal connections, and export begindir_rate_limited and
+begindir_live_limited on the MetricsPort.
+---
+ changes/ticket41339_begindir_stream_limits |  6 ++
+ doc/man/tor.1.txt                          | 14 +++-
+ src/core/or/connection_edge.c              | 80 +++++++++---------
+ src/core/or/dos.c                          | 97 +++++++++++++++++-----
+ src/core/or/dos.h                          |  7 +-
+ src/core/or/dos_options.inc                |  3 +
+ src/feature/relay/relay_metrics.c          |  4 +
+ 7 files changed, 146 insertions(+), 65 deletions(-)
+ create mode 100644 changes/ticket41339_begindir_stream_limits
+
+diff --git a/changes/ticket41339_begindir_stream_limits b/changes/ticket41339_begindir_stream_limits
+new file mode 100644
+index 0000000..6caadc5
+--- /dev/null
++++ b/changes/ticket41339_begindir_stream_limits
+@@ -0,0 +1,6 @@
++  o Minor features (DoS-resistance, directory):
++    - Apply the per-circuit stream creation token bucket and a new
++      concurrent live-stream ceiling (DoSStreamCreationMaxConcurrent,
++      default 20) to BEGIN_DIR cells in connection_exit_begin_conn() before
++      allocating internal connections, and export begindir_rate_limited and
++      begindir_live_limited on the MetricsPort. Part of ticket 41339.
+diff --git a/doc/man/tor.1.txt b/doc/man/tor.1.txt
+index 5ba5549..d6b640c 100644
+--- a/doc/man/tor.1.txt
++++ b/doc/man/tor.1.txt
+@@ -3110,12 +3110,13 @@ Denial of Service mitigation subsystem described above.
+     consensus parameter. If not defined in the consensus, the value is 0.
+     (Default: auto)
+ 
+-The following options are useful only for a exit relay.
++The following options apply to stream creation on a relay (exit and directory streams).
+ 
+ [[DoSStreamCreationEnabled]] **DoSStreamCreationEnabled** **0**|**1**|**auto**::
+ 
+     Enable the stream DoS mitigation. If set to 1 (enabled), tor will apply
+-    rate limit on the creation of new streams and dns requests per circuit.
++    rate limit on the creation of new streams, directory streams, and dns
++    requests per circuit.
+     "auto" means use the consensus parameter. If not defined in the consensus,
+     the value is 0. (Default: auto)
+ 
+@@ -3148,6 +3149,15 @@ The following options are useful only for a exit relay.
+     not defined or set to 0, it is controlled by a consensus parameter. If not
+     defined in the consensus, the value is 300. (Default: 0)
+ 
++[[DoSStreamCreationMaxConcurrent]] **DoSStreamCreationMaxConcurrent** __NUM__::
++
++    The maximum number of concurrent open streams allowed on a single circuit.
++    If this ceiling is reached, actions can be taken against the excess stream
++    or circuit (DoSStreamCreationDefenseType), and excess BEGIN_DIR cells are
++    counted in tor_relay_dos_total{type="begindir_live_limited"}. If not
++    defined or set to 0, it is controlled by a consensus parameter. If not
++    defined in the consensus, the value is 20. (Default: 0)
++
+ The following options are useful only for an onion service directory (HSDir).
+ 
+ [[HSDirOneRequestPerCircuit]] **HSDirOneRequestPerCircuit** **0**|**1**|**auto**::
+diff --git a/src/core/or/connection_edge.c b/src/core/or/connection_edge.c
+index 53f7c6b..05e3fb2 100644
+--- a/src/core/or/connection_edge.c
++++ b/src/core/or/connection_edge.c
+@@ -4245,17 +4245,6 @@ connection_exit_begin_conn(const relay_msg_t *msg, circuit_t *circ)
+                                     layer_hint);
+       return 0;
+     }
+-    /* Make sure to get the 'real' address of the previous hop: the
+-     * caller might want to know whether the remote IP address has changed,
+-     * and we might already have corrected base_.addr[ess] for the relay's
+-     * canonical IP address. */
+-    tor_addr_t chan_addr;
+-    if (or_circ && or_circ->p_chan &&
+-        channel_get_addr_if_possible(or_circ->p_chan, &chan_addr)) {
+-      address = tor_addr_to_str_dup(&chan_addr);
+-    } else {
+-      address = tor_strdup("127.0.0.1");
+-    }
+     port = 1; /* XXXX This value is never actually used anywhere, and there
+                * isn't "really" a connection here.  But we
+                * need to set it to something nonzero. */
+@@ -4278,6 +4267,29 @@ connection_exit_begin_conn(const relay_msg_t *msg, circuit_t *circ)
+     }
+   }
+ 
++  if (or_circ) {
++    /* If we're hibernating or shutting down, we refuse to open new streams. */
++    if (we_are_hibernating()) {
++      tor_free(address);
++      relay_send_end_cell_from_edge(msg->stream_id, circ,
++                                    END_STREAM_REASON_HIBERNATING, NULL);
++      return 0;
++    }
++    /* In the future we may want to have a similar defense for OS BEGIN. */
++    dos_defense_type = dos_stream_new_begin_or_resolve_cell(or_circ,
++                                                            bcell.is_begindir);
++    if (dos_defense_type != DOS_STREAM_DEFENSE_NONE) {
++      tor_free(address);
++      if (dos_defense_type == DOS_STREAM_DEFENSE_CLOSE_CIRCUIT)
++        return -END_CIRC_REASON_RESOURCELIMIT;
++      // we don't use END_STREAM_REASON_RESOURCELIMIT because it would make a
++      // client mark us as non-functional until they get a new consensus.
++      relay_send_end_cell_from_edge(msg->stream_id, circ,
++                                    END_STREAM_REASON_MISC, layer_hint);
++      return 0;
++    }
++  }
++
+   log_debug(LD_EXIT,"Creating new exit connection.");
+   /* The 'AF_INET' here is temporary; we might need to change it later in
+    * connection_exit_connect(). */
+@@ -4308,50 +4320,32 @@ connection_exit_begin_conn(const relay_msg_t *msg, circuit_t *circ)
+     }
+     return ret;
+   }
+-  tor_strlower(address);
+-  n_stream->base_.address = address;
+   n_stream->base_.state = EXIT_CONN_STATE_RESOLVEFAILED;
+   /* default to failed, change in dns_resolve if it turns out not to fail */
+-
+-  /* If we're hibernating or shutting down, we refuse to open new streams. */
+-  if (we_are_hibernating()) {
+-    relay_send_end_cell_from_edge(msg->stream_id, circ,
+-                                  END_STREAM_REASON_HIBERNATING, NULL);
+-    connection_free_(TO_CONN(n_stream));
+-    return 0;
+-  }
+-
+   n_stream->on_circuit = circ;
+ 
+-  if (msg->command == RELAY_COMMAND_BEGIN_DIR) {
++  if (bcell.is_begindir) {
++    /* Make sure to get the 'real' address of the previous hop: the
++     * caller might want to know whether the remote IP address has changed,
++     * and we might already have corrected base_.addr[ess] for the relay's
++     * canonical IP address. */
+     tor_addr_t tmp_addr;
+     tor_assert(or_circ);
+     if (or_circ->p_chan &&
+         channel_get_addr_if_possible(or_circ->p_chan, &tmp_addr)) {
+       tor_addr_copy(&n_stream->base_.addr, &tmp_addr);
++      address = tor_addr_to_str_dup(&tmp_addr);
++    } else {
++      address = tor_strdup("127.0.0.1");
+     }
+-    return connection_exit_connect_dir(n_stream);
+   }
+ 
+-  log_debug(LD_EXIT,"about to start the dns_resolve().");
++  tor_strlower(address);
++  n_stream->base_.address = address;
++  if (bcell.is_begindir)
++    return connection_exit_connect_dir(n_stream);
+ 
+-  // in the future we may want to have a similar defense for BEGIN_DIR and
+-  // BEGIN sent to OS.
+-  dos_defense_type = dos_stream_new_begin_or_resolve_cell(or_circ);
+-  switch (dos_defense_type) {
+-    case DOS_STREAM_DEFENSE_NONE:
+-      break;
+-    case DOS_STREAM_DEFENSE_REFUSE_STREAM:
+-      // we don't use END_STREAM_REASON_RESOURCELIMIT because it would make a
+-      // client mark us as non-functional until they get a new consensus.
+-      relay_send_end_cell_from_edge(msg->stream_id, circ,
+-                                    END_STREAM_REASON_MISC, layer_hint);
+-      connection_free_(TO_CONN(n_stream));
+-      return 0;
+-    case DOS_STREAM_DEFENSE_CLOSE_CIRCUIT:
+-      connection_free_(TO_CONN(n_stream));
+-      return -END_CIRC_REASON_RESOURCELIMIT;
+-  }
++  log_debug(LD_EXIT,"about to start the dns_resolve().");
+ 
+   /* send it off to the gethostbyname farm */
+   switch (dns_resolve(n_stream)) {
+@@ -4407,7 +4401,7 @@ connection_exit_begin_resolve(const relay_msg_t *msg, or_circuit_t *circ)
+ 
+   dummy_conn->on_circuit = TO_CIRCUIT(circ);
+ 
+-  dos_defense_type = dos_stream_new_begin_or_resolve_cell(circ);
++  dos_defense_type = dos_stream_new_begin_or_resolve_cell(circ, false);
+   switch (dos_defense_type) {
+     case DOS_STREAM_DEFENSE_NONE:
+       break;
+diff --git a/src/core/or/dos.c b/src/core/or/dos.c
+index b66611a..44686af 100644
+--- a/src/core/or/dos.c
++++ b/src/core/or/dos.c
+@@ -27,6 +27,7 @@
+ #include "core/or/dos_sys.h"
+ 
+ #include "core/or/dos_options_st.h"
++#include "core/or/edge_connection_st.h"
+ #include "core/or/or_connection_st.h"
+ 
+ /*
+@@ -89,9 +90,11 @@ static unsigned int dos_stream_enabled = 0;
+ 
+ /* Consensus parameters. They can be changed when a new consensus arrives.
+  * They are initialized with the hardcoded default values. */
+-static dos_stream_defense_type_t dos_stream_defense_type;
++static dos_stream_defense_type_t dos_stream_defense_type =
++  DOS_STREAM_DEFENSE_TYPE_DEFAULT;
+ static uint32_t dos_stream_rate = DOS_STREAM_RATE_DEFAULT;
+ static uint32_t dos_stream_burst = DOS_STREAM_BURST_DEFAULT;
++static uint32_t dos_stream_max_concurrent = DOS_STREAM_MAX_CONCURRENT_DEFAULT;
+ 
+ /* Keep some stats for the heartbeat so we can report out. */
+ static uint64_t stream_num_rejected;
+@@ -324,12 +327,21 @@ get_param_stream_burst(const networkstatus_t *ns)
+                                  1, INT32_MAX);
+ }
+ 
++/* Return the positive torrc option <b>opt</b> if set, or the cached consensus
++ * parameter <b>param</b>. */
++static uint32_t
++dos_uint_or_param(int opt, uint32_t param)
++{
++  return (opt > 0) ? (uint32_t)opt : param;
++}
++
+ /* Return the consensus parameter of the circuit creation defense type. */
+ static uint32_t
+ get_param_stream_defense_type(const networkstatus_t *ns)
+ {
+-  if (dos_get_options()->DoSStreamCreationDefenseType) {
+-    return dos_get_options()->DoSStreamCreationDefenseType;
++  const int opt = dos_get_options()->DoSStreamCreationDefenseType;
++  if (opt >= DOS_STREAM_DEFENSE_NONE && opt <= DOS_STREAM_DEFENSE_MAX) {
++    return (uint32_t)opt;
+   }
+   return networkstatus_get_param(ns, "DoSStreamCreationDefenseType",
+                                  DOS_STREAM_DEFENSE_TYPE_DEFAULT,
+@@ -368,6 +380,10 @@ set_dos_parameters(const networkstatus_t *ns)
+   dos_stream_defense_type = get_param_stream_defense_type(ns);
+   dos_stream_rate = get_param_stream_rate(ns);
+   dos_stream_burst = get_param_stream_burst(ns);
++  dos_stream_max_concurrent = dos_uint_or_param(
++    dos_get_options()->DoSStreamCreationMaxConcurrent,
++    networkstatus_get_param(ns, "DoSStreamCreationMaxConcurrent",
++                            DOS_STREAM_MAX_CONCURRENT_DEFAULT, 1, INT32_MAX));
+ 
+   /* HSDir. */
+   dos_hsdir_one_request_per_circ =
+@@ -878,28 +894,69 @@ dos_get_num_stream_rejected(void)
+   return stream_num_rejected;
+ }
+ 
+-/* Return the action to take against a BEGIN or RESOLVE cell. Return
+- *  DOS_STREAM_DEFENSE_NONE when no action should be taken.
+- *  Increment the appropriate counter when the cell was found to go over a
+- *  limit. */
++/* Consume one token from <b>bucket</b> using <b>rate</b> and <b>burst</b>,
++ * initializing or adjusting <b>bucket</b> if needed. Return true iff a token
++ * was available. */
++static bool
++dos_token_bucket_consume(token_bucket_ctr_t *bucket,
++                         uint32_t rate, uint32_t burst)
++{
++  const uint32_t now = (uint32_t) monotime_coarse_absolute_sec();
++  if (BUG(rate == 0 || burst == 0))
++    return true;
++  if (bucket->cfg.rate == 0) {
++    token_bucket_ctr_init(bucket, rate, burst, now);
++  } else if (bucket->cfg.rate != rate ||
++             (uint32_t)bucket->cfg.burst != burst) {
++    token_bucket_ctr_adjust(bucket, rate, burst);
++  }
++  token_bucket_ctr_refill(bucket, now);
++  if (token_bucket_ctr_get(bucket) > 0) {
++    token_bucket_ctr_dec(bucket, 1);
++    return true;
++  }
++  return false;
++}
++
++/* Return the action to take against a BEGIN, BEGIN_DIR (when
++ * <b>is_begindir</b> is true), or RESOLVE cell on <b>circ</b>. Evaluates both
++ * the per-circuit stream token bucket and the per-circuit live-stream ceiling
++ * (scanning at most dos_stream_max_concurrent streams across n_streams and
++ * resolving_streams), updating the global and BEGIN_DIR-specific counters even
++ * when enforcement is disabled. */
+ dos_stream_defense_type_t
+-dos_stream_new_begin_or_resolve_cell(or_circuit_t *circ)
++dos_stream_new_begin_or_resolve_cell(or_circuit_t *circ, bool is_begindir)
+ {
+-  if (!dos_stream_enabled || circ == NULL)
++  if (circ == NULL || !public_server_mode(get_options())) {
+     return DOS_STREAM_DEFENSE_NONE;
+-
+-  token_bucket_ctr_refill(&circ->stream_limiter,
+-                          (uint32_t) monotime_coarse_absolute_sec());
+-
+-  if (token_bucket_ctr_get(&circ->stream_limiter) > 0) {
+-    token_bucket_ctr_dec(&circ->stream_limiter, 1);
++  }
++  const edge_connection_t *lists[] = {
++    circ->n_streams, circ->resolving_streams
++  };
++  uint32_t live = 0;
++  for (size_t i = 0; i < ARRAY_LENGTH(lists); ++i) {
++    for (const edge_connection_t *c = lists[i];
++         c && live < dos_stream_max_concurrent; c = c->next_stream) {
++      live += !c->base_.marked_for_close;
++    }
++  }
++  const bool over_rate = !dos_token_bucket_consume(
++    &circ->stream_limiter, dos_stream_rate, dos_stream_burst);
++  const bool over_live = (live >= dos_stream_max_concurrent);
++  if (!over_rate && !over_live) {
+     return DOS_STREAM_DEFENSE_NONE;
+   }
+-  /* if defense type is DOS_STREAM_DEFENSE_NONE but DoSStreamEnabled is true,
+-   * we count offending cells as rejected, despite them being actually
+-   * accepted. */
++  if (is_begindir) {
++    if (over_rate)
++      dos_note_dir_stat(DOS_DIR_BEGINDIR_RATE_LIMITED);
++    if (over_live)
++      dos_note_dir_stat(DOS_DIR_BEGINDIR_LIVE_LIMITED);
++  }
++  /* Count offending cells even when DoSStreamCreationEnabled is off or
++   * defense type is DOS_STREAM_DEFENSE_NONE. */
+   ++stream_num_rejected;
+-  return dos_stream_defense_type;
++  return dos_stream_enabled ? dos_stream_defense_type
++                            : DOS_STREAM_DEFENSE_NONE;
+ }
+ 
+ /* Initialize the token bucket for stream rate limit on a circuit. */
+@@ -1279,6 +1336,8 @@ dos_free_all(void)
+   /* Free the connection mitigation subsystem. It is safe to do this even if
+    * it wasn't initialized. */
+   conn_free_all();
++
++  dos_stream_enabled = 0;
+ }
+ 
+ /* Initialize the Denial of Service subsystem. */
+diff --git a/src/core/or/dos.h b/src/core/or/dos.h
+index 170cc80..af100f0 100644
+--- a/src/core/or/dos.h
++++ b/src/core/or/dos.h
+@@ -95,6 +95,8 @@ typedef enum dos_dir_stat_t {
+   DOS_DIR_RESP_COMPLETED,
+   DOS_DIR_NON_HS_REQUEST,
+   DOS_DIR_REQ_UNPARSED,
++  DOS_DIR_BEGINDIR_RATE_LIMITED,
++  DOS_DIR_BEGINDIR_LIVE_LIMITED,
+   DOS_DIR_STAT_MAX
+ } dos_dir_stat_t;
+ 
+@@ -195,6 +197,8 @@ dos_conn_defense_type_t dos_conn_addr_get_defense_type(const tor_addr_t *addr);
+ #define DOS_STREAM_RATE_DEFAULT 100
+ /* DosStreamCreationBurst default. */
+ #define DOS_STREAM_BURST_DEFAULT 300
++/* DoSStreamCreationMaxConcurrent default. */
++#define DOS_STREAM_MAX_CONCURRENT_DEFAULT 20
+ 
+ /* Type of defense that we can use for the stream creation DoS mitigation. */
+ typedef enum dos_stream_defense_type_t {
+@@ -211,7 +215,8 @@ typedef enum dos_stream_defense_type_t {
+ } dos_stream_defense_type_t;
+ 
+ dos_stream_defense_type_t dos_stream_new_begin_or_resolve_cell(
+-                                                          or_circuit_t *circ);
++                                                          or_circuit_t *circ,
++                                                          bool is_begindir);
+ void dos_stream_init_circ_tbf(or_circuit_t *circ);
+ 
+ #ifdef DOS_PRIVATE
+diff --git a/src/core/or/dos_options.inc b/src/core/or/dos_options.inc
+index 48694bc..0a34ad3 100644
+--- a/src/core/or/dos_options.inc
++++ b/src/core/or/dos_options.inc
+@@ -59,6 +59,9 @@ CONF_VAR(DoSStreamCreationRate, POSINT, 0, "0")
+ /** Maximum allowed burst of stream. */
+ CONF_VAR(DoSStreamCreationBurst, POSINT, 0, "0")
+ 
++/** Maximum concurrent streams allowed on a single circuit. */
++CONF_VAR(DoSStreamCreationMaxConcurrent, POSINT, 0, "0")
++
+ /** When an circuit is detected as malicious, what defense should be used
+  * against it. See the dos_stream_defense_type_t enum. */
+ CONF_VAR(DoSStreamCreationDefenseType, INT, 0, "0")
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index 706acf1..38c58a4 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -451,6 +451,10 @@ fill_dos_values(void)
+     { "dir_server_edge_conns",     dir_edge },
+     { "dir_server_wait_conns",     dir_wait },
+     { "dir_server_write_conns",    dir_write },
++    { "begindir_rate_limited",
++      dos_get_dir_stat(DOS_DIR_BEGINDIR_RATE_LIMITED) },
++    { "begindir_live_limited",
++      dos_get_dir_stat(DOS_DIR_BEGINDIR_LIVE_LIMITED) },
+     { "stream_rejected",           dos_get_num_stream_rejected() },
+   };
+ 
+-- 
+2.39.5 (Apple Git-154)
+

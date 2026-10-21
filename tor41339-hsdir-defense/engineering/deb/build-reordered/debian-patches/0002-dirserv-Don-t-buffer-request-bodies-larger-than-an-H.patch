@@ -1,7 +1,7 @@
-From c5cb9f80c1c24a3bc38693544b65b109ce86b823 Mon Sep 17 00:00:00 2001
+From 6b925e1f533e7fea87dd806156f07d023677eef8 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 4/7] dirserv: Don't buffer request bodies larger than an HS
+Subject: [PATCH 02/11] dirserv: Don't buffer request bodies larger than an HS
  descriptor
 
 A relay that is not a directory authority accepts only one kind of
@@ -61,7 +61,7 @@ malformed uploads, whose bodies were well under 50 KB.
 
 diff --git a/changes/dirserv_upload_size b/changes/dirserv_upload_size
 new file mode 100644
-index 0000000000..9f30b5e078
+index 0000000..9f30b5e
 --- /dev/null
 +++ b/changes/dirserv_upload_size
 @@ -0,0 +1,8 @@
@@ -74,7 +74,7 @@ index 0000000000..9f30b5e078
 +      is the HSV3MaxDescriptorSize consensus parameter, capped at 16 MB.
 +      Authorities keep the 16 MB limit. Part of ticket 41339.
 diff --git a/src/core/proto/proto_http.c b/src/core/proto/proto_http.c
-index d5d1f60ca9..4f66a5dee0 100644
+index d5d1f60..4f66a5d 100644
 --- a/src/core/proto/proto_http.c
 +++ b/src/core/proto/proto_http.c
 @@ -99,6 +99,14 @@ fetch_from_buf_http(buf_t *buf,
@@ -93,10 +93,10 @@ index d5d1f60ca9..4f66a5dee0 100644
          return 0; /* not all there yet */
        }
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index f8e098c59c..ad13181812 100644
+index bcea4c2..56caf8f 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
-@@ -1627,8 +1627,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+@@ -1623,8 +1623,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
    }
  
    if (!authdir_mode(options)) {
@@ -107,7 +107,7 @@ index f8e098c59c..ad13181812 100644
      write_short_http_response(conn, 400, "Nonauthoritative directory does not "
                             "accept posted server descriptors");
      goto done;
-@@ -1746,13 +1746,17 @@ directory_handle_command(dir_connection_t *conn)
+@@ -1742,13 +1742,17 @@ directory_handle_command(dir_connection_t *conn)
    char *headers=NULL, *body=NULL;
    size_t body_len=0;
    int r;
@@ -127,7 +127,7 @@ index f8e098c59c..ad13181812 100644
        log_fn_ratelim(&warning_limit, LOG_WARN, LD_DIRSERV,
                       "Oversized or malformed directory request from %s. "
 diff --git a/src/test/test_dir_handle_get.c b/src/test/test_dir_handle_get.c
-index a529ed7afb..a2d6cd4619 100644
+index a529ed7..a2d6cd4 100644
 --- a/src/test/test_dir_handle_get.c
 +++ b/src/test/test_dir_handle_get.c
 @@ -36,6 +36,7 @@

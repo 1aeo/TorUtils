@@ -27,37 +27,38 @@ requests.
 
 ## The series (`patches/`)
 
-Apply with `git am` onto Tor 0.4.9.14, upstream `main`, or `maint-0.4.9`. This
-is the reordered series proposed upstream (the low-risk previous-hop check
-first); `patches/torspec-param-spec.patch` and `patches/torspec-draft.txt` are
-the companion consensus-parameter and rend-spec-v3 text.
+Apply with `git am` onto Tor 0.4.9.14, upstream `main`, or `maint-0.4.9`. The
+11-patch series is ordered from easiest-to-merge upstream (hardening/bugfixes
+and pure observability metrics) to off-by-default enforcement;
+`patches/torspec-param-spec.patch` and `patches/torspec-draft.txt` are the
+companion consensus-parameter and rend-spec-v3 text.
 
-| # | What it does | Default |
-|---|---|---|
-| 0001 | HS descriptor requests must arrive from a *known* relay previous hop, as exits have required since 0.2.2. Independent of `RefuseUnknownExits`. | enforcement **off** (count-only) |
-| 0002 | At most one onion-service directory request per circuit (the stock-client invariant). Counts reuse; optionally closes the circuit. | enforcement **off** (count-only) |
-| 0003 | Rate-limit / down-level the malformed-HTTP-request warnings a dir server logs. | — |
-| 0004 | Non-authorities don't buffer an upload body larger than an HS descriptor; reject an oversized declared `Content-Length` at once. | — |
-| 0005 | A dir server discards anything a client sends after its request. | — |
-| 0006 | Check the descriptor signature length before the Ed25519 certificate verification. | — |
-| 0007 | Credit an HSDir "download" only once the response is fully written out. | — |
+| # | Theme | What it does | Default |
+|---|---|---|---|
+| 0001 | Hardening (MR !979) | Rate-limit / down-level the malformed-HTTP-request warnings a dir server logs. | — |
+| 0002 | Hardening (MR !979) | Non-authorities don't buffer an upload body larger than an HS descriptor; reject an oversized declared `Content-Length` at once. | — |
+| 0003 | Hardening (MR !979) | A dir server discards anything a client sends after its request. | — |
+| 0004 | Hardening (MR !979) | Check the descriptor signature length before the Ed25519 certificate verification. | — |
+| 0005 | Hardening (MR !979) | Credit an HSDir "download" only once the response is fully written out. | — |
+| 0006 | Metrics (request & topology) | Export `hsdir_request_total`, `hsdir_req_reused`, `hsdir_circ_reused`, `hsdir_single_hop`, `hsdir_unknown_prev_hop`, `dir_non_hs_request`, and `dir_req_unparsed` on the MetricsPort + DoS heartbeat. | count-only |
+| 0007 | Metrics (GET/POST outcomes) | Export `hsdir_get_found`, `hsdir_get_not_found`, `hsdir_get_completed`, `hsdir_post_ok`, `hsdir_post_rejected`, and `dir_resp_completed` on the MetricsPort. | count-only |
+| 0008 | Metrics (server dir gauges) | Export `dir_server_wait_conns`, `dir_server_write_conns`, `dir_server_edge_conns`, and `hsdir_writing_conns` gauges on the MetricsPort. | count-only |
+| 0009 | Enforcement (HSDir topology) | Off-by-default `HSDirRefuseUnknownPrevHop` (503 on unknown previous hop) and `HSDirOneRequestPerCircuit` (`RESOURCELIMIT` close on repeat HS request). | enforcement **off** (`auto` = 0) |
+| 0010 | Enforcement (`BEGIN_DIR` streams) | Apply `DoSStreamCreation*` token bucket and `DoSStreamCreationMaxConcurrent` (default 20) to `BEGIN_DIR` before allocating internal connections; export `begindir_rate_limited` and `begindir_live_limited`. | enforcement **off** (`auto` = 0) |
+| 0011 | Enforcement (HSDir fetch buckets) | Off-by-default per-descriptor (`HSDirDescriptorLimitEnabled`, rate 5/s, burst 20) and relay-wide (`HSDirGlobalLimitEnabled`, rate 50/s, burst 200) token buckets for cached HSv3 descriptor GET hits; export `hsdir_desc_rate_limited` and `hsdir_global_rate_limited`. | enforcement **off** (`auto` = 0) |
 
-Both behavioral defenses (0001, 0002) ship **observe-only**: a binary with no
-consensus or torrc opinion only *counts* (the DoS heartbeat line plus four
-`tor_relay_dos_total{type="hsdir_*"}` MetricsPort counters: `hsdir_circ_reused`,
-`hsdir_req_reused`, `hsdir_request_total`, `hsdir_unknown_prev_hop`) and never
-closes a circuit or refuses a request. Each has
-independent controls — a torrc `AUTOBOOL` option overriding a consensus
-parameter overriding the count-only default — so operators and the directory
-authorities can measure before enabling enforcement, and the enforcement toggle
-uses live `SETCONF` with **no restart** in the canary runbook (the configuration
-mechanism also supports reloads; see `analysis/prevhop-false-positive.md`).
-`connection_edge.c` is untouched.
+All behavioral defenses (`0009`, `0010`, `0011`) ship **observe-only**: a binary
+with no consensus or torrc opinion only *counts* (the DoS heartbeat line plus
+the `tor_relay_dos_total` MetricsPort counters/gauges) and never closes a
+circuit or refuses a request. Each has independent controls — a torrc `AUTOBOOL`
+option overriding a consensus parameter overriding the count-only default — so
+operators and the directory authorities can measure before enabling enforcement,
+and the enforcement toggle uses live `SETCONF` with **no restart** in the canary
+runbook (the configuration mechanism also supports reloads; see
+`analysis/prevhop-false-positive.md`).
 
-The accepted experiment keeps **all seven patches** as one fixed baseline.
-Patches 0003–0007 remain active when defenses 0001/0002 are disabled; the full
-build is not behaviorally identical to stock. The existing four counters remain
-unchanged. See the [final canary plan](operator/CANARY-MEASUREMENT-PLAN.md) for
+The initial `+tor41339.3` `.deb` canary packages were built from the 7-patch
+baseline (`0001`–`0005` + `0006` + `0009`). See the [final canary plan](operator/CANARY-MEASUREMENT-PLAN.md) for
 a native Ubuntu 26.04 build supplied by the designated builder agent, one pilot
 on vipopen followed by staged expansion toward half its relays, and 7–14 usable
 HSDir days of passive collection per patched member. Stock references remain
@@ -164,7 +165,7 @@ quantities the stock (unpatched) counters can and cannot establish.
 ## Layout
 
 ```
-patches/       the 7-patch series (git am) + torspec text
+patches/       the 11-patch series (git am) + torspec text
 simulator/     closed-lab benchmark: design, harness (scripts/), results/
 operator/      count-only canary + capture playbook + crash-at-scale review
 analysis/      claim ledger, 0002 FP measurement, live-capture interpretation,

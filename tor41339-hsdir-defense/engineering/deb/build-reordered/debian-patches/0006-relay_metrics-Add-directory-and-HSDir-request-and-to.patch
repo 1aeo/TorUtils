@@ -1,0 +1,504 @@
+From b304c831520f17a9e2d291580ea5ebf1dc19952d Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Tue, 20 Oct 2026 21:18:38 -0700
+Subject: [PATCH 06/11] relay_metrics: Add directory and HSDir request and
+ topology counters
+
+Export server directory and onion service directory request and topology
+counters on the MetricsPort (hsdir_request_total, hsdir_req_reused,
+hsdir_circ_reused, hsdir_single_hop, hsdir_unknown_prev_hop,
+dir_non_hs_request, and dir_req_unparsed), log hsdir_circ_reused and
+hsdir_unknown_prev_hop in the DoS heartbeat, and refactor
+fill_dos_values() into a table-driven loop.
+---
+ changes/ticket41339_metrics_req_topology |  6 ++
+ src/core/or/dos.c                        | 43 +++++++++++
+ src/core/or/dos.h                        | 15 ++++
+ src/core/or/or_circuit_st.h              |  5 ++
+ src/feature/dircache/dircache.c          | 43 +++++++----
+ src/feature/dircommon/directory.c        | 49 ++++++++++++
+ src/feature/dircommon/directory.h        |  1 +
+ src/feature/relay/relay_metrics.c        | 95 +++++++++---------------
+ src/test/test_hs_cache.c                 |  7 ++
+ src/test/test_status.c                   |  4 +-
+ 10 files changed, 194 insertions(+), 74 deletions(-)
+ create mode 100644 changes/ticket41339_metrics_req_topology
+
+diff --git a/changes/ticket41339_metrics_req_topology b/changes/ticket41339_metrics_req_topology
+new file mode 100644
+index 0000000..d883954
+--- /dev/null
++++ b/changes/ticket41339_metrics_req_topology
+@@ -0,0 +1,6 @@
++  o Minor features (DoS-resistance, onion service directory, metrics):
++    - Export server directory and onion service directory request and topology
++      counters on the MetricsPort (hsdir_request_total, hsdir_req_reused,
++      hsdir_circ_reused, hsdir_single_hop, hsdir_unknown_prev_hop,
++      dir_non_hs_request, and dir_req_unparsed), and log hsdir_circ_reused and
++      hsdir_unknown_prev_hop in the DoS heartbeat. Part of ticket 41339.
+diff --git a/src/core/or/dos.c b/src/core/or/dos.c
+index b789f87..e5eb15d 100644
+--- a/src/core/or/dos.c
++++ b/src/core/or/dos.c
+@@ -103,6 +103,9 @@ static uint64_t stream_num_rejected;
+ /* Keep stats for the heartbeat. */
+ static uint64_t num_single_hop_client_refused;
+ 
++/** Directory and HSDir DoS statistics counters, indexed by dos_dir_stat_t. */
++static uint64_t dos_dir_stats[DOS_DIR_STAT_MAX];
++
+ /** Return the consensus parameter for the outbound circ_max_cell_queue_size
+  * limit. */
+ static uint32_t
+@@ -702,6 +705,24 @@ dos_get_num_single_hop_refused(void)
+   return num_single_hop_client_refused;
+ }
+ 
++/** Increment the directory/HSDir DoS counter <b>stat</b>. */
++void
++dos_note_dir_stat(dos_dir_stat_t stat)
++{
++  if (BUG(stat >= DOS_DIR_STAT_MAX))
++    return;
++  dos_dir_stats[stat]++;
++}
++
++/** Return the directory/HSDir DoS counter <b>stat</b>. */
++uint64_t
++dos_get_dir_stat(dos_dir_stat_t stat)
++{
++  if (BUG(stat >= DOS_DIR_STAT_MAX))
++    return 0;
++  return dos_dir_stats[stat];
++}
++
+ /* Called when a CREATE cell is received from the given channel. */
+ void
+ dos_cc_new_create_cell(channel_t *chan)
+@@ -1022,6 +1043,22 @@ dos_should_refuse_single_hop_client(void)
+                                        0 /* default */, 0, 1);
+ }
+ 
++/* Note down that we've just seen an anonymous onion service directory request
++ * on a circuit that had previously made <b>prev_count</b> such requests.
++ * Counts all anonymous HS requests in DOS_DIR_HSDIR_REQUEST_TOTAL, every
++ * repeat request in DOS_DIR_HSDIR_REQ_REUSED, and each reused circuit once in
++ * DOS_DIR_HSDIR_CIRC_REUSED (for the heartbeat and the MetricsPort). */
++void
++dos_note_hsdir_request(unsigned int prev_count)
++{
++  dos_note_dir_stat(DOS_DIR_HSDIR_REQUEST_TOTAL);
++  if (prev_count >= 1) {
++    dos_note_dir_stat(DOS_DIR_HSDIR_REQ_REUSED);
++    if (prev_count == 1)
++      dos_note_dir_stat(DOS_DIR_HSDIR_CIRC_REUSED);
++  }
++}
++
+ /* Log a heartbeat message with some statistics. */
+ void
+ dos_log_heartbeat(void)
+@@ -1076,6 +1113,12 @@ dos_log_heartbeat(void)
+   smartlist_add_asprintf(elems,
+                          "%" PRIu64 " INTRODUCE2 rejected",
+                          hs_dos_get_intro2_rejected_count());
++  smartlist_add_asprintf(elems,
++                         "%" PRIu64 " circuits with repeated HSDir requests, "
++                         "%" PRIu64 " HSDir requests with an unknown "
++                         "previous hop",
++                         dos_dir_stats[DOS_DIR_HSDIR_CIRC_REUSED],
++                         dos_dir_stats[DOS_DIR_HSDIR_UNKNOWN_PREV_HOP]);
+ 
+   char *msg = smartlist_join_strings(elems, ", ", 0, NULL);
+ 
+diff --git a/src/core/or/dos.h b/src/core/or/dos.h
+index 0360628..fde29be 100644
+--- a/src/core/or/dos.h
++++ b/src/core/or/dos.h
+@@ -80,8 +80,23 @@ void dos_new_client_conn(or_connection_t *or_conn,
+                          const char *transport_name);
+ void dos_close_client_conn(const or_connection_t *or_conn);
+ 
++/** Directory and HSDir DoS statistics counters. */
++typedef enum dos_dir_stat_t {
++  DOS_DIR_HSDIR_CIRC_REUSED,
++  DOS_DIR_HSDIR_REQ_REUSED,
++  DOS_DIR_HSDIR_REQUEST_TOTAL,
++  DOS_DIR_HSDIR_SINGLE_HOP,
++  DOS_DIR_HSDIR_UNKNOWN_PREV_HOP,
++  DOS_DIR_NON_HS_REQUEST,
++  DOS_DIR_REQ_UNPARSED,
++  DOS_DIR_STAT_MAX
++} dos_dir_stat_t;
++
+ int dos_should_refuse_single_hop_client(void);
+ void dos_note_refuse_single_hop_client(void);
++void dos_note_dir_stat(dos_dir_stat_t stat);
++uint64_t dos_get_dir_stat(dos_dir_stat_t stat);
++void dos_note_hsdir_request(unsigned int prev_count);
+ void dos_note_circ_max_outq(const channel_t *chan);
+ 
+ uint32_t dos_get_num_cc_marked_addr(void);
+diff --git a/src/core/or/or_circuit_st.h b/src/core/or/or_circuit_st.h
+index 348e146..3a91612 100644
+--- a/src/core/or/or_circuit_st.h
++++ b/src/core/or/or_circuit_st.h
+@@ -71,6 +71,11 @@ struct or_circuit_t {
+   /* We have already received an INTRODUCE1 cell on this circuit. */
+   unsigned int already_received_introduce1 : 1;
+ 
++  /** Saturating count (0, 1, or 2+) of onion service directory requests
++   * (descriptor fetch or upload) received on this circuit. See
++   * connection_dir_allow_hs_request(). */
++  unsigned int n_hsdir_requests : 2;
++
+   /** If set, this circuit carries HS traffic. Consider it in any HS
+    *  statistics. */
+   unsigned int circuit_carries_hs_traffic_stats : 1;
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index d90de27..d7d7899 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -15,6 +15,7 @@
+ #include "app/config/config.h"
+ #include "app/config/resolve_addr.h"
+ #include "core/mainloop/connection.h"
++#include "core/or/dos.h"
+ #include "core/or/relay.h"
+ #include "feature/dirauth/dirvote.h"
+ #include "feature/dirauth/authmode.h"
+@@ -405,6 +406,7 @@ directory_handle_command_get,(dir_connection_t *conn, const char *headers,
+   conn->base_.state = DIR_CONN_STATE_SERVER_WRITING;
+ 
+   if (parse_http_url(headers, &url) < 0) {
++    dos_note_dir_stat(DOS_DIR_REQ_UNPARSED);
+     write_short_http_response(conn, 400, "Bad request");
+     return 0;
+   }
+@@ -432,6 +434,8 @@ directory_handle_command_get,(dir_connection_t *conn, const char *headers,
+       url[url_len-2] = '\0';
+     }
+   }
++  if (strcmpstart(url, "/tor/hs/3/"))
++    dos_note_dir_stat(DOS_DIR_NON_HS_REQUEST);
+ 
+   if ((header = http_get_header(headers, "Accept-Encoding: "))) {
+     compression_methods_supported = parse_accept_encoding_header(header);
+@@ -1348,6 +1352,21 @@ handle_get_keys(dir_connection_t *conn, const get_handler_args_t *args)
+   return 0;
+ }
+ 
++/** Return true iff the onion service directory request on <b>conn</b> is
++ * anonymous and allowed by connection_dir_allow_hs_request(). Otherwise, send
++ * a 503 response with <b>single_hop_msg</b> when non-anonymous and return
++ * false. */
++static bool
++allow_hs_dir_request(dir_connection_t *conn, const char *single_hop_msg)
++{
++  if (!connection_dir_is_anonymous(conn)) {
++    dos_note_dir_stat(DOS_DIR_HSDIR_SINGLE_HOP);
++    write_short_http_response(conn, 503, single_hop_msg);
++    return false;
++  }
++  return connection_dir_allow_hs_request(conn);
++}
++
+ /** Helper function for GET `/tor/hs/3/...`. Only for version 3.
+  */
+ STATIC int
+@@ -1361,11 +1380,9 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+ 
+   /* Reject non anonymous dir connections (which also tests if encrypted). We
+    * do not allow single hop clients to query an HSDir. */
+-  if (!connection_dir_is_anonymous(conn)) {
+-    write_short_http_response(conn, 503,
+-                              "Rejecting single hop HS v3 descriptor request");
++  if (!allow_hs_dir_request(conn,
++                            "Rejecting single hop HS v3 descriptor request"))
+     goto done;
+-  }
+ 
+   /* After the path prefix follows the base64 encoded blinded pubkey which we
+    * use to get the descriptor from the cache. Skip the prefix and get the
+@@ -1592,11 +1609,13 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+     log_info(LD_DIR, "Rejected dir post request from %s "
+              "since we're not a public relay.",
+              connection_describe_peer(TO_CONN(conn)));
++    dos_note_dir_stat(DOS_DIR_REQ_UNPARSED);
+     write_short_http_response(conn, 503, "Not acting as a public relay");
+     goto done;
+   }
+ 
+   if (parse_http_url(headers, &url) < 0) {
++    dos_note_dir_stat(DOS_DIR_REQ_UNPARSED);
+     write_short_http_response(conn, 400, "Bad request");
+     return 0;
+   }
+@@ -1606,21 +1625,17 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+    * (which also tests for encrypted). We do not allow single-hop client to
+    * post a descriptor onto an HSDir. */
+   if (!strcmpstart(url, "/tor/hs/")) {
+-    if (!connection_dir_is_anonymous(conn)) {
+-      write_short_http_response(conn, 503,
+-                                "Rejecting single hop HS descriptor post");
++    if (!allow_hs_dir_request(conn,
++                              "Rejecting single hop HS descriptor post"))
+       goto done;
+-    }
+-    const char *msg = "HS descriptor stored successfully.";
+-
+     /* We most probably have a publish request for an HS descriptor. */
+     int code = handle_post_hs_descriptor(url, body);
+-    if (code != 200) {
+-      msg = "Invalid HS descriptor. Rejected.";
+-    }
+-    write_short_http_response(conn, code, msg);
++    write_short_http_response(conn, code, code == 200 ?
++        "HS descriptor stored successfully." :
++        "Invalid HS descriptor. Rejected.");
+     goto done;
+   }
++  dos_note_dir_stat(DOS_DIR_NON_HS_REQUEST);
+ 
+   if (!authdir_mode(options)) {
+     /* we just provide cached directories; we don't want to receive
+diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
+index e2c8419..988e047 100644
+--- a/src/feature/dircommon/directory.c
++++ b/src/feature/dircommon/directory.c
+@@ -11,6 +11,7 @@
+ #include "core/or/connection_edge.h"
+ #include "core/or/connection_or.h"
+ #include "core/or/channeltls.h"
++#include "core/or/dos.h"
+ #include "feature/dircache/dircache.h"
+ #include "feature/dircache/dirserv.h"
+ #include "feature/dirclient/dirclient.h"
+@@ -265,6 +266,49 @@ connection_dir_is_anonymous(const dir_connection_t *dir_conn)
+   return !channel_is_client(CONST_TO_OR_CIRCUIT(circ)->p_chan);
+ }
+ 
++/** Note that the anonymous directory connection <b>conn</b> is making an onion
++ * service directory request, and return true iff an HSDir should serve it.
++ *
++ * First, check whether the previous hop is a known relay (in our consensus or
++ * with a descriptor), as exits do for RefuseUnknownExits (1751), because a
++ * peer that authenticates with a self-generated relay identity is not a client
++ * channel and could otherwise make one-hop HS requests.
++ *
++ * Second, Tor and Arti make every onion service directory request on its own
++ * circuit, so a circuit that already made one is not a stock client. We count
++ * total anonymous HS requests (as
++ * tor_relay_dos_total{type="hsdir_request_total"}), every repeat request on a
++ * circuit ({type="hsdir_req_reused"}), and reused circuits once per circuit
++ * (in the heartbeat and as {type="hsdir_circ_reused"}).
++ *
++ * Both checks stay specific to onion service requests: relays fetching other
++ * documents over one-hop circuits also pass connection_dir_is_anonymous(),
++ * and legitimately make several requests per circuit. */
++bool
++connection_dir_allow_hs_request(dir_connection_t *conn)
++{
++  or_circuit_t *circ;
++  channel_t *p_chan;
++
++  /* This guarantees a linked edge connection on an open OR circuit. */
++  if (BUG(!connection_dir_is_anonymous(conn)))
++    return true;
++  circ = TO_OR_CIRCUIT(TO_EDGE_CONN(TO_CONN(conn)->linked_conn)->on_circuit);
++  p_chan = circ->p_chan;
++
++  const bool prev_hop_known =
++    connection_or_digest_is_known_relay(p_chan->identity_digest);
++  if (!prev_hop_known)
++    dos_note_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
++
++  const unsigned int prev_reqs = circ->n_hsdir_requests;
++  dos_note_hsdir_request(prev_reqs);
++  if (prev_reqs < 2)
++    circ->n_hsdir_requests = prev_reqs + 1;
++
++  return true;
++}
++
+ /** Did <b>conn</b> ever send us a version 0 sendme cell and we allowed
+  * it? Used to decide whether to count consensus fetches from it in our
+  * geoip stats.
+@@ -536,6 +580,11 @@ connection_dir_about_to_close(dir_connection_t *dir_conn)
+ {
+   connection_t *conn = TO_CONN(dir_conn);
+ 
++  if (DIR_CONN_IS_SERVER(conn) &&
++      conn->state == DIR_CONN_STATE_SERVER_COMMAND_WAIT) {
++    dos_note_dir_stat(DOS_DIR_REQ_UNPARSED);
++  }
++
+   if (conn->state < DIR_CONN_STATE_CLIENT_FINISHED) {
+     /* It's a directory connection and connecting or fetching
+      * failed: forget about this router, and maybe try again. */
+diff --git a/src/feature/dircommon/directory.h b/src/feature/dircommon/directory.h
+index ffb2a87..fbbb6d9 100644
+--- a/src/feature/dircommon/directory.h
++++ b/src/feature/dircommon/directory.h
+@@ -95,6 +95,7 @@ char *http_get_header(const char *headers, const char *which);
+ 
+ int connection_dir_is_encrypted(const dir_connection_t *conn);
+ bool connection_dir_is_anonymous(const dir_connection_t *conn);
++bool connection_dir_allow_hs_request(dir_connection_t *conn);
+ bool connection_dir_used_obsolete_sendme(const dir_connection_t *conn);
+ int connection_dir_reached_eof(dir_connection_t *conn);
+ int connection_dir_process_inbuf(dir_connection_t *conn);
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index 492a594..537dab1 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -404,66 +404,43 @@ static void
+ fill_dos_values(void)
+ {
+   const relay_metrics_entry_t *rentry = &base_metrics[RELAY_METRICS_NUM_DOS];
+-  metrics_store_entry_t *sentry = metrics_store_add(
+-      the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
+-
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "circuit_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_cc_rejected());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "circuit_killed_max_cell"));
+-  metrics_store_entry_update(sentry, stats_n_circ_max_cell_reached);
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "circuit_killed_max_cell_outq"));
+-  metrics_store_entry_update(sentry, stats_n_circ_max_cell_outq_reached);
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "marked_address"));
+-  metrics_store_entry_update(sentry, dos_get_num_cc_marked_addr());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "marked_address_maxq"));
+-  metrics_store_entry_update(sentry, dos_get_num_cc_marked_addr_maxq());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "conn_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_conn_addr_connect_rejected());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "concurrent_conn_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_conn_addr_rejected());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "single_hop_refused"));
+-  metrics_store_entry_update(sentry, dos_get_num_single_hop_refused());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "introduce2_rejected"));
+-  metrics_store_entry_update(sentry, hs_dos_get_intro2_rejected_count());
++  const struct {
++    const char *type;
++    uint64_t val;
++  } entries[] = {
++    { "circuit_rejected",          dos_get_num_cc_rejected() },
++    { "circuit_killed_max_cell",   stats_n_circ_max_cell_reached },
++    { "circuit_killed_max_cell_outq", stats_n_circ_max_cell_outq_reached },
++    { "marked_address",            dos_get_num_cc_marked_addr() },
++    { "marked_address_maxq",       dos_get_num_cc_marked_addr_maxq() },
++    { "conn_rejected",             dos_get_num_conn_addr_connect_rejected() },
++    { "concurrent_conn_rejected",  dos_get_num_conn_addr_rejected() },
++    { "single_hop_refused",        dos_get_num_single_hop_refused() },
++    { "introduce2_rejected",       hs_dos_get_intro2_rejected_count() },
++    { "hsdir_circ_reused",
++      dos_get_dir_stat(DOS_DIR_HSDIR_CIRC_REUSED) },
++    { "hsdir_req_reused",
++      dos_get_dir_stat(DOS_DIR_HSDIR_REQ_REUSED) },
++    { "hsdir_request_total",
++      dos_get_dir_stat(DOS_DIR_HSDIR_REQUEST_TOTAL) },
++    { "hsdir_single_hop",
++      dos_get_dir_stat(DOS_DIR_HSDIR_SINGLE_HOP) },
++    { "hsdir_unknown_prev_hop",
++      dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP) },
++    { "dir_non_hs_request",
++      dos_get_dir_stat(DOS_DIR_NON_HS_REQUEST) },
++    { "dir_req_unparsed",
++      dos_get_dir_stat(DOS_DIR_REQ_UNPARSED) },
++    { "stream_rejected",           dos_get_num_stream_rejected() },
++  };
+ 
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "stream_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_stream_rejected());
++  for (size_t i = 0; i < ARRAY_LENGTH(entries); i++) {
++    metrics_store_entry_t *sentry = metrics_store_add(
++        the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
++    metrics_store_entry_add_label(sentry,
++            metrics_format_label("type", entries[i].type));
++    metrics_store_entry_update(sentry, entries[i].val);
++  }
+ }
+ 
+ /** Fill function for the RELAY_METRICS_CC_COUNTERS metric. */
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index f96b9e4..03686f2 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -23,6 +23,7 @@
+ #include "core/proto/proto_http.h"
+ #include "core/or/circuitlist.h"
+ #include "core/or/channel.h"
++#include "core/or/dos.h"
+ #include "lib/crypt_ops/crypto_format.h"
+ #include "lib/crypt_ops/crypto_rand.h"
+ 
+@@ -834,10 +835,16 @@ static void
+ test_downloaded_counter_non_hs(void *arg)
+ {
+   dir_connection_t *conn = dir_connection_new(AF_INET);
++  const uint64_t unparsed_before = dos_get_dir_stat(DOS_DIR_REQ_UNPARSED);
+   (void) arg;
+ 
+   MOCK(connection_mark_for_close_internal_, hsdir_mock_mark_for_close);
+   TO_CONN(conn)->purpose = DIR_PURPOSE_SERVER;
++  TO_CONN(conn)->state = DIR_CONN_STATE_SERVER_COMMAND_WAIT;
++  connection_dir_about_to_close(conn);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_REQ_UNPARSED),
++            OP_EQ, unparsed_before + 1);
++
+   TO_CONN(conn)->state = DIR_CONN_STATE_SERVER_WRITING;
+   tt_int_op(connection_dir_finished_flushing(conn), OP_EQ, 0);
+   tt_assert(TO_CONN(conn)->marked_for_close);
+diff --git a/src/test/test_status.c b/src/test/test_status.c
+index 4ceb81f..f8ad3e1 100644
+--- a/src/test/test_status.c
++++ b/src/test/test_status.c
+@@ -366,7 +366,9 @@ test_status_hb_not_in_consensus(void *arg)
+                  "[DoSConnectionEnabled disabled], "
+                  "[DoSRefuseSingleHopClientRendezvous disabled], "
+                  "[DoSStreamCreationEnabled disabled], "
+-                 "0 INTRODUCE2 rejected.\n");
++                 "0 INTRODUCE2 rejected, "
++                 "0 circuits with repeated HSDir requests, "
++                 "0 HSDir requests with an unknown previous hop.\n");
+   tt_int_op(mock_saved_log_n_entries(), OP_EQ, 6);
+ 
+  done:
+-- 
+2.39.5 (Apple Git-154)
+

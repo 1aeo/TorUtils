@@ -1,7 +1,7 @@
-From b76a22be7937431051983fd6573f5812b1828e6b Mon Sep 17 00:00:00 2001
+From 4299306f85491e37862bb98ffc0df551bf9f5d06 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 7/7] hs_cache: Only credit HSDir downloads once the response
+Subject: [PATCH 05/11] hs_cache: Only credit HSDir downloads once the response
  is written out
 
 b628ffeb6 (40996) increments n_downloaded when the HSDir's directory
@@ -34,7 +34,7 @@ Related to 41339.
 
 diff --git a/changes/hsdir_download_credit b/changes/hsdir_download_credit
 new file mode 100644
-index 0000000000..6ee401367b
+index 0000000..6ee4013
 --- /dev/null
 +++ b/changes/hsdir_download_credit
 @@ -0,0 +1,9 @@
@@ -48,10 +48,10 @@ index 0000000000..6ee401367b
 +      flushed, which still does not prove the client received the descriptor.
 +      Bugfix on 0.4.8.14. Related to ticket 41339.
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index ad13181812..ea8c69591f 100644
+index 56caf8f..d90de27 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
-@@ -1387,7 +1387,7 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+@@ -1385,7 +1385,7 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
  
    /* We have successfully written the descriptor on the connection outbuf so
     * save this query identifier into the dir_connection_t in order
@@ -61,7 +61,7 @@ index ad13181812..ea8c69591f 100644
      /* Decode blinded key. This is certain to work else
       * hs_cache_lookup_as_dir() would have failed. */
 diff --git a/src/feature/dircommon/dir_connection_st.h b/src/feature/dircommon/dir_connection_st.h
-index ee26fd3627..b774d32cdb 100644
+index ee26fd3..b774d32 100644
 --- a/src/feature/dircommon/dir_connection_st.h
 +++ b/src/feature/dircommon/dir_connection_st.h
 @@ -45,8 +45,8 @@ struct dir_connection_t {
@@ -76,10 +76,10 @@ index ee26fd3627..b774d32cdb 100644
  
    /** If this is a one-hop connection, tracks the state of the directory guard
 diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
-index ec2c348f02..1266cbc2a8 100644
+index b8b0197..e2c8419 100644
 --- a/src/feature/dircommon/directory.c
 +++ b/src/feature/dircommon/directory.c
-@@ -613,17 +613,6 @@ connection_dir_about_to_close(dir_connection_t *dir_conn)
+@@ -542,17 +542,6 @@ connection_dir_about_to_close(dir_connection_t *dir_conn)
      connection_dir_client_request_failed(dir_conn);
    }
  
@@ -97,7 +97,7 @@ index ec2c348f02..1266cbc2a8 100644
    connection_dir_client_refetch_hsdesc_if_needed(dir_conn);
  }
  
-@@ -662,6 +651,13 @@ connection_dir_finished_flushing(dir_connection_t *conn)
+@@ -591,6 +580,13 @@ connection_dir_finished_flushing(dir_connection_t *conn)
          connection_mark_for_close(TO_CONN(conn));
        } else {
          log_debug(LD_DIRSERV, "Finished writing server response. Closing.");
@@ -112,7 +112,7 @@ index ec2c348f02..1266cbc2a8 100644
        }
        return 0;
 diff --git a/src/feature/hs/hs_cache.c b/src/feature/hs/hs_cache.c
-index 128051b241..cead515ec0 100644
+index 128051b..cead515 100644
 --- a/src/feature/hs/hs_cache.c
 +++ b/src/feature/hs/hs_cache.c
 @@ -436,8 +436,9 @@ hs_cache_lookup_as_dir(uint32_t version, const char *query,
@@ -128,7 +128,7 @@ index 128051b241..cead515ec0 100644
  hs_cache_mark_dowloaded_as_dir(const hs_ident_dir_conn_t *ident)
  {
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 598839174d..937a17932b 100644
+index 100a90e..f96b9e4 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -16,6 +16,8 @@
@@ -140,7 +140,7 @@ index 598839174d..937a17932b 100644
  #include "feature/nodelist/networkstatus.h"
  #include "core/mainloop/connection.h"
  #include "core/proto/proto_http.h"
-@@ -1097,6 +1099,97 @@ test_client_cache_remove(void *arg)
+@@ -754,6 +756,97 @@ test_client_cache_remove(void *arg)
    UNMOCK(networkstatus_get_reasonably_live_consensus);
  }
  
@@ -238,10 +238,10 @@ index 598839174d..937a17932b 100644
  struct testcase_t hs_cache[] = {
    /* Encoding tests. */
    { "directory", test_directory, TT_FORK,
-@@ -1113,6 +1206,10 @@ struct testcase_t hs_cache[] = {
+@@ -766,6 +859,10 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
-   { "hsdir_refuse_unknown_prev_hop", test_hsdir_refuse_unknown_prev_hop,
-     TT_FORK, NULL, NULL },
+   { "upload_and_download_hs_desc", test_upload_and_download_hs_desc, TT_FORK,
+     NULL, NULL },
 +  { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
 +    NULL, NULL },
 +  { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
