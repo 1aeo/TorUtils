@@ -1,0 +1,556 @@
+From ac42f17c483c1f2aadab0ab3209beb8bd0294e48 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Tue, 20 Oct 2026 21:36:03 -0700
+Subject: [PATCH 11/11] hsdir: Add off-by-default per-descriptor and global
+ fetch rate limiters
+
+Add off-by-default per-descriptor (HSDirDescriptorLimitEnabled,
+HSDirDescriptorRate, HSDirDescriptorBurst) and relay-wide
+(HSDirGlobalLimitEnabled, HSDirGlobalRate, HSDirGlobalBurst) token
+buckets for cached HSv3 descriptor fetches, closing the circuit with
+END_CIRC_REASON_RESOURCELIMIT before queuing the ~40 KB descriptor when
+enforcement is enabled, and export hsdir_desc_rate_limited and
+hsdir_global_rate_limited on the MetricsPort.
+---
+ changes/ticket41339_hsdir_rate_limits |   8 ++
+ doc/man/tor.1.txt                     |  46 ++++++++++
+ src/core/or/dos.c                     |  65 +++++++++++++-
+ src/core/or/dos.h                     |   3 +
+ src/core/or/dos_options.inc           |  22 +++++
+ src/feature/dircache/dircache.c       |  20 ++---
+ src/feature/dircommon/directory.c     |  23 +++++
+ src/feature/dircommon/directory.h     |   5 ++
+ src/feature/hs/hs_cache.c             |  13 +++
+ src/feature/hs/hs_cache.h             |   5 ++
+ src/feature/relay/relay_metrics.c     |   4 +
+ src/test/test_hs_cache.c              | 120 ++++++++++++++++++++++++++
+ 12 files changed, 321 insertions(+), 13 deletions(-)
+ create mode 100644 changes/ticket41339_hsdir_rate_limits
+
+diff --git a/changes/ticket41339_hsdir_rate_limits b/changes/ticket41339_hsdir_rate_limits
+new file mode 100644
+index 0000000..211b0a2
+--- /dev/null
++++ b/changes/ticket41339_hsdir_rate_limits
+@@ -0,0 +1,8 @@
++  o Minor features (DoS-resistance, onion service directory):
++    - Support off-by-default per-descriptor (HSDirDescriptorLimitEnabled,
++      HSDirDescriptorRate, HSDirDescriptorBurst) and relay-wide
++      (HSDirGlobalLimitEnabled, HSDirGlobalRate, HSDirGlobalBurst) token
++      buckets for cached onion service descriptor fetches, closing circuits
++      with reason RESOURCELIMIT before queuing the ~40 KB descriptor when
++      enforcement is enabled, and export hsdir_desc_rate_limited and
++      hsdir_global_rate_limited on the MetricsPort. Part of ticket 41339.
+diff --git a/doc/man/tor.1.txt b/doc/man/tor.1.txt
+index d6b640c..361f723 100644
+--- a/doc/man/tor.1.txt
++++ b/doc/man/tor.1.txt
+@@ -3189,6 +3189,52 @@ The following options are useful only for an onion service directory (HSDir).
+     The count appears in the heartbeat and as
+     tor_relay_dos_total{type="hsdir_unknown_prev_hop"}. (Default: auto)
+ 
++[[HSDirDescriptorLimitEnabled]] **HSDirDescriptorLimitEnabled** **0**|**1**|**auto**::
++
++    If set to 1, an HSDir rate-limits repeated fetches of any single cached
++    onion service descriptor using a per-descriptor token bucket controlled by
++    **HSDirDescriptorRate** and **HSDirDescriptorBurst**, closing the circuit
++    (with reason RESOURCELIMIT) before queuing the ~40 KB descriptor when its
++    bucket is exhausted. If 0, it only counts rate-limit hits in
++    tor_relay_dos_total{type="hsdir_desc_rate_limited"}. "auto" uses the
++    hsdir_desc_limit_enabled consensus parameter (default: 0, count only).
++    (Default: auto)
++
++[[HSDirDescriptorRate]] **HSDirDescriptorRate** __N__::
++
++    Refill rate in requests per second for each cached onion service
++    descriptor's fetch token bucket. If 0, uses the hsdir_desc_rate consensus
++    parameter, which defaults to 5. (Default: 0)
++
++[[HSDirDescriptorBurst]] **HSDirDescriptorBurst** __N__::
++
++    Maximum burst in requests for each cached onion service descriptor's fetch
++    token bucket. If 0, uses the hsdir_desc_burst consensus parameter, which
++    defaults to 20. (Default: 0)
++
++[[HSDirGlobalLimitEnabled]] **HSDirGlobalLimitEnabled** **0**|**1**|**auto**::
++
++    If set to 1, an HSDir rate-limits total cached onion service descriptor
++    fetches across the relay using a global token bucket controlled by
++    **HSDirGlobalRate** and **HSDirGlobalBurst**, closing the circuit (with
++    reason RESOURCELIMIT) before queuing the ~40 KB descriptor when the bucket
++    is exhausted. If 0, it only counts rate-limit hits in
++    tor_relay_dos_total{type="hsdir_global_rate_limited"}. "auto" uses the
++    hsdir_global_limit_enabled consensus parameter (default: 0, count only).
++    (Default: auto)
++
++[[HSDirGlobalRate]] **HSDirGlobalRate** __N__::
++
++    Refill rate in requests per second for the relay-wide cached onion service
++    descriptor fetch token bucket. If 0, uses the hsdir_global_rate consensus
++    parameter, which defaults to 50. (Default: 0)
++
++[[HSDirGlobalBurst]] **HSDirGlobalBurst** __N__::
++
++    Maximum burst in requests for the relay-wide cached onion service
++    descriptor fetch token bucket. If 0, uses the hsdir_global_burst consensus
++    parameter, which defaults to 200. (Default: 0)
++
+ 
+ For onion services, mitigations are a work in progress and multiple options
+ are currently available.
+diff --git a/src/core/or/dos.c b/src/core/or/dos.c
+index 44686af..5515aae 100644
+--- a/src/core/or/dos.c
++++ b/src/core/or/dos.c
+@@ -108,11 +108,23 @@ static uint64_t num_single_hop_client_refused;
+ 
+ /** Directory and HSDir DoS statistics counters, indexed by dos_dir_stat_t. */
+ static uint64_t dos_dir_stats[DOS_DIR_STAT_MAX];
++static token_bucket_ctr_t hsdir_global_fetch_limiter;
+ 
+-/* Cached consensus parameters for HSDirOneRequestPerCircuit and
+- * HSDirRefuseUnknownPrevHop (default 0: count only). */
++#define DOS_HSDIR_DESC_RATE_DEFAULT 5
++#define DOS_HSDIR_DESC_BURST_DEFAULT 20
++#define DOS_HSDIR_GLOBAL_RATE_DEFAULT 50
++#define DOS_HSDIR_GLOBAL_BURST_DEFAULT 200
++
++/* Cached consensus parameters for HSDir defenses (enforcement flags default to
++ * 0: count only). */
+ static unsigned int dos_hsdir_one_request_per_circ;
+ static unsigned int dos_hsdir_refuse_unknown_prev_hop;
++static unsigned int dos_hsdir_desc_limit_enabled;
++static uint32_t dos_hsdir_desc_rate = DOS_HSDIR_DESC_RATE_DEFAULT;
++static uint32_t dos_hsdir_desc_burst = DOS_HSDIR_DESC_BURST_DEFAULT;
++static unsigned int dos_hsdir_global_limit_enabled;
++static uint32_t dos_hsdir_global_rate = DOS_HSDIR_GLOBAL_RATE_DEFAULT;
++static uint32_t dos_hsdir_global_burst = DOS_HSDIR_GLOBAL_BURST_DEFAULT;
+ 
+ /** Return the consensus parameter for the outbound circ_max_cell_queue_size
+  * limit. */
+@@ -390,6 +402,22 @@ set_dos_parameters(const networkstatus_t *ns)
+     !!networkstatus_get_param(ns, "hsdir_one_request_per_circ", 0, 0, 1);
+   dos_hsdir_refuse_unknown_prev_hop =
+     !!networkstatus_get_param(ns, "hsdir_refuse_unknown_prev_hop", 0, 0, 1);
++  dos_hsdir_desc_limit_enabled =
++    !!networkstatus_get_param(ns, "hsdir_desc_limit_enabled", 0, 0, 1);
++  dos_hsdir_desc_rate =
++    networkstatus_get_param(ns, "hsdir_desc_rate",
++                            DOS_HSDIR_DESC_RATE_DEFAULT, 1, INT32_MAX);
++  dos_hsdir_desc_burst =
++    networkstatus_get_param(ns, "hsdir_desc_burst",
++                            DOS_HSDIR_DESC_BURST_DEFAULT, 1, INT32_MAX);
++  dos_hsdir_global_limit_enabled =
++    !!networkstatus_get_param(ns, "hsdir_global_limit_enabled", 0, 0, 1);
++  dos_hsdir_global_rate =
++    networkstatus_get_param(ns, "hsdir_global_rate",
++                            DOS_HSDIR_GLOBAL_RATE_DEFAULT, 1, INT32_MAX);
++  dos_hsdir_global_burst =
++    networkstatus_get_param(ns, "hsdir_global_burst",
++                            DOS_HSDIR_GLOBAL_BURST_DEFAULT, 1, INT32_MAX);
+ }
+ 
+ /* Free everything for the circuit creation DoS mitigation subsystem. */
+@@ -1160,6 +1188,38 @@ dos_should_refuse_unknown_hsdir_prev_hop(void)
+                                dos_hsdir_refuse_unknown_prev_hop);
+ }
+ 
++/* Update the per-descriptor <b>desc_limiter</b> and relay-wide HS fetch token
++ * buckets for a cached HSv3 descriptor GET hit, and return true iff the HSDir
++ * should serve the descriptor. */
++bool
++dos_allow_hsdir_descriptor_fetch(token_bucket_ctr_t *desc_limiter)
++{
++  if (BUG(desc_limiter == NULL))
++    return true;
++  const dos_options_t *opts = dos_get_options();
++  bool allow = true;
++
++  if (!dos_token_bucket_consume(
++        desc_limiter,
++        dos_uint_or_param(opts->HSDirDescriptorRate, dos_hsdir_desc_rate),
++        dos_uint_or_param(opts->HSDirDescriptorBurst, dos_hsdir_desc_burst))) {
++    dos_note_dir_stat(DOS_DIR_HSDIR_DESC_RATE_LIMITED);
++    if (dos_autobool_or_param(opts->HSDirDescriptorLimitEnabled,
++                              dos_hsdir_desc_limit_enabled))
++      allow = false;
++  }
++  if (!dos_token_bucket_consume(
++        &hsdir_global_fetch_limiter,
++        dos_uint_or_param(opts->HSDirGlobalRate, dos_hsdir_global_rate),
++        dos_uint_or_param(opts->HSDirGlobalBurst, dos_hsdir_global_burst))) {
++    dos_note_dir_stat(DOS_DIR_HSDIR_GLOBAL_RATE_LIMITED);
++    if (dos_autobool_or_param(opts->HSDirGlobalLimitEnabled,
++                              dos_hsdir_global_limit_enabled))
++      allow = false;
++  }
++  return allow;
++}
++
+ /* Log a heartbeat message with some statistics. */
+ void
+ dos_log_heartbeat(void)
+@@ -1338,6 +1398,7 @@ dos_free_all(void)
+   conn_free_all();
+ 
+   dos_stream_enabled = 0;
++  memset(&hsdir_global_fetch_limiter, 0, sizeof(hsdir_global_fetch_limiter));
+ }
+ 
+ /* Initialize the Denial of Service subsystem. */
+diff --git a/src/core/or/dos.h b/src/core/or/dos.h
+index af100f0..e0fcb8e 100644
+--- a/src/core/or/dos.h
++++ b/src/core/or/dos.h
+@@ -92,6 +92,8 @@ typedef enum dos_dir_stat_t {
+   DOS_DIR_HSDIR_GET_COMPLETED,
+   DOS_DIR_HSDIR_POST_OK,
+   DOS_DIR_HSDIR_POST_REJECTED,
++  DOS_DIR_HSDIR_DESC_RATE_LIMITED,
++  DOS_DIR_HSDIR_GLOBAL_RATE_LIMITED,
+   DOS_DIR_RESP_COMPLETED,
+   DOS_DIR_NON_HS_REQUEST,
+   DOS_DIR_REQ_UNPARSED,
+@@ -107,6 +109,7 @@ uint64_t dos_get_dir_stat(dos_dir_stat_t stat);
+ int dos_should_enforce_hsdir_one_request_per_circ(void);
+ void dos_note_hsdir_request(unsigned int prev_count);
+ int dos_should_refuse_unknown_hsdir_prev_hop(void);
++bool dos_allow_hsdir_descriptor_fetch(token_bucket_ctr_t *desc_limiter);
+ void dos_note_circ_max_outq(const channel_t *chan);
+ 
+ uint32_t dos_get_num_cc_marked_addr(void);
+diff --git a/src/core/or/dos_options.inc b/src/core/or/dos_options.inc
+index 0a34ad3..db86373 100644
+--- a/src/core/or/dos_options.inc
++++ b/src/core/or/dos_options.inc
+@@ -85,4 +85,26 @@ CONF_VAR(HSDirOneRequestPerCircuit, AUTOBOOL, 0, "auto")
+  * parameter. */
+ CONF_VAR(HSDirRefuseUnknownPrevHop, AUTOBOOL, 0, "auto")
+ 
++/** Autobool: Should an HSDir rate-limit repeated fetches of a single cached
++ * onion service descriptor, rather than only counting rate-limit hits?
++ * Overrides the hsdir_desc_limit_enabled consensus parameter. */
++CONF_VAR(HSDirDescriptorLimitEnabled, AUTOBOOL, 0, "auto")
++
++/** Per-descriptor fetch refill rate (requests/sec) for HSDir cache entries. */
++CONF_VAR(HSDirDescriptorRate, POSINT, 0, "0")
++
++/** Per-descriptor fetch burst (requests) for HSDir cache entries. */
++CONF_VAR(HSDirDescriptorBurst, POSINT, 0, "0")
++
++/** Autobool: Should an HSDir rate-limit total cached onion service
++ * descriptor fetches across the relay, rather than only counting rate-limit
++ * hits? Overrides the hsdir_global_limit_enabled consensus parameter. */
++CONF_VAR(HSDirGlobalLimitEnabled, AUTOBOOL, 0, "auto")
++
++/** Relay-wide fetch refill rate (requests/sec) for cached HS descriptors. */
++CONF_VAR(HSDirGlobalRate, POSINT, 0, "0")
++
++/** Relay-wide fetch burst (requests) for cached HS descriptors. */
++CONF_VAR(HSDirGlobalBurst, POSINT, 0, "0")
++
+ END_CONF_STRUCT(dos_options_t)
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index 11f1439..805f567 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1398,20 +1398,18 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+   }
+   dos_note_dir_stat(DOS_DIR_HSDIR_GET_FOUND);
+ 
++  /* Decode blinded key (certain to succeed after hs_cache_lookup_as_dir()) and
++   * check the per-descriptor and relay-wide fetch rate limiters before queuing
++   * the ~40 KB descriptor onto conn->outbuf. */
++  ed25519_public_key_t blinded_key;
++  ed25519_public_from_base64(&blinded_key, pubkey_str);
++  if (!connection_dir_allow_hs_descriptor_fetch(conn, &blinded_key))
++    goto done;
++
+   /* Found requested descriptor! Pass it to this nice client. */
+   write_http_response_header(conn, strlen(desc_str), NO_METHOD, 0);
+   connection_buf_add(desc_str, strlen(desc_str), TO_CONN(conn));
+-
+-  /* We have successfully written the descriptor on the connection outbuf so
+-   * save this query identifier into the dir_connection_t in order
+-   * to associate it to the descriptor once the response is written out. */
+-  {
+-    /* Decode blinded key. This is certain to work else
+-     * hs_cache_lookup_as_dir() would have failed. */
+-    ed25519_public_key_t blinded_key;
+-    ed25519_public_from_base64(&blinded_key, pubkey_str);
+-    conn->hs_ident = hs_ident_server_dir_conn_new(&blinded_key);
+-  }
++  conn->hs_ident = hs_ident_server_dir_conn_new(&blinded_key);
+ 
+  done:
+   return 0;
+diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
+index d63642e..19efd0b 100644
+--- a/src/feature/dircommon/directory.c
++++ b/src/feature/dircommon/directory.c
+@@ -350,6 +350,29 @@ connection_dir_allow_hs_request(dir_connection_t *conn)
+   return true;
+ }
+ 
++/** Check the per-descriptor and relay-wide fetch token buckets for a cached
++ * HSv3 descriptor GET hit for <b>blinded_key</b> on <b>conn</b>, and return
++ * true iff the descriptor should be served. When enforcement is enabled and a
++ * token bucket is exhausted, closes the circuit with
++ * END_CIRC_REASON_RESOURCELIMIT before queueing the ~40 KB response. */
++bool
++connection_dir_allow_hs_descriptor_fetch(
++                              dir_connection_t *conn,
++                              const ed25519_public_key_t *blinded_key)
++{
++  if (BUG(!connection_dir_is_anonymous(conn)))
++    return true;
++  if (!dos_allow_hsdir_descriptor_fetch(
++        hs_cache_get_dir_fetch_limiter(blinded_key))) {
++    static ratelim_t fetch_lim = RATELIM_INIT(600);
++    close_hsdir_circuit_for_resourcelimit(
++      TO_OR_CIRCUIT(TO_EDGE_CONN(TO_CONN(conn)->linked_conn)->on_circuit),
++      &fetch_lim, "rate-limited HS descriptor fetch");
++    return false;
++  }
++  return true;
++}
++
+ /** Count active server-side directory connections waiting for an HTTP request
+  * (<b>wait_out</b>), writing a response (<b>write_out</b>), writing an onion
+  * service descriptor response (<b>hs_write_out</b>), and active linked
+diff --git a/src/feature/dircommon/directory.h b/src/feature/dircommon/directory.h
+index 3b5ec6f..8f8cc0e 100644
+--- a/src/feature/dircommon/directory.h
++++ b/src/feature/dircommon/directory.h
+@@ -93,9 +93,14 @@ int parse_http_command(const char *headers,
+                        char **command_out, char **url_out);
+ char *http_get_header(const char *headers, const char *which);
+ 
++struct ed25519_public_key_t;
++
+ int connection_dir_is_encrypted(const dir_connection_t *conn);
+ bool connection_dir_is_anonymous(const dir_connection_t *conn);
+ bool connection_dir_allow_hs_request(dir_connection_t *conn);
++bool connection_dir_allow_hs_descriptor_fetch(
++                    dir_connection_t *conn,
++                    const struct ed25519_public_key_t *blinded_key);
+ void connection_dir_count_server_conns(uint64_t *wait_out,
+                                        uint64_t *write_out,
+                                        uint64_t *hs_write_out,
+diff --git a/src/feature/hs/hs_cache.c b/src/feature/hs/hs_cache.c
+index cead515..461573a 100644
+--- a/src/feature/hs/hs_cache.c
++++ b/src/feature/hs/hs_cache.c
+@@ -196,6 +196,7 @@ cache_store_v3_as_dir(hs_cache_dir_descriptor_t *desc)
+      * remove the entry we currently have from our cache so we can then
+      * store the new one. */
+     desc->n_downloaded = cache_entry->n_downloaded;
++    desc->fetch_limiter = cache_entry->fetch_limiter;
+     remove_v3_desc_as_dir(cache_entry);
+     hs_cache_decrement_allocation(cache_get_dir_entry_size(cache_entry));
+     cache_dir_desc_free(cache_entry);
+@@ -452,6 +453,18 @@ hs_cache_mark_dowloaded_as_dir(const hs_ident_dir_conn_t *ident)
+   }
+ }
+ 
++/** Return the per-descriptor fetch token bucket for <b>blinded_key</b> in the
++ * v3 directory cache, or NULL if not present. */
++token_bucket_ctr_t *
++hs_cache_get_dir_fetch_limiter(const ed25519_public_key_t *blinded_key)
++{
++  hs_cache_dir_descriptor_t *entry;
++  if (!blinded_key || !hs_cache_v3_dir)
++    return NULL;
++  entry = lookup_v3_desc_as_dir(blinded_key->pubkey);
++  return entry ? &entry->fetch_limiter : NULL;
++}
++
+ /** Clean all directory caches using the current time now. */
+ void
+ hs_cache_clean_as_dir(time_t now)
+diff --git a/src/feature/hs/hs_cache.h b/src/feature/hs/hs_cache.h
+index 9cf73c1..8082e61 100644
+--- a/src/feature/hs/hs_cache.h
++++ b/src/feature/hs/hs_cache.h
+@@ -16,6 +16,7 @@
+ #include "feature/hs/hs_ident.h"
+ #include "feature/rend/rendcommon.h"
+ #include "feature/nodelist/torcert.h"
++#include "lib/evloop/token_bucket.h"
+ 
+ struct ed25519_public_key_t;
+ 
+@@ -73,6 +74,8 @@ typedef struct hs_cache_dir_descriptor_t {
+    * heuristic for the OOM cache cleaning. It is very large so we avoid an kind
+    * of possible wrapping. */
+   uint64_t n_downloaded;
++  /** Per-descriptor fetch rate limiter for HSDir DoS mitigation. */
++  token_bucket_ctr_t fetch_limiter;
+ } hs_cache_dir_descriptor_t;
+ 
+ /* Public API */
+@@ -98,6 +101,8 @@ int hs_cache_store_as_dir(const char *desc);
+ int hs_cache_lookup_as_dir(uint32_t version, const char *query,
+                            const char **desc_out);
+ void hs_cache_mark_dowloaded_as_dir(const hs_ident_dir_conn_t *ident);
++token_bucket_ctr_t *hs_cache_get_dir_fetch_limiter(
++                    const struct ed25519_public_key_t *blinded_key);
+ 
+ const hs_descriptor_t *
+ hs_cache_lookup_as_client(const struct ed25519_public_key_t *key);
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index 38c58a4..4dd85d6 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -441,6 +441,10 @@ fill_dos_values(void)
+       dos_get_dir_stat(DOS_DIR_HSDIR_POST_OK) },
+     { "hsdir_post_rejected",
+       dos_get_dir_stat(DOS_DIR_HSDIR_POST_REJECTED) },
++    { "hsdir_desc_rate_limited",
++      dos_get_dir_stat(DOS_DIR_HSDIR_DESC_RATE_LIMITED) },
++    { "hsdir_global_rate_limited",
++      dos_get_dir_stat(DOS_DIR_HSDIR_GLOBAL_RATE_LIMITED) },
+     { "hsdir_writing_conns",       hsdir_write },
+     { "dir_resp_completed",
+       dos_get_dir_stat(DOS_DIR_RESP_COMPLETED) },
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index 3661a7b..58b41fd 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -1233,6 +1233,124 @@ test_downloaded_counter_non_hs(void *arg)
+   connection_free_minimal(TO_CONN(edge));
+ }
+ 
++/* Outcome metrics (hsdir_get_found, hsdir_get_not_found, hsdir_post_*,
++ * hsdir_desc_rate_limited, hsdir_global_rate_limited, begindir_*_limited) and
++ * the off-by-default HSDir*LimitEnabled and DoSStreamCreation* limiters always
++ * count and only enforce when enabled via torrc or consensus. */
++static void
++test_hsdir_rate_limits_and_metrics(void *arg)
++{
++  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
++  dos_options_t *dos_opts;
++  hs_descriptor_t *desc = NULL;
++  char *desc_str = NULL, *fetched = NULL;
++  const ed25519_public_key_t *blinded_key;
++  ed25519_keypair_t signing_kp;
++  or_circuit_t *mcirc = NULL, *pcirc = NULL, *bcirc = NULL;
++  edge_connection_t *live_stream = NULL;
++  const uint64_t non_hs_before = dos_get_dir_stat(DOS_DIR_NON_HS_REQUEST);
++  (void) arg;
++
++  init_test();
++  MOCK(circuit_mark_for_close_, mock_circuit_mark_for_close);
++  get_options_mutable()->ORPort_set = 1;
++  dos_opts = get_dos_options(get_options_mutable());
++
++  /* Generate one valid descriptor and publish it over POST. */
++  tt_int_op(ed25519_keypair_generate(&signing_kp, 0), OP_EQ, 0);
++  desc = hs_helper_build_hs_desc_with_ip(&signing_kp);
++  tt_assert(desc);
++  tt_int_op(hs_desc_encode_descriptor(desc, &signing_kp, NULL, &desc_str),
++            OP_EQ, 0);
++  blinded_key = &desc->plaintext_data.blinded_pubkey;
++
++  /* 1. Outcome counters: 1 miss (404), 1 invalid POST (400), 1 valid POST
++   * (200), and 3 hits (200). With HSDirDescriptorBurst=2, HSDirGlobalBurst=2,
++   * and enforcement off, the 3rd hit is still served and increments both
++   * rate-limit counters. */
++  dos_opts->HSDirDescriptorRate = 1;
++  dos_opts->HSDirDescriptorBurst = 2;
++  dos_opts->HSDirGlobalRate = 1;
++  dos_opts->HSDirGlobalBurst = 2;
++  mcirc = or_circuit_new(0, NULL);
++  mcirc->p_chan = chan;
++  tt_size_op(helper_hs_request_on_circ(mcirc, false), OP_GT, 0); /* 404 */
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_GET_NOT_FOUND), OP_EQ, 1);
++  pcirc = or_circuit_new(0, NULL);
++  pcirc->p_chan = chan;
++  tt_size_op(helper_hs_request_on_circ(pcirc, true), OP_GT, 0); /* 400 */
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_POST_REJECTED), OP_EQ, 1);
++  tt_size_op(helper_hs_request_on_circ_impl(pcirc, desc_str, NULL),
++             OP_GT, 0); /* 200 */
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_POST_OK), OP_EQ, 1);
++
++  for (int i = 0; i < 3; i++) {
++    fetched = helper_fetch_desc_from_hsdir(blinded_key);
++    tt_str_op(fetched, OP_EQ, desc_str);
++    tor_free(fetched);
++  }
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_GET_FOUND), OP_EQ, 3);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_DESC_RATE_LIMITED), OP_EQ, 1);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_GLOBAL_RATE_LIMITED), OP_EQ, 1);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_NON_HS_REQUEST), OP_EQ, non_hs_before);
++
++  /* 2. Enable per-descriptor enforcement: the 4th hit is refused before
++   * queuing the ~40 KB descriptor, and re-uploading a newer revision of the
++   * same descriptor does not reset its exhausted token bucket. */
++  dos_opts->HSDirDescriptorLimitEnabled = 1;
++  fetched = helper_fetch_desc_from_hsdir(blinded_key);
++  tt_ptr_op(fetched, OP_EQ, NULL);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_DESC_RATE_LIMITED), OP_EQ, 2);
++
++  desc->plaintext_data.revision_counter++;
++  tor_free(desc_str);
++  tt_int_op(hs_desc_encode_descriptor(desc, &signing_kp, NULL, &desc_str),
++            OP_EQ, 0);
++  tt_int_op(hs_cache_store_as_dir(desc_str), OP_EQ, 0);
++  fetched = helper_fetch_desc_from_hsdir(blinded_key);
++  tt_ptr_op(fetched, OP_EQ, NULL);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_DESC_RATE_LIMITED), OP_EQ, 3);
++
++  /* 3. Per-circuit stream limiter counts rate and live-stream excess on
++   * BEGIN_DIR even when DoSStreamCreationEnabled is off (0), and enforces
++   * REFUSE_STREAM when enabled (1). */
++  dos_opts->DoSStreamCreationRate = 2;
++  dos_opts->DoSStreamCreationBurst = 1;
++  dos_opts->DoSStreamCreationMaxConcurrent = 1;
++  dos_init();
++  bcirc = or_circuit_new(0, NULL);
++  live_stream = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
++  bcirc->n_streams = live_stream;
++  tt_int_op(dos_stream_new_begin_or_resolve_cell(bcirc, true), OP_EQ,
++            DOS_STREAM_DEFENSE_NONE);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_LIVE_LIMITED), OP_EQ, 1);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_RATE_LIMITED), OP_EQ, 0);
++
++  dos_opts->DoSStreamCreationEnabled = 1;
++  dos_init();
++  tt_int_op(dos_stream_new_begin_or_resolve_cell(bcirc, true), OP_EQ,
++            DOS_STREAM_DEFENSE_REFUSE_STREAM);
++  tt_int_op(dos_stream_new_begin_or_resolve_cell(bcirc, true), OP_EQ,
++            DOS_STREAM_DEFENSE_REFUSE_STREAM);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_RATE_LIMITED), OP_EQ, 2);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_LIVE_LIMITED), OP_EQ, 3);
++  tt_u64_op(dos_get_num_stream_rejected(), OP_EQ, 3);
++
++ done:
++  UNMOCK(circuit_mark_for_close_);
++  if (bcirc)
++    bcirc->n_streams = NULL;
++  connection_free_minimal(TO_CONN(live_stream));
++  SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
++                    TO_OR_CIRCUIT(c)->p_chan = NULL);
++  circuit_free_all();
++  hs_descriptor_free(desc);
++  tor_free(desc_str);
++  tor_free(fetched);
++  tor_free(chan);
++  hs_free_all();
++}
++
+ struct testcase_t hs_cache[] = {
+   /* Encoding tests. */
+   { "directory", test_directory, TT_FORK,
+@@ -1249,6 +1367,8 @@ struct testcase_t hs_cache[] = {
+     NULL, NULL },
+   { "hsdir_refuse_unknown_prev_hop", test_hsdir_refuse_unknown_prev_hop,
+     TT_FORK, NULL, NULL },
++  { "hsdir_rate_limits_and_metrics", test_hsdir_rate_limits_and_metrics,
++    TT_FORK, NULL, NULL },
+   { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
+     NULL, NULL },
+   { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
+-- 
+2.39.5 (Apple Git-154)
+
