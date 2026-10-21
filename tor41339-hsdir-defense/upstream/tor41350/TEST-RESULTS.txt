@@ -117,3 +117,12 @@ after startup                          gauge(opened)=0   created=0   kernel ESTA
 7 real TLS connections open            gauge(opened)=7   created=7   kernel ESTAB=7
 +5 non-TLS +5 FIN while stalled        gauge(opened)=7   created=7   kernel ESTAB=7
 real connections closed                gauge(opened)=0   created=7   kernel ESTAB=0
+
+Same with --rst (the 10 connections are closed with an RST, SO_LINGER 0):
+
+== tor-0.4.9.14 --rst
+7 real TLS connections open            gauge(opened)=7   created=7   kernel ESTAB=7
++10 RST while stalled                  gauge(opened)=0   created=7   kernel ESTAB=7
+== 0.4.9.14 + 0001 --rst
+7 real TLS connections open            gauge(opened)=7   created=7   kernel ESTAB=7
++10 RST while stalled                  gauge(opened)=7   created=7   kernel ESTAB=7

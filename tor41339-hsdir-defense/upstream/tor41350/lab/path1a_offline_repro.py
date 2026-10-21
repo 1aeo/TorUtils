@@ -3,12 +3,13 @@
 
 Run it ONLY inside a network namespace that has nothing but loopback, e.g.
 
-    unshare -n sh -c 'ip link set lo up && python3 -I path1a_offline_repro.py /path/to/tor'
+    unshare -n sh -c 'ip link set lo up && python3 -I path1a_offline_repro.py /path/to/tor [--rst]'
 
 It refuses to run if any non-loopback interface is up. It starts one relay
 that cannot reach the Tor network, opens N real inbound TLS connections to its
 ORPort, then stalls the relay (SIGSTOP) while M short-lived connections that
-send non-TLS bytes or only a FIN wait in the accept backlog (what a busy main
+send non-TLS bytes or only a FIN (or, with --rst, an RST) wait in the accept
+backlog (what a busy main
 loop sees during a connection flood), resumes it, and compares
 tor_relay_connections{type="OR",direction="received",state="opened"} with the
 kernel's count of established ORPort sockets. Ports are chosen at run time.
@@ -20,6 +21,7 @@ import shutil
 import signal
 import socket
 import ssl
+import struct
 import subprocess
 import sys
 import tempfile
@@ -72,8 +74,9 @@ def established(port):
 
 
 def main():
-    if len(sys.argv) != 2:
-        sys.exit("usage: path1a_offline_repro.py TOR_BINARY")
+    rst = sys.argv[2:] == ["--rst"]
+    if len(sys.argv) != 2 and not rst:
+        sys.exit("usage: path1a_offline_repro.py TOR_BINARY [--rst]")
     if not only_loopback():
         sys.exit("refusing to run: a non-loopback interface is up "
                  "(use unshare -n and bring up lo only)")
@@ -121,13 +124,20 @@ def main():
         os.kill(tor.pid, signal.SIGSTOP)
         for i in range(N_GARBAGE + N_FIN):
             s = socket.create_connection(("127.0.0.1", or_port), 5)
-            if i < N_GARBAGE:
+            if rst:
+                # Close with an RST instead of a FIN.
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
+                             struct.pack("ii", 1, 0))
+            elif i < N_GARBAGE:
                 s.sendall(b"GET / HTTP/1.0\r\n\r\n")
             s.close()
         time.sleep(0.5)
         os.kill(tor.pid, signal.SIGCONT)
         time.sleep(2)
-        snapshot("+%d non-TLS +%d FIN while stalled" % (N_GARBAGE, N_FIN))
+        if rst:
+            snapshot("+%d RST while stalled" % (N_GARBAGE + N_FIN))
+        else:
+            snapshot("+%d non-TLS +%d FIN while stalled" % (N_GARBAGE, N_FIN))
 
         for s in real:
             s.close()
