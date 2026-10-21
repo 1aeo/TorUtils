@@ -1,36 +1,55 @@
-# Upstream GitLab Issue Draft: Directory and HSDir MetricsPort Visibility (`0006`–`0008`)
+**Title:** MetricsPort: count tunneled directory requests and onion service descriptor fetch/upload outcomes
 
-**Title:** `relay_metrics`: Export server directory and HSDir request, outcome, and connection state metrics on MetricsPort
+### Summary
 
-## Summary
+During the BEGIN_DIR / HSDir floods in #41339 (see also tpo/network-health/analysis#113), operators could see `tor_relay_streams_total{type="BEGIN_DIR"}` rise sharply. But nothing on the MetricsPort shows what those streams then did. We'd like to discuss adding a few observe-only, relay-wide metrics before proposing any code.
 
-During `BEGIN_DIR` and onion service directory (`HSDir`) floods (see #41339), relays see large spikes in `tor_relay_streams_total{type="BEGIN_DIR"}` and main-thread CPU saturation while `tor_hs_rdv_stats` and outbound bandwidth remain flat. Existing `MetricsPort` counters cannot distinguish what `BEGIN_DIR` streams are requesting, whether responses complete locally or abort mid-stream, or how many internal `BEGIN_DIR` connections are accumulating in `connection_array`.
+In 0.4.9.14, `tor_relay_streams_total{type="BEGIN_DIR"}` is counted once per stream in `connection_exit_connect_dir()`, before any HTTP request arrives. After that point:
 
-We propose exporting three small groups of `tor_relay_dos_total{type="..."}` metrics on the `MetricsPort`:
+1. **What the stream carried isn't visible.** Nothing separates:
+   - streams that never deliver a valid request: closed while still in `DIR_CONN_STATE_SERVER_COMMAND_WAIT`, or answered with a `parse_http_url()` 400;
+   - ordinary directory requests (consensus, `/tor/micro/`, `/tor/keys/`, …, including unknown URLs answered 404);
+   - onion service descriptor fetches and uploads.
+2. **HSDir outcomes aren't visible.** The MetricsPort has no counter for descriptor fetches or uploads. The only HSDir-related relay metrics are `tor_relay_flag{type="HSDir"}` and `tor_relay_load_oom_bytes_total{subsys="hsdir"}`. The `tor_hs_*` families only cover onion services hosted by the same tor. The extra-info line `hidserv-dir-v3-onions-seen` counts unique blinded keys, daily, binned and with added noise. So an operator can't tell:
+   - fetch hits (200, the whole descriptor queued at once: typically ~14 KB, at most `HSV3MaxDescriptorSize`) from misses (404, ~60 bytes) or single-hop refusals (503);
+   - accepted uploads from rejected ones, or why an upload was rejected. A 400 can mean a bad URL or version, an invalid descriptor (parse, signature or certificate failure), or a revision counter no newer than the cached copy. A stale re-upload from a legitimate service is a very different signal from junk.
+   - whether a queued response was ever written out.
+3. **The connections behind these streams aren't visible.** Each BEGIN_DIR creates a socketless, linked exit + directory connection pair:
+   - ConnLimit and the OOS handler count only sockets;
+   - `tor_relay_connections` never counts these pairs as opened (a related accounting problem is tracked in #41350);
+   - an idle pair can stay open until `TestingDirConnectionMaxStall` (5 minutes);
+   - bandwidth graphs barely move, since a stream may carry only a CONNECTED cell and a 404.
+4. **Per-circuit and previous-hop behaviour isn't visible.**
+   - Stock clients make each HSDir request on its own circuit. C tor isolates anonymized directory requests with `ISO_STREAM`, and HS fetches and uploads use `DIRIND_ANONYMOUS`. Arti uses a fresh `HsCircPool` circuit for each HSDir fetch or upload attempt. Nothing counts circuits that make several such requests. DoSStreamCreation never sees BEGIN_DIR, because `connection_exit_begin_conn()` returns before reaching it.
+   - BEGIN_DIR skips the known-relay check that `RefuseUnknownExits` applies to exit streams. DoSCircuitCreation counts only client (unauthenticated) channels. So an HS request whose previous hop is relay-authenticated but in neither our consensus nor our descriptor list goes unrecorded.
 
-## 1. Directory & HSDir Request and Topology Counters (`0006`)
-Currently, `tor_relay_streams_total{type="BEGIN_DIR"}` increments before HTTP parsing, and `tor_hs_rdv_stats` only counts completed descriptor fetches/uploads. Operators cannot tell whether `BEGIN_DIR` streams are anonymous HS requests, single-hop HS requests rejected with `503`, ordinary directory requests, or streams closing before sending valid HTTP headers, nor whether attackers reuse circuits across requests.
+### What is the expected behavior?
 
-* `hsdir_request_total`: Total anonymous `/tor/hs/...` requests (GET + POST).
-* `hsdir_req_reused`: Repeat anonymous `/tor/hs/...` requests on a circuit that already made one.
-* `hsdir_circ_reused`: Circuits that made more than one anonymous `/tor/hs/...` request (counted once per circuit; also logged in the DoS heartbeat).
-* `hsdir_single_hop`: Non-anonymous (single-hop) `/tor/hs/...` requests rejected with `503`.
-* `hsdir_unknown_prev_hop`: Anonymous `/tor/hs/...` requests whose previous hop is not in the consensus/routerlist (also logged in the DoS heartbeat).
-* `dir_non_hs_request`: Valid non-HS server directory requests (consensus, microdescriptors, server descriptors, keys).
-* `dir_req_unparsed`: Server directory streams that failed HTTP parsing or closed in `DIR_CONN_STATE_SERVER_COMMAND_WAIT` before sending a complete request.
+All values would be relay-wide, with no behaviour change. Only tunneled (linked) connections would be counted, so DirPort traffic stays out. Names are placeholders.
 
-## 2. Directory & HSDir Outcome and Completion Counters (`0007`)
-Currently, `hs_cache_lookup_as_dir()` and `connection_dir_finished_flushing()` do not expose whether requests hit or miss the cache, or whether queued responses finish flushing to the linked edge stream versus aborting mid-stream.
+| Metric | Labels | Counts |
+|---|---|---|
+| `tor_relay_hsdir_get_total` | `action="success\|not_found\|single_hop"` | descriptor fetches answered 200, 404 (including malformed keys), or 503 single-hop |
+| `tor_relay_hsdir_post_total` | `action="success\|bad_url\|invalid\|not_newer\|single_hop"` | uploads accepted, or rejected for the reason given |
+| `tor_relay_dir_requests_total` | `type="non_hs\|unparsed"` | other directory requests; streams with no valid request |
+| `tor_relay_dir_responses_total` | `type="hs_descriptor\|other"` | responses fully handed to the linked exit stream (`connection_dir_finished_flushing()`) |
+| `tor_relay_dir_server_conns` (gauge) | `state="command_wait\|writing_hs_descriptor\|writing_other\|draining"` | open tunneled directory connections; `draining` = exit streams whose directory side has closed |
+| `tor_relay_dos_total` | `type="hsdir_req_reused"`, `"hsdir_circ_reused"`, `"hsdir_unknown_prev_hop"` | HS requests after the first on a circuit; circuits with two or more (2 bits on `or_circuit_t`); HS requests whose previous hop isn't a known relay |
 
-* `hsdir_get_found` / `hsdir_get_not_found`: Anonymous HSv3 descriptor GET cache hits (`200`) vs. cache misses (`404`).
-* `hsdir_get_completed`: Anonymous HSv3 descriptor GET responses (`200`) that finished flushing from `dir_conn->outbuf` to the linked edge stream (`hsdir_get_found - hsdir_get_completed - hsdir_writing_conns` gives mid-stream aborts).
-* `hsdir_post_ok` / `hsdir_post_rejected`: Anonymous HSv3 descriptor POST uploads accepted (`200`) vs. rejected (`400`).
-* `dir_resp_completed`: Server directory HTTP responses (all classes) that finished flushing from `dir_conn->outbuf` (`dir_resp_completed - hsdir_get_completed` gives completed non-HS-descriptor responses).
+**Notes**
 
-## 3. Server Directory Connection State Gauges (`0008`)
-Internal `BEGIN_DIR` linked connections (`CONN_TYPE_DIR` + `CONN_TYPE_EXIT`) have `s = TOR_INVALID_SOCKET (-1)` and never call `rep_hist_note_conn_opened()`, making them invisible to `tor_relay_connections` even when thousands accumulate in `connection_array` and `active_linked_connection_lst`.
+- **Reconciliation.** On a public relay, every tunneled BEGIN_DIR stream ends up in exactly one bucket. Up to scrape timing, `streams_total{BEGIN_DIR}` ≈ `hsdir_get` + `hsdir_post` + `dir_requests` + `dir_server_conns{command_wait}`. Similarly, `hsdir_get{success}` − `dir_responses{hs_descriptor}` − `dir_server_conns{writing_hs_descriptor}` counts descriptor responses abandoned before hand-off. "Written out" means handed to the exit edge, not delivered to the client; stock's own comment there calls it "only an intermediate step".
+- **Cost.**
+  - Increments only on paths that already run.
+  - One `connection_or_digest_is_known_relay()` lookup per anonymous HS request.
+  - 2 bits on `or_circuit_t`.
+  - The gauge is computed at scrape time in one pass over the connection array.
+- **Privacy.** MetricsPort is operator-local, and nothing is labelled per descriptor, key or peer. We're happy to coarsen or drop anything you'd rather not expose.
 
-* `dir_server_wait_conns`: Live server `dir_connection_t` objects in `DIR_CONN_STATE_SERVER_COMMAND_WAIT`.
-* `dir_server_write_conns`: Live server `dir_connection_t` objects in `DIR_CONN_STATE_SERVER_WRITING`.
-* `hsdir_writing_conns`: Subset of `dir_server_write_conns` serving an onion service descriptor (`hs_ident != NULL`).
-* `dir_server_edge_conns`: Live linked `BEGIN_DIR` `CONN_TYPE_EXIT` streams (`conn->linked == 1`), where `dir_server_edge_conns - (dir_server_wait_conns + dir_server_write_conns)` measures edge streams still draining onto circuits after `dir_conn` has closed.
+**Questions**
+
+1. Separate families as above, or `type` labels under `tor_relay_dos_total`? It is a counter family, so the gauge can't go there. Any naming preferences?
+2. Should DirPort requests be counted too, perhaps with a `transport` label?
+3. Is the per-circuit and previous-hop view useful enough to keep? Is there anything you'd add or drop?
+
+/label ~Feature ~Metrics
