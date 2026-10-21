@@ -45,7 +45,7 @@ These scripts reproduce the results in the issue on one Linux machine. Each star
 |---|---|
 | `latency.sh` | 20 scrapes while healthy, then 20 while tor's main thread is stopped with `ptrace` (`stall.py`) |
 | `socket-cap.sh` | Scrapes with a 256 fd limit, after filling tor's sockets with idle SocksPort connections |
-| `sandbox.sh` | Runs with `Sandbox 1`, and prints each thread's seccomp mode and the main thread's signal mask |
+| `sandbox.sh` | Runs with `Sandbox 1`, and prints each thread's seccomp mode |
 | `stress.sh <tor> [secs]` | Parallel scrapes while SIGHUP flips the MetricsPort port and policy, plus a stall. Counts `BUG()` warnings, and ThreadSanitizer reports for a `-fsanitize=thread` build |
 | `accept-spin.sh` | Makes `accept()` fail with `EMFILE` and prints each thread's CPU time |
 
