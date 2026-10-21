@@ -7,9 +7,11 @@
 # Nothing here talks to the real Tor network.
 # Usage: DEBDIR=<dir with tor_*_amd64.deb> OUT=<out dir> CHUTNEY_PATH=<chutney>
 #        CHUTNEY_TOR=<tor for the lab's own nodes> CHUTNEY_TOR_GENCERT=<tor-gencert>
-#        VENV=<python venv with chutney> [IMAGE=ubuntu:26.04] ./run-deb-test.sh
+#        VENV=<python venv with chutney> REV=<N of +tor41339.N>
+#        [IMAGE=ubuntu:26.04] ./run-deb-test.sh
+# Exits with the container's status: nonzero if any check failed.
 set -u
-: "${DEBDIR:?}" "${OUT:?}" "${CHUTNEY_PATH:?}" "${CHUTNEY_TOR:?}" "${CHUTNEY_TOR_GENCERT:?}" "${VENV:?}"
+: "${DEBDIR:?}" "${OUT:?}" "${CHUTNEY_PATH:?}" "${CHUTNEY_TOR:?}" "${CHUTNEY_TOR_GENCERT:?}" "${VENV:?}" "${REV:?}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 IMAGE=${IMAGE:-ubuntu:24.04}
 export CHUTNEY_PATH CHUTNEY_TOR CHUTNEY_TOR_GENCERT PYTHONPATH="$CHUTNEY_PATH:${PYTHONPATH:-}"
@@ -36,7 +38,9 @@ Sandbox ${DEB_SANDBOX:-1}
 Log notice file /var/lib/tor-lab/notice.log
 EOT
 } > "$OUT/torrc-lab"
-docker run --rm --network host -v "$DEBDIR":/debs:ro -v "$OUT":/lab:ro \
+docker run --rm --network host -e REV="$REV" -v "$DEBDIR":/debs:ro -v "$OUT":/lab:ro \
   -v "$HERE/in-container.sh":/run.sh:ro "$IMAGE" bash /run.sh > "$OUT/install-run-transcript.txt" 2>&1
-echo "container rc=$?" >> "$OUT/install-run-transcript.txt"
+rc=$?
+echo "container rc=$rc" >> "$OUT/install-run-transcript.txt"
 chutney stop >> "$OUT/labnet.log" 2>&1
+exit $rc

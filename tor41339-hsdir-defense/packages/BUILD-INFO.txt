@@ -1,6 +1,6 @@
-Provenance: tor 0.4.9.14 + the tor#41339 series, +tor41339.4, amd64, for
-  Ubuntu 24.04 (noble):    tor_0.4.9.14-1~noble+1+tor41339.4_amd64.deb
-  Ubuntu 26.04 (resolute): tor_0.4.9.14-1~resolute+1+tor41339.4_amd64.deb
+Provenance: tor 0.4.9.14 + the tor#41339 series, +tor41339.5, amd64, for
+  Ubuntu 24.04 (noble):    tor_0.4.9.14-1~noble+1+tor41339.5_amd64.deb
+  Ubuntu 26.04 (resolute): tor_0.4.9.14-1~resolute+1+tor41339.5_amd64.deb
 plus tor-geoipdb (all) for each. Checksums: SHA256SUMS.
 
 The two builds are the same code with the same features. They differ only in
@@ -35,32 +35,34 @@ restoring doc/nofooter.conf, then tor41339-hsdir-defense/patches/0001-0013
   b12c93706bfa73c047ac9e3d91218f94e08277f50ad6c73cf8ee278f1d5f9536  0003-dirserv-Discard-client-input-received-after-the-requ.patch
   d92bc54ccfe62af2e75d028287ea6c24da738ea2c5040219428224a4e24b2cca  0004-hs_desc-Check-signature-length-before-verifying-the-.patch
   304261c11f984868b850561a177e69214352c06c9927682246f4928b4fa29096  0005-hs_cache-Only-credit-HSDir-downloads-once-the-respon.patch
-  66d50d41d2701e07c09e5c58dbb1a79834d2f83ae8574302a7a075b65fcf3649  0006-relay_metrics-Count-onion-service-descriptor-fetches.patch
-  286fd539c73ed742029ba61c4b1d887e6ad888f268ff6d4a33512b351e8e41d2  0007-relay_metrics-Count-tunneled-directory-requests-and-.patch
-  8e4e6070f9847392c9513a76147a561088dd28115f59327929d42cf63188f50a  0008-relay_metrics-Add-a-gauge-of-tunneled-directory-serv.patch
-  98fb278634ca918f83aec094b5427ba31d00902253633856763ab72c9afb75ed  0009-relay_metrics-Make-fill_dos_values-table-driven.patch
-  eabc4e3c1395520db95d0aae5bd0ac92eb004436d8a37e2733a73ad4682673d4  0010-dos-Count-repeated-and-unknown-previous-hop-HSDir-re.patch
-  093d9390228ea981a99da626ee8284ce4df650839bddf5527fd3404f339fb523  0011-dos-Add-off-by-default-HSDir-circuit-reuse-and-previ.patch
-  273e908e13791459ed22edcbdaf23a4bc61f002c57a949a47f81dd19b117b27e  0012-dos-Add-an-off-by-default-limit-on-open-BEGIN_DIR-st.patch
-  a72228e7bde06960d1c9d8362a3d2e27867c739872219b63b2495fcbdf713360  0013-hs_cache-Add-an-off-by-default-per-descriptor-fetch-.patch
+  4dfd20653e9d91cf4b2219971f23f24dd6ec325019eeebe7d095d6e06133075f  0006-relay_metrics-Count-onion-service-descriptor-fetches.patch
+  363618a3ac9720d5c7d13b377d0d1d8e854478fc6e1460f6b4679968a9023cf2  0007-relay_metrics-Count-tunneled-directory-requests-and-.patch
+  02fdcabcf8b78caad45df2838632e5fc6dd9585baecbab3fe8cab22b981edc93  0008-relay_metrics-Add-a-gauge-of-tunneled-directory-serv.patch
+  809beb25e02d1941200c3dec10e8831999dda985eca51fe2b7682cb131705af5  0009-relay_metrics-Make-fill_dos_values-table-driven.patch
+  7a6b8dda853e16e9720243b8a18afce48ab59f0260207a005dc381bdabdfe446  0010-dos-Count-repeated-and-unknown-previous-hop-HSDir-re.patch
+  090fde83f1e117c298ed885a27273905964ccc99e0c77b834ea4080157c81d5c  0011-dos-Add-off-by-default-HSDir-circuit-reuse-and-previ.patch
+  0fa8f35fbcdc01229566b60292d52f5c877593572ffae3b0b221fa1f92ec382e  0012-dos-Add-an-off-by-default-limit-on-open-BEGIN_DIR-st.patch
+  ce6d287e48959a380f402a046b838ad13a714099d6bfea5f8c28f9a6237d0962  0013-hs_cache-Add-an-off-by-default-per-descriptor-fetch-.patch
   54c154c41100cc45b1d57db301b791fc427076496a1188cf47b27ea72961bf76  series
 
 Builders (driver ../engineering/deb/build-reordered/build-in-container-reordered.sh
-with SUITE=noble or resolute, REV=4, EXPECT_PATCHES=14; dpkg-buildpackage -b;
+with SUITE=noble or resolute, REV=5, EXPECT_PATCHES=14; dpkg-buildpackage -b;
 set -o pipefail so a failed build cannot be masked):
   noble:    fresh ubuntu:24.04 container (Canonical LTS image,
             digest sha256:5ce7043d3beb84e91bfeecacb5fafc80602bf247a1dd6016bc0fe7d69d707eca), gcc 13
   resolute: fresh ubuntu:26.04 container (Canonical LTS image,
             digest sha256:51e35c02a42cf2a6646c5879f5752b38098ed0a20056a989f0af3a3c5e697c9a), gcc 15
 
-dh_auto_test (make test), both builds: 1614 tests ok, 24 skipped, 0 failed.
+dh_auto_test (make test), both builds: 1617 tests ok, 24 skipped, 0 failed.
 Compiler warnings on lines the series adds: none in either build. The only
-warning in a file the series touches is in unchanged upstream test code:
+warnings in files the series touches are in unchanged upstream test code:
+test_hs_descriptor.c:151 -Wmaybe-uninitialized (both builds) and
 test_dir_handle_get.c:2410 -Wmaybe-uninitialized (gcc 15 only).
-Each binary contains the 7 new option names and every new metric name.
+Each binary contains the 7 new option names and every new metric name, and
+its manual gives DoSBeginDirMaxStreams a default of 64.
 
 The same series, built from git with --enable-fatal-warnings, builds and
-passes make test at each of the 13 commits (1596 to 1607 tests), and with
+passes make test at each of the 13 commits (1596 to 1610 tests), and with
 --disable-module-relay at the tip.
 
 Install: only the tor package is needed; tor-geoipdb is a Recommends

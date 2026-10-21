@@ -1,4 +1,4 @@
-From 26d072705916beb8ef7c657adf1afb05c16801fc Mon Sep 17 00:00:00 2001
+From 3366072f74adbe0123a36f89d8225fd335de3e34 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:40:13 +0000
 Subject: [PATCH 06/13] relay_metrics: Count onion service descriptor fetches
@@ -22,12 +22,12 @@ Part of #41339.
 ---
  changes/ticket41339_hsdir_outcomes |   6 ++
  src/feature/dircache/dircache.c    |  19 ++++-
- src/feature/hs/hs_cache.c          |   8 ++-
- src/feature/relay/relay_metrics.c  |  76 ++++++++++++++++++++
- src/feature/relay/relay_metrics.h  |  40 +++++++++++
- src/test/test_hs_cache.c           | 110 ++++++++++++++++++++++++++++-
+ src/feature/hs/hs_cache.c          |   8 +-
+ src/feature/relay/relay_metrics.c  |  76 +++++++++++++++++++
+ src/feature/relay/relay_metrics.h  |  40 ++++++++++
+ src/test/test_hs_cache.c           | 118 ++++++++++++++++++++++++++++-
  src/test/test_stats.c              |   2 +-
- 7 files changed, 255 insertions(+), 6 deletions(-)
+ 7 files changed, 263 insertions(+), 6 deletions(-)
  create mode 100644 changes/ticket41339_hsdir_outcomes
 
 diff --git a/changes/ticket41339_hsdir_outcomes b/changes/ticket41339_hsdir_outcomes
@@ -316,7 +316,7 @@ index e7b5b660fa..3c0eedacf6 100644
 +
  #endif /* !defined(TOR_FEATURE_RELAY_RELAY_METRICS_H) */
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 14008a4f88..2c32181eb1 100644
+index 14008a4f88..4cdd7f3189 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -21,11 +21,16 @@
@@ -345,7 +345,7 @@ index 14008a4f88..2c32181eb1 100644
      /* Try to clean now which should be fine, there is at worst few seconds
       * between the store and this call. */
      hs_cache_clean_as_dir(time(NULL));
-@@ -343,6 +348,107 @@ helper_fetch_desc_from_hsdir(const ed25519_public_key_t *blinded_key)
+@@ -343,6 +348,115 @@ helper_fetch_desc_from_hsdir(const ed25519_public_key_t *blinded_key)
    return received_desc;
  }
  
@@ -396,6 +396,7 @@ index 14008a4f88..2c32181eb1 100644
 +  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
 +  ed25519_keypair_t signing_kp;
 +  hs_descriptor_t *desc = NULL;
++  dir_connection_t *dirport;
 +  char *desc_str = NULL, *get = NULL;
 +  char key[ED25519_BASE64_LEN+1];
 +  const char *post = "POST /tor/hs/3/publish HTTP/1.0\r\n\r\n";
@@ -433,6 +434,13 @@ index 14008a4f88..2c32181eb1 100644
 +  hsdir_request_on_new_circ(chan, get, NULL);
 +  hsdir_request_on_new_circ(chan, post, desc_str);
 +
++  /* Requests on the DirPort (not tunneled) aren't counted. */
++  dirport = dir_connection_new(AF_INET);
++  tor_addr_from_ipv4h(&TO_CONN(dirport)->addr, 0x7f000001);
++  directory_handle_command_get(dirport, get, NULL, 0);
++  directory_handle_command_post(dirport, post, desc_str, strlen(desc_str));
++  connection_free_minimal(TO_CONN(dirport));
++
 +  /* Exactly one request of each outcome. */
 +  for (size_t i = 0; i < ARRAY_LENGTH(get_actions); i++)
 +    tt_i64_op(GET_METRIC(get_actions[i]), OP_EQ, get0[i] + 1);
@@ -453,7 +461,7 @@ index 14008a4f88..2c32181eb1 100644
  /* Publish a descriptor to the HSDir, then fetch it. Check that the received
     descriptor matches the published one. */
  static void
-@@ -859,6 +965,8 @@ struct testcase_t hs_cache[] = {
+@@ -859,6 +973,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "upload_and_download_hs_desc", test_upload_and_download_hs_desc, TT_FORK,
      NULL, NULL },

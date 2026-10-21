@@ -1,4 +1,4 @@
-From 456e66ca8dcaf630712ad590b6dd33b602a718da Mon Sep 17 00:00:00 2001
+From 3824dc2efc9f68e29aba845ac1cbb6040679d29d Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:45:05 +0000
 Subject: [PATCH 08/13] relay_metrics: Add a gauge of tunneled directory server
@@ -21,10 +21,10 @@ gone and only the stream is left, draining onto the circuit
 Part of #41339.
 ---
  changes/ticket41339_dir_server_conns |  5 +++
- src/feature/relay/relay_metrics.c    | 45 ++++++++++++++++++++++++
- src/feature/relay/relay_metrics.h    |  2 ++
- src/test/test_hs_cache.c             | 51 ++++++++++++++++++++++++++++
- 4 files changed, 103 insertions(+)
+ src/feature/relay/relay_metrics.c    | 45 ++++++++++++++++++++++
+ src/feature/relay/relay_metrics.h    |  2 +
+ src/test/test_hs_cache.c             | 57 ++++++++++++++++++++++++++++
+ 4 files changed, 109 insertions(+)
  create mode 100644 changes/ticket41339_dir_server_conns
 
 diff --git a/changes/ticket41339_dir_server_conns b/changes/ticket41339_dir_server_conns
@@ -136,7 +136,7 @@ index f793c890e2..efa9413342 100644
  
  /** The metadata of a relay metric. */
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 3a8e972f34..8335e80508 100644
+index f9e557a38d..b3b9843cda 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -20,6 +20,7 @@
@@ -147,7 +147,7 @@ index 3a8e972f34..8335e80508 100644
  #include "core/proto/proto_http.h"
  #include "app/config/config.h"
  #include "core/or/circuitlist.h"
-@@ -1015,6 +1016,54 @@ test_dir_request_response_metrics(void *arg)
+@@ -1024,6 +1025,60 @@ test_dir_request_response_metrics(void *arg)
    tor_free(chan);
  }
  
@@ -161,9 +161,11 @@ index 3a8e972f34..8335e80508 100644
 +{
 +  const char *states[] = { "command_wait", "writing_hs_descriptor",
 +                           "writing_other", "draining" };
++  const int64_t added[ARRAY_LENGTH(states)] = { 1, 1, 1, 2 };
 +  int64_t before[ARRAY_LENGTH(states)];
-+  connection_t *conns[6];
++  connection_t *conns[7];
 +  edge_connection_t *edge = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
++  edge_connection_t *edge2 = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
 +  ed25519_public_key_t pk;
 +  (void) arg;
 +
@@ -181,18 +183,22 @@ index 3a8e972f34..8335e80508 100644
 +  conns[3]->linked = 0; /* Direct, not tunneled. */
 +  conns[4]->state = DIR_CONN_STATE_SERVER_COMMAND_WAIT;
 +  conns[4]->marked_for_close = 1;
-+  /* A stream whose directory connection is gone. */
++  /* Streams whose directory connection is gone, or closing. */
 +  conns[5] = TO_CONN(edge);
 +  conns[5]->linked = 1;
++  conns[6] = TO_CONN(edge2);
++  conns[6]->linked = 1;
++  conns[6]->linked_conn = conns[4];
 +
 +  for (size_t i = 0; i < ARRAY_LENGTH(states); i++)
 +    before[i] = DIR_CONN_GAUGE(states[i]);
 +  for (size_t i = 0; i < ARRAY_LENGTH(conns); i++)
 +    smartlist_add(get_connection_array(), conns[i]);
 +  for (size_t i = 0; i < ARRAY_LENGTH(states); i++)
-+    tt_i64_op(DIR_CONN_GAUGE(states[i]), OP_EQ, before[i] + 1);
++    tt_i64_op(DIR_CONN_GAUGE(states[i]), OP_EQ, before[i] + added[i]);
 +
 + done:
++  conns[6]->linked_conn = NULL;
 +  for (size_t i = 0; i < ARRAY_LENGTH(conns); i++) {
 +    smartlist_remove(get_connection_array(), conns[i]);
 +    connection_free_minimal(conns[i]);
@@ -202,7 +208,7 @@ index 3a8e972f34..8335e80508 100644
  struct testcase_t hs_cache[] = {
    /* Encoding tests. */
    { "directory", test_directory, TT_FORK,
-@@ -1031,6 +1080,8 @@ struct testcase_t hs_cache[] = {
+@@ -1040,6 +1095,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "dir_request_response_metrics", test_dir_request_response_metrics,
      TT_FORK, NULL, NULL },

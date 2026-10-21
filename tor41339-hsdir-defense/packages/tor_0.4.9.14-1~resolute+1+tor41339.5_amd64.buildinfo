@@ -2,22 +2,22 @@ Format: 1.0
 Source: tor
 Binary: tor tor-dbgsym tor-geoipdb
 Architecture: all amd64
-Version: 0.4.9.14-1~resolute+1+tor41339.4
+Version: 0.4.9.14-1~resolute+1+tor41339.5
 Checksums-Md5:
- 6fc7d769aa087a7b288a1187101c7489 7077486 tor-dbgsym_0.4.9.14-1~resolute+1+tor41339.4_amd64.ddeb
- e1190d60ba310dd7b6d136e71f2c8a1d 2751366 tor-geoipdb_0.4.9.14-1~resolute+1+tor41339.4_all.deb
- 768dab1e944010256cb436d093ef2fca 1779796 tor_0.4.9.14-1~resolute+1+tor41339.4_amd64.deb
+ c84ee7d210737ef3ceb63fe636bfd872 7078756 tor-dbgsym_0.4.9.14-1~resolute+1+tor41339.5_amd64.ddeb
+ 834420409afa1e595b21d11a0b0ee4a9 2758708 tor-geoipdb_0.4.9.14-1~resolute+1+tor41339.5_all.deb
+ 67e9e8af94eac8922836c473795ad0e0 1779932 tor_0.4.9.14-1~resolute+1+tor41339.5_amd64.deb
 Checksums-Sha1:
- aac1d3d862cdb2a87f8b8609d33986b75b782f05 7077486 tor-dbgsym_0.4.9.14-1~resolute+1+tor41339.4_amd64.ddeb
- 69e1338496eb56f52ba5286870d1ff12d3a65c0e 2751366 tor-geoipdb_0.4.9.14-1~resolute+1+tor41339.4_all.deb
- 276d6eb971fee9114e8f547ba72a55ec327d6788 1779796 tor_0.4.9.14-1~resolute+1+tor41339.4_amd64.deb
+ 7ef3800c7ca0fc75bad97d4d53a08b81ee290c10 7078756 tor-dbgsym_0.4.9.14-1~resolute+1+tor41339.5_amd64.ddeb
+ e94200fd9f0dd1bdbb8f61f3403a26592f13e988 2758708 tor-geoipdb_0.4.9.14-1~resolute+1+tor41339.5_all.deb
+ 79b8979411affc6e865a855ca64e67f0c849d343 1779932 tor_0.4.9.14-1~resolute+1+tor41339.5_amd64.deb
 Checksums-Sha256:
- 3a841d136500877295156b6a84b74763f311f8901a4e0f11f2ce4a390b86277b 7077486 tor-dbgsym_0.4.9.14-1~resolute+1+tor41339.4_amd64.ddeb
- b056089e966e02b78ed2a69592254430f9179c0d25e2319ff5c1cd83e02f54fd 2751366 tor-geoipdb_0.4.9.14-1~resolute+1+tor41339.4_all.deb
- d74a2d25d0b9de56545abaea525cfb82f5f2ffa6b49519359d7fa734c2f749dd 1779796 tor_0.4.9.14-1~resolute+1+tor41339.4_amd64.deb
+ 79b8d718be3006956d3e50cd1b3f9b2dddb47cfa8b3790302132ddbaf1447a99 7078756 tor-dbgsym_0.4.9.14-1~resolute+1+tor41339.5_amd64.ddeb
+ 23b68df4c4e54af04896cf87481d2cf555af1bd71c0fc1eb3b5f650018960145 2758708 tor-geoipdb_0.4.9.14-1~resolute+1+tor41339.5_all.deb
+ ae6337e108257ce475c5d07fff9972f813f09213d799eac52e9ffec03ddfcf8c 1779932 tor_0.4.9.14-1~resolute+1+tor41339.5_amd64.deb
 Build-Origin: Ubuntu
 Build-Architecture: amd64
-Build-Date: Wed, 21 Oct 2026 09:38:40 +0000
+Build-Date: Wed, 21 Oct 2026 11:21:59 +0000
 Build-Path: /build/tor-0.4.9.14
 Installed-Build-Depends:
  asciidoc (= 10.2.1-1build1),
@@ -229,4 +229,4 @@ Installed-Build-Depends:
 Environment:
  DEB_BUILD_OPTIONS="parallel=4"
  DEB_BUILD_PROFILES="derivative.ubuntu noudeb"
- SOURCE_DATE_EPOCH="1792574913"
+ SOURCE_DATE_EPOCH="1792581106"

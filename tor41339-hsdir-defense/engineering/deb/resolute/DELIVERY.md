@@ -1,10 +1,10 @@
 # Native Ubuntu 26.04 artifact: builder delivery for the build handoff
 
 > **Superseded artifact.** This records the `+tor41339.3` handoff (the legacy
-> 7-patch series). `../../../packages/` now holds `+tor41339.4`, built from
+> 7-patch series). `../../../packages/` now holds `+tor41339.5`, built from
 > all 13 patches; see `../../../packages/BUILD-INFO.txt`, the install check in
 > this directory, and `controls/` for its evidence. The systemd, allocator
-> and sibling checks below have not been redone for `+tor41339.4`.
+> and sibling checks below have not been redone for `+tor41339.5`.
 
 This answers `../../../operator/NATIVE-26.04-BUILD-HANDOFF.md` item by item.
 It is the builder's evidence for review. It is not deployment authorization,

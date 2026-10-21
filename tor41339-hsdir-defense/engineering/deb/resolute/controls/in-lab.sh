@@ -24,6 +24,8 @@ EVIL_ISO_SESSIONGRP=1 bash /sim/loadclient_up.sh "$NODES" /work/lc-reuse 8020 90
 EVIL_ONEHOP=1 bash /sim/loadclient_up.sh "$NODES" /work/lc-onehop 8022 9022 /lc/tor onehop | tail -1
 python3 /evidence/controls.py "$NODES" /out/controls-result.json "${PHASE_S:-40}"
 echo "--- bad syscalls across all node logs: $(cat "$NODES"/*/*.log 2>/dev/null | grep -c 'Caught a bad syscall')"
-echo "--- 'Refusing HS directory request' / 'Closing circuit after repeated' lines (need ProtocolWarnings; chutney sets it):"
-grep -h 'Refusing HS directory request\|Closing circuit after repeated HS directory request' "$NODES"/*/*.log 2>/dev/null | sed 's/^.*\] //' | sort | uniq -c | head
+echo "--- defense log lines (need ProtocolWarnings; chutney sets it):"
+grep -hE 'Closing a circuit that (made more than one|fetched an) onion service|Refusing an onion service directory request' "$NODES"/*/*.log 2>/dev/null | sed -E 's/^.*\] //; s/relay .*\./relay <peer>./' | sort | uniq -c | head
+echo "--- heartbeat DoS lines at the end (target relays):"
+for f in "$NODES"/00[4-9]r/notice.log; do grep -h 'DoS mitigation since startup' "$f" | tail -n1 | sed 's/^.*\] //'; done | sort | uniq -c
 for f in "$NODES"/0*r; do printf '%s Sandbox=%s %s\n' "$(basename $f)" "$(grep -i '^Sandbox' $f/torrc | awk '{print $2}')" "$(grep -E '^Seccomp_filters' /proc/$(cat $f/pid)/status | tr -s '\t' ' ')"; done

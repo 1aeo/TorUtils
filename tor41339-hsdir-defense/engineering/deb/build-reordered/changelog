@@ -1,4 +1,4 @@
-tor (0.4.9.14-1~noble+1+tor41339.4) noble; urgency=medium
+tor (0.4.9.14-1~noble+1+tor41339.5) noble; urgency=medium
 
   * Apply the tor#41339 HSDir defensive series (patches 0001-0013): HTTP
     and onion service descriptor hardening, MetricsPort counters for
@@ -6,7 +6,7 @@ tor (0.4.9.14-1~noble+1+tor41339.4) noble; urgency=medium
     and BEGIN_DIR defenses, all off by default; restore
     doc/nofooter.conf.
 
- -- 1aeo <github@1aeo.com>  Wed, 21 Oct 2026 09:17:38 +0000
+ -- 1aeo <github@1aeo.com>  Wed, 21 Oct 2026 10:58:59 +0000
 
 tor (0.4.9.14-1~noble+1) noble-backport; urgency=medium
 

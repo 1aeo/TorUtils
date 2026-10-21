@@ -1,9 +1,9 @@
 # Rebuild the `.deb`s (24.04 noble, 26.04 resolute) from the current series
 
-The attached packages in `../../packages/` are `+tor41339.4` for Ubuntu 24.04
+The attached packages in `../../packages/` are `+tor41339.5` for Ubuntu 24.04
 (`~noble+1`) and 26.04 (`~resolute+1`), built from `../../patches/0001`–`0013`
 (provenance: `../../packages/BUILD-INFO.txt`). Use this runbook whenever
-`patches/` changes, bumping the suffix (`+tor41339.5`, …) so `dpkg` sees the
+`patches/` changes, bumping the suffix (`+tor41339.6`, …) so `dpkg` sees the
 new build as newer. Rebuild **both** releases from the same
 series, and regenerate every artifact below together, so the binaries, the
 `debian-patches/` build copy and the docs never diverge.
@@ -43,8 +43,8 @@ series, and regenerate every artifact below together, so the binaries, the
    `EXPECT_PATCHES` (14 for `0000`–`0013`).
 2. Run once per release (the driver runs with `set -o pipefail`, so a failed
    `dpkg-buildpackage` fails the run):
-   - `docker run --rm --network host -e SUITE=noble -e REV=4 -e EXPECT_PATCHES=14 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-noble:/out ubuntu:24.04 bash /in/build-in-container-reordered.sh`
-   - `docker run --rm --network host -e SUITE=resolute -e REV=4 -e EXPECT_PATCHES=14 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-resolute:/out ubuntu:26.04 bash /in/build-in-container-reordered.sh`
+   - `docker run --rm --network host -e SUITE=noble -e REV=5 -e EXPECT_PATCHES=14 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-noble:/out ubuntu:24.04 bash /in/build-in-container-reordered.sh`
+   - `docker run --rm --network host -e SUITE=resolute -e REV=5 -e EXPECT_PATCHES=14 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-resolute:/out ubuntu:26.04 bash /in/build-in-container-reordered.sh`
 
    Expect `dh_auto_test` green in both (see `BUILD-INFO.txt` for the counts).
 3. Check: no compiler warning on any line the series adds (warnings in
@@ -61,15 +61,20 @@ series, and regenerate every artifact below together, so the binaries, the
 
 Run `install-run-reordered/run-deb-test.sh` once per package (see its header
 for the variables: the output dir, a chutney checkout and venv, a tor +
-tor-gencert for the lab's own authorities, and `IMAGE=ubuntu:26.04` for the
-resolute package). It brings up a private chutney net, installs **only** the
-`tor` package in a fresh container of that release, runs an unpublished relay
-under `Sandbox 1`, and must report: `--verify-config` rc 0 for both torrcs,
-`VERSION_OK=1`, `NEW_OPTIONS=7` with every defense off (`auto` or `0`),
-Bootstrapped 100%, `Seccomp_filters: 2` (Docker's filter plus tor's),
-`NEW_METRIC_SERIES=22`, and 0 bad syscalls. (Not exiting on SIGTERM under `Sandbox 1` is the pre-existing
-upstream bug tor#41060; `../seccomp/sigterm-repro.sh` compares stock and
-patched.)
+tor-gencert for the lab's own authorities, `REV`, and `IMAGE=ubuntu:26.04`
+for the resolute package). It brings up a private chutney net, installs
+**only** the `tor` package in a fresh container of that release, and runs an
+unpublished relay under `Sandbox 1`. It exits nonzero unless both torrcs pass
+`--verify-config`, the version ends in `+tor41339.$REV`, all 7 new options
+exist (`NEW_OPTIONS=7`, every defense off), the relay bootstraps, all 24 new
+MetricsPort series are present (`NEW_METRIC_SERIES=24`), and there are 0 bad
+syscalls; the transcript ends with `RESULT: PASS`. (Not exiting on SIGTERM
+under `Sandbox 1` is the pre-existing upstream bug tor#41060;
+`../seccomp/sigterm-repro.sh` compares stock and patched.)
+
+Then run `resolute/controls/run-controls.sh` (see its header) with a lab
+image holding the package, once per release: every defense is switched on and
+off live under HS-directory traffic in a network-less container.
 
 ## Regenerate together
 

@@ -1,4 +1,4 @@
-From bf409f8cc0badd107ed7832dba9fd1fd47021bd2 Mon Sep 17 00:00:00 2001
+From 4f3615470d79f6cb6731c4c9c1afad3a3b2ae2cf Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:48:27 +0000
 Subject: [PATCH 10/13] dos: Count repeated and unknown-previous-hop HSDir
@@ -21,29 +21,30 @@ and two bits on or_circuit_t.
 
 Part of #41339.
 ---
- changes/ticket41339_hsdir_reuse_counters |  7 ++
+ changes/ticket41339_hsdir_reuse_counters |  8 ++
  src/core/or/dos.c                        | 17 +++++
  src/core/or/dos.h                        | 17 +++++
  src/core/or/or_circuit_st.h              |  4 +
  src/feature/dircache/dircache.c          | 32 ++++++++
  src/feature/relay/relay_metrics.c        |  5 ++
  src/test/test_hs_cache.c                 | 95 ++++++++++++++++++++++--
- 7 files changed, 172 insertions(+), 5 deletions(-)
+ 7 files changed, 173 insertions(+), 5 deletions(-)
  create mode 100644 changes/ticket41339_hsdir_reuse_counters
 
 diff --git a/changes/ticket41339_hsdir_reuse_counters b/changes/ticket41339_hsdir_reuse_counters
 new file mode 100644
-index 0000000000..609f972773
+index 0000000000..3cd5003287
 --- /dev/null
 +++ b/changes/ticket41339_hsdir_reuse_counters
-@@ -0,0 +1,7 @@
+@@ -0,0 +1,8 @@
 +  o Minor features (metrics port, relay):
 +    - Count, on the MetricsPort, the anonymous onion service directory
 +      requests an HSDir receives, the requests and circuits that repeat them
 +      on one circuit, and those whose previous hop is not a known relay, as
 +      tor_relay_dos_total{type="hsdir_request_total"|"hsdir_req_reused"|
 +      "hsdir_circ_reused"|"hsdir_unknown_prev_hop"}. Stock clients and
-+      services do neither. Part of ticket 41339.
++      services repeat none, and use an unknown previous hop only while our
++      consensus lags theirs. Part of ticket 41339.
 diff --git a/src/core/or/dos.c b/src/core/or/dos.c
 index b789f87aae..f6963823ee 100644
 --- a/src/core/or/dos.c
@@ -210,7 +211,7 @@ index 8aee3da717..aee312deeb 100644
  
    for (size_t i = 0; i < ARRAY_LENGTH(entries); i++) {
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 8335e80508..a4f0de7954 100644
+index b3b9843cda..f94a76d39d 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -25,6 +25,7 @@
@@ -266,7 +267,7 @@ index 8335e80508..a4f0de7954 100644
  /* HSDirs count descriptor fetches and uploads by outcome. */
  static void
  test_hsdir_get_post_metrics(void *arg)
-@@ -1064,6 +1074,79 @@ test_dir_server_conns_gauge(void *arg)
+@@ -1079,6 +1089,79 @@ test_dir_server_conns_gauge(void *arg)
    }
  }
  
@@ -346,7 +347,7 @@ index 8335e80508..a4f0de7954 100644
  struct testcase_t hs_cache[] = {
    /* Encoding tests. */
    { "directory", test_directory, TT_FORK,
-@@ -1082,6 +1165,8 @@ struct testcase_t hs_cache[] = {
+@@ -1097,6 +1180,8 @@ struct testcase_t hs_cache[] = {
      TT_FORK, NULL, NULL },
    { "dir_server_conns_gauge", test_dir_server_conns_gauge, TT_FORK,
      NULL, NULL },

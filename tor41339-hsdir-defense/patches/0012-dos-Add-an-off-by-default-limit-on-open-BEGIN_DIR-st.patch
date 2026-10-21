@@ -1,6 +1,6 @@
-From 545f8553df73bcab3807dec6660feac438740a0b Mon Sep 17 00:00:00 2001
+From 20be0fb501761f48d484d5ccae0a1c1b19fcd3b2 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
-Date: Wed, 21 Oct 2026 09:02:05 +0000
+Date: Wed, 21 Oct 2026 10:12:44 +0000
 Subject: [PATCH 12/13] dos: Add an off-by-default limit on open BEGIN_DIR
  streams per circuit
 
@@ -12,14 +12,20 @@ open for minutes.
 
 Add DoSBeginDirLimitEnabled, an AUTOBOOL whose "auto" default follows
 the consensus parameter of the same name (default 0), and
-DoSBeginDirMaxStreams (default 20). When enabled, a public relay
+DoSBeginDirMaxStreams (default 64). When enabled, a public relay
 refuses a BEGIN_DIR stream on a circuit that already has that many open
-directory streams, with END_STREAM_REASON_MISC as the stream defense
-does.
+directory streams. It sends END_STREAM_REASON_MISC, like the stream
+defense, but tor clients ignore the reason on BEGIN_DIR streams: they
+treat the refusal as a failed directory request and, except for onion
+service requests, consider the relay down until their next consensus.
 
-From the client code, we expect stock clients to have a few directory
-streams open on a circuit, and up to about 18 while bootstrapping from
-a single directory guard. BEGIN_DIR cells over the limit are counted as
+Stock clients rarely have more than a few directory streams open on one
+circuit. While bootstrapping, a tor client launches about one
+descriptor request per 500 relays, spread over up to three directory
+guards, all on one circuit per guard; a bridge fetches both router
+descriptors and microdescriptors, about 36 requests in a network of
+9,000 relays. The default leaves room for that through a single guard.
+BEGIN_DIR cells over the limit are counted as
 tor_relay_dos_total{type="begindir_over_max"} whether or not the limit
 is enabled, so operators can check that before enabling it.
 
@@ -31,50 +37,54 @@ Part of #41339.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_0112dw5hzSb9kGftLP3nkYC5
 ---
- changes/ticket41339_begindir_max_streams |  5 ++
- doc/man/tor.1.txt                        | 15 +++++
- src/core/or/connection_edge.c            | 10 ++-
- src/core/or/dos.c                        | 37 +++++++++++
- src/core/or/dos.h                        |  8 ++-
- src/core/or/dos_options.inc              |  8 +++
- src/feature/relay/relay_metrics.c        |  1 +
- src/test/test_dos.c                      | 79 ++++++++++++++++++++++++
- src/test/test_status.c                   |  1 +
- 9 files changed, 161 insertions(+), 3 deletions(-)
+ changes/ticket41339_begindir_max_streams |   7 +
+ doc/man/tor.1.txt                        |  17 +++
+ src/core/or/connection_edge.c            |  10 +-
+ src/core/or/dos.c                        |  37 +++++
+ src/core/or/dos.h                        |   8 +-
+ src/core/or/dos_options.inc              |   8 ++
+ src/feature/relay/relay_metrics.c        |   1 +
+ src/test/test_dos.c                      | 172 +++++++++++++++++++++++
+ src/test/test_status.c                   |   1 +
+ 9 files changed, 258 insertions(+), 3 deletions(-)
  create mode 100644 changes/ticket41339_begindir_max_streams
 
 diff --git a/changes/ticket41339_begindir_max_streams b/changes/ticket41339_begindir_max_streams
 new file mode 100644
-index 0000000000..5945b9481e
+index 0000000000..4ef9f4cc9a
 --- /dev/null
 +++ b/changes/ticket41339_begindir_max_streams
-@@ -0,0 +1,5 @@
+@@ -0,0 +1,7 @@
 +  o Minor features (DoS-resistance, directory cache):
 +    - Add the DoSBeginDirLimitEnabled and DoSBeginDirMaxStreams options and
-+      consensus parameters. When enabled (off by default), a relay refuses
-+      BEGIN_DIR streams on a circuit that already has DoSBeginDirMaxStreams
-+      (default 20) open directory streams. Part of ticket 41339.
++      consensus parameters. When enabled (off by default), a public relay
++      refuses BEGIN_DIR streams on a circuit that already has
++      DoSBeginDirMaxStreams (default 64) open directory streams. Such
++      streams are counted as tor_relay_dos_total{type="begindir_over_max"}
++      whether or not it is enabled. Part of ticket 41339.
 diff --git a/doc/man/tor.1.txt b/doc/man/tor.1.txt
-index ed3cfb8ba4..ae5a7d075a 100644
+index 72f251dc4f..9122a8bddc 100644
 --- a/doc/man/tor.1.txt
 +++ b/doc/man/tor.1.txt
-@@ -3110,6 +3110,21 @@ Denial of Service mitigation subsystem described above.
+@@ -3110,6 +3110,23 @@ Denial of Service mitigation subsystem described above.
      consensus parameter. If not defined in the consensus, the value is 0.
      (Default: auto)
  
 +[[DoSBeginDirLimitEnabled]] **DoSBeginDirLimitEnabled** **0**|**1**|**auto**::
 +
 +    Refuse a BEGIN_DIR stream on a circuit that already has
-+    DoSBeginDirMaxStreams open directory streams. Clients treat a refused
-+    stream as a failed directory request. Whatever this value, such streams
-+    are counted on the MetricsPort. "auto" means use the consensus parameter.
-+    If not defined in the consensus, the value is 0. (Default: auto)
++    DoSBeginDirMaxStreams open directory streams. Tor clients treat a refused
++    stream as a failed directory request and, except for onion service
++    requests, consider this relay down until their next consensus. Whatever
++    this value, such streams are counted on the MetricsPort. "auto" means use
++    the consensus parameter. If not defined in the consensus, the value is 0.
++    (Default: auto)
 +
 +[[DoSBeginDirMaxStreams]] **DoSBeginDirMaxStreams** __NUM__::
 +
 +    The maximum number of open directory streams on a single circuit. See
 +    DoSBeginDirLimitEnabled. If not defined or set to 0, it is controlled by a
-+    consensus parameter. If not defined in the consensus, the value is 20.
++    consensus parameter. If not defined in the consensus, the value is 64.
 +    (Default: 0)
 +
  The following options are useful only for a exit relay.
@@ -171,7 +181,7 @@ index a6e40bb714..740fc53c91 100644
    smartlist_add_asprintf(elems,
                           "%" PRIu64 " INTRODUCE2 rejected",
 diff --git a/src/core/or/dos.h b/src/core/or/dos.h
-index 0280b77df0..0a0c9dce13 100644
+index 0280b77df0..b1fb6991c4 100644
 --- a/src/core/or/dos.h
 +++ b/src/core/or/dos.h
 @@ -83,7 +83,7 @@ void dos_close_client_conn(const or_connection_t *or_conn);
@@ -198,7 +208,7 @@ index 0280b77df0..0a0c9dce13 100644
  /* DosStreamCreationBurst default. */
  #define DOS_STREAM_BURST_DEFAULT 300
 +/* DoSBeginDirMaxStreams default. */
-+#define DOS_BEGINDIR_MAX_STREAMS_DEFAULT 20
++#define DOS_BEGINDIR_MAX_STREAMS_DEFAULT 64
  
  /* Type of defense that we can use for the stream creation DoS mitigation. */
  typedef enum dos_stream_defense_type_t {
@@ -230,7 +240,7 @@ index 276fbce13a..5f1fe6235b 100644
  * applicable for a malicious address. A random time delta is added to the
  * defense time of an address which will be between 1 second and half of this
 diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
-index aee312deeb..6994df02f8 100644
+index 7e9d404770..8c7a421cff 100644
 --- a/src/feature/relay/relay_metrics.c
 +++ b/src/feature/relay/relay_metrics.c
 @@ -466,6 +466,7 @@ fill_dos_values(void)
@@ -242,50 +252,76 @@ index aee312deeb..6994df02f8 100644
  
    for (size_t i = 0; i < ARRAY_LENGTH(entries); i++) {
 diff --git a/src/test/test_dos.c b/src/test/test_dos.c
-index 6c57e85cb8..008ac110db 100644
+index 409b34df9b..23598a7e03 100644
 --- a/src/test/test_dos.c
 +++ b/src/test/test_dos.c
-@@ -4,8 +4,11 @@
+@@ -4,11 +4,16 @@
  #define DOS_PRIVATE
  #define CHANNEL_OBJECT_PRIVATE
  #define CIRCUITLIST_PRIVATE
 +#define CONNECTION_PRIVATE
  
  #include "core/or/or.h"
-+#include "app/config/config.h"
+ #include "app/config/config.h"
 +#include "core/mainloop/connection.h"
++#include "core/mainloop/mainloop.h"
  #include "core/or/dos.h"
  #include "core/or/circuitlist.h"
++#include "core/or/connection_edge.h"
++#include "core/or/relay.h"
  #include "lib/crypt_ops/crypto_rand.h"
-@@ -18,11 +21,16 @@
+ #include "lib/time/compat_time.h"
+ #include "feature/stats/geoip_stats.h"
+@@ -17,10 +22,13 @@
+ #include "feature/nodelist/networkstatus.h"
+ #include "feature/nodelist/nodelist.h"
  #include "feature/nodelist/routerlist.h"
++#include "feature/hibernate/hibernate.h"
  
  #include "feature/nodelist/networkstatus_st.h"
-+#include "app/config/or_options_st.h"
-+#include "core/or/dos_options_st.h"
+ #include "app/config/or_options_st.h"
+ #include "core/or/dos_options_st.h"
 +#include "core/or/edge_connection_st.h"
 +#include "core/or/or_circuit_st.h"
  #include "core/or/or_connection_st.h"
  #include "feature/nodelist/routerstatus_st.h"
  
- #include "test/test.h"
- #include "test/log_test_helpers.h"
-+#include "test/opts_test_helpers.h"
- 
- static const uint64_t BILLION = 1000000000;
- 
-@@ -566,6 +574,75 @@ test_dos_conn_rate(void *arg)
-   dos_free_all();
+@@ -599,6 +607,164 @@ test_dos_refuse_single_hop(void *arg)
+   tor_free(dummy_ns);
  }
  
++/** Add <b>n</b> streams to <b>circ</b>: directory streams if <b>linked</b>,
++ * and closing ones if <b>marked</b>. */
++static void
++add_streams(or_circuit_t *circ, int n, bool linked, bool marked)
++{
++  for (int i = 0; i < n; i++) {
++    edge_connection_t *stream = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
++    stream->base_.linked = linked;
++    stream->base_.marked_for_close = marked;
++    stream->next_stream = circ->n_streams;
++    circ->n_streams = stream;
++  }
++}
++
++/** Free the streams that add_streams() added to <b>circ</b>. */
++static void
++free_streams(or_circuit_t *circ)
++{
++  while (circ->n_streams) {
++    edge_connection_t *stream = circ->n_streams;
++    circ->n_streams = stream->next_stream;
++    connection_free_minimal(TO_CONN(stream));
++  }
++}
++
 +/** Test that BEGIN_DIR cells on a circuit with DoSBeginDirMaxStreams open
-+ * directory streams are counted, and only refused when the limit is
-+ * enabled. */
++ * directory streams are counted, and only refused by public relays when the
++ * limit is enabled. */
 +static void
 +test_dos_begindir_max_streams(void *arg)
 +{
 +  or_circuit_t *circ = or_circuit_new(0, NULL);
-+  edge_connection_t *streams[4];
 +  dos_options_t *dos_opts = get_dos_options(get_options_mutable());
 +  (void) arg;
 +
@@ -293,69 +329,151 @@ index 6c57e85cb8..008ac110db 100644
 +       mock_networkstatus_get_latest_consensus);
 +  get_options_mutable()->ORPort_set = 1;
 +
-+  /* Two open directory streams, a closing one, and an exit stream. */
-+  for (int i = 0; i < 4; i++) {
-+    streams[i] = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
-+    streams[i]->base_.linked = (i < 3);
-+    streams[i]->next_stream = circ->n_streams;
-+    circ->n_streams = streams[i];
-+  }
-+  streams[2]->base_.marked_for_close = 1;
-+
-+  /* Under the default limit of 20 or a torrc limit of 3, nothing is
-+   * counted. */
-+  tt_assert(!dos_should_refuse_begindir(circ));
-+  dos_opts->DoSBeginDirMaxStreams = 3;
++  /* Exit streams and closing directory streams don't count. */
++  add_streams(circ, 1, false, false);
++  add_streams(circ, 1, true, true);
++  add_streams(circ, 63, true, false);
++  dos_opts->DoSBeginDirLimitEnabled = 1;
 +  tt_assert(!dos_should_refuse_begindir(circ));
 +  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, 0);
-+
-+  /* At a limit of 2, we count, but only refuse when enabled. */
-+  dos_opts->DoSBeginDirMaxStreams = 2;
-+  tt_assert(!dos_should_refuse_begindir(circ));
-+  dos_opts->DoSBeginDirLimitEnabled = 1;
++  /* The default limit is 64. */
++  add_streams(circ, 1, true, false);
 +  tt_assert(dos_should_refuse_begindir(circ));
-+  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, 2);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, 1);
++  free_streams(circ);
 +
 +  /* The consensus can set both, and the torrc overrides it. */
++  add_streams(circ, 2, true, false);
 +  dummy_ns = tor_malloc_zero(sizeof(networkstatus_t));
 +  dummy_ns->net_params = smartlist_new();
 +  smartlist_add(dummy_ns->net_params, (char *) "DoSBeginDirLimitEnabled=1");
 +  smartlist_add(dummy_ns->net_params, (char *) "DoSBeginDirMaxStreams=2");
 +  dos_opts->DoSBeginDirLimitEnabled = -1;
-+  dos_opts->DoSBeginDirMaxStreams = 0;
 +  tt_assert(dos_should_refuse_begindir(circ));
 +  dos_opts->DoSBeginDirMaxStreams = 3;
 +  tt_assert(!dos_should_refuse_begindir(circ));
 +  dos_opts->DoSBeginDirMaxStreams = 0;
 +  dos_opts->DoSBeginDirLimitEnabled = 0;
 +  tt_assert(!dos_should_refuse_begindir(circ));
-+  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, 4);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, 3);
 +
-+  /* Relays that aren't public never refuse. */
++  /* Bridges count, but never refuse. */
 +  dos_opts->DoSBeginDirLimitEnabled = 1;
-+  get_options_mutable()->ORPort_set = 0;
++  get_options_mutable()->BridgeRelay = 1;
 +  tt_assert(!dos_should_refuse_begindir(circ));
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, 4);
 +
 + done:
 +  UNMOCK(networkstatus_get_latest_consensus);
 +  if (dummy_ns)
 +    smartlist_free(dummy_ns->net_params);
 +  tor_free(dummy_ns);
-+  circ->n_streams = NULL;
-+  for (int i = 0; i < 4; i++)
-+    connection_free_minimal(TO_CONN(streams[i]));
++  free_streams(circ);
 +  circuit_free_all();
 +}
 +
- struct testcase_t dos_tests[] = {
-   { "conn_creation", test_dos_conn_creation, TT_FORK, NULL, NULL },
-   { "circuit_creation", test_dos_circuit_creation, TT_FORK, NULL, NULL },
-@@ -573,5 +650,7 @@ struct testcase_t dos_tests[] = {
-   { "known_relay" , test_known_relay, TT_FORK,
++static int n_connected = 0, n_end = 0, end_reason = 0;
++static int
++mock_relay_send_command_from_edge(streamid_t stream_id, circuit_t *circ,
++                                  uint8_t relay_command, const char *payload,
++                                  size_t payload_len,
++                                  crypt_path_t *cpath_layer,
++                                  const char *filename, int lineno)
++{
++  (void) stream_id;
++  (void) circ;
++  (void) cpath_layer;
++  (void) filename;
++  (void) lineno;
++  if (relay_command == RELAY_COMMAND_CONNECTED)
++    n_connected++;
++  if (relay_command == RELAY_COMMAND_END) {
++    n_end++;
++    end_reason = payload_len ? payload[0] : -1;
++  }
++  return 0;
++}
++
++static int
++mock_we_are_hibernating(void)
++{
++  return 0;
++}
++
++/** Test that connection_exit_begin_conn() refuses a BEGIN_DIR over the limit
++ * with an END cell, before opening any connection. */
++static void
++test_dos_begindir_refused(void *arg)
++{
++  or_circuit_t *circ = or_circuit_new(0, NULL);
++  dos_options_t *dos_opts = get_dos_options(get_options_mutable());
++  relay_msg_t msg;
++  (void) arg;
++
++  tor_init_connection_lists();
++  MOCK(relay_send_command_from_edge_, mock_relay_send_command_from_edge);
++  MOCK(we_are_hibernating, mock_we_are_hibernating);
++  get_options_mutable()->ORPort_set = 1;
++  get_options_mutable()->DirPort_set = 1;
++  get_options_mutable()->DirCache = 1;
++  dos_opts->DoSBeginDirMaxStreams = 2;
++  dos_opts->DoSBeginDirLimitEnabled = 1;
++  TO_CIRCUIT(circ)->purpose = CIRCUIT_PURPOSE_OR;
++  memset(&msg, 0, sizeof(msg));
++  msg.command = RELAY_COMMAND_BEGIN_DIR;
++  msg.body = (const uint8_t *) "";
++
++  for (msg.stream_id = 1; msg.stream_id <= 3; msg.stream_id++)
++    tt_int_op(connection_exit_begin_conn(&msg, TO_CIRCUIT(circ)), OP_EQ, 0);
++  tt_int_op(n_connected, OP_EQ, 2);
++  tt_int_op(n_end, OP_EQ, 1);
++  tt_int_op(end_reason, OP_EQ, END_STREAM_REASON_MISC);
++  /* Two linked pairs. */
++  tt_int_op(smartlist_len(get_connection_array()), OP_EQ, 4);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, 1);
++
++ done:
++  UNMOCK(relay_send_command_from_edge_);
++  UNMOCK(we_are_hibernating);
++  SMARTLIST_FOREACH(get_connection_array(), connection_t *, c, {
++    if (c->type == CONN_TYPE_EXIT)
++      TO_EDGE_CONN(c)->on_circuit = NULL;
++  });
++  circ->n_streams = NULL;
++  while (smartlist_len(get_connection_array())) {
++    connection_t *c = smartlist_get(get_connection_array(), 0);
++    connection_remove(c);
++    connection_free_(c);
++  }
++  circuit_free_all();
++}
++
+ /** Test that the heartbeat shows the directory request counts of each
+  * defense once it is enabled. */
+ static void
+@@ -610,11 +776,14 @@ test_dos_dir_heartbeat(void *arg)
+   get_options_mutable()->ORPort_set = 1;
+   dos_opts->HSDirOneRequestPerCircuit = 1;
+   dos_opts->HSDirRefuseUnknownPrevHop = 1;
++  dos_opts->DoSBeginDirLimitEnabled = 1;
++  dos_note_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX);
+   dos_note_dir_stat(DOS_DIR_HSDIR_CIRC_REUSED);
+   dos_note_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
+   dos_note_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
+   setup_full_capture_of_logs(LOG_NOTICE);
+   dos_log_heartbeat();
++  expect_single_log_msg_containing("1 BEGIN_DIR streams over the limit");
+   expect_single_log_msg_containing("1 circuits with repeated HSDir requests, "
+                                    "2 HSDir requests from unknown relays");
+ 
+@@ -630,6 +799,9 @@ struct testcase_t dos_tests[] = {
      NULL, NULL },
    { "conn_rate", test_dos_conn_rate, TT_FORK, NULL, NULL },
+   { "refuse_single_hop", test_dos_refuse_single_hop, TT_FORK, NULL, NULL },
 +  { "begindir_max_streams", test_dos_begindir_max_streams, TT_FORK,
 +    NULL, NULL },
++  { "begindir_refused", test_dos_begindir_refused, TT_FORK, NULL, NULL },
+   { "dir_heartbeat", test_dos_dir_heartbeat, TT_FORK, NULL, NULL },
    END_OF_TESTCASES
  };
 diff --git a/src/test/test_status.c b/src/test/test_status.c

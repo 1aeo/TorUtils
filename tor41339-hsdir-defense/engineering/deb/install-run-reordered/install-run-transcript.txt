@@ -1,17 +1,15 @@
++ : 5
++ fail=0
 + export DEBIAN_FRONTEND=noninteractive
 + DEBIAN_FRONTEND=noninteractive
 + head -2 /etc/os-release
 PRETTY_NAME="Ubuntu 24.04.5 LTS"
 NAME="Ubuntu"
 + apt-get update -q
-+ apt-get install -y -q --no-install-recommends /debs/tor_0.4.9.14-1~noble+1+tor41339.4_amd64.deb curl procps
-+ tail -n 3
-Setting up libcurl4t64:amd64 (8.5.0-2ubuntu10.16) ...
-Setting up curl (8.5.0-2ubuntu10.16) ...
-Processing triggers for libc-bin (2.39-0ubuntu8.9) ...
-+ tail -n 2
++ apt-get install -y -q --no-install-recommends /debs/tor_0.4.9.14-1~noble+1+tor41339.5_amd64.deb curl procps
 + dpkg -l tor tor-geoipdb
-ii  tor            0.4.9.14-1~noble+1+tor41339.4 amd64        anonymizing overlay network for TCP
++ tail -n 2
+ii  tor            0.4.9.14-1~noble+1+tor41339.5 amd64        anonymizing overlay network for TCP
 un  tor-geoipdb    <none>                        <none>       (no description available)
 + tor --version
 Tor version 0.4.9.14.
@@ -19,42 +17,47 @@ This build of Tor is covered by the GNU General Public License (https://www.gnu.
 Tor is running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc.
 Tor compiled with GCC version 13.3.0
 + tor --verify-config
-Oct 21 09:40:40.207 [notice] Tor 0.4.9.14 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc.
-Oct 21 09:40:40.207 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
-Oct 21 09:40:40.207 [notice] Read configuration file "/etc/tor/torrc".
-Oct 21 09:40:40.208 [warn] You are running Tor as root. You don't need to, and you probably shouldn't.
+Oct 21 11:25:19.915 [notice] Tor 0.4.9.14 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc.
+Oct 21 11:25:19.915 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+Oct 21 11:25:19.915 [notice] Read configuration file "/etc/tor/torrc".
+Oct 21 11:25:19.916 [warn] You are running Tor as root. You don't need to, and you probably shouldn't.
 Configuration was valid
-+ echo 'verify-config(default /etc/tor/torrc) rc=0'
-+ install -d -o debian-tor -g debian-tor -m 700 /var/lib/tor-lab
 verify-config(default /etc/tor/torrc) rc=0
++ rc=0
++ echo 'verify-config(default /etc/tor/torrc) rc=0'
++ check '[' 0 -eq 0 ']'
++ '[' 0 -eq 0 ']'
++ install -d -o debian-tor -g debian-tor -m 700 /var/lib/tor-lab
 + cp /lab/torrc-lab /etc/tor/torrc-lab
 + tor -f /etc/tor/torrc-lab --verify-config
-Oct 21 09:40:40.219 [notice] Tor 0.4.9.14 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc.
-Oct 21 09:40:40.219 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
-Oct 21 09:40:40.219 [notice] Read configuration file "/etc/tor/torrc-lab".
-Oct 21 09:40:40.220 [warn] Your ContactInfo config option is not set. Please strongly consider setting it, so we can contact you if your relay is misconfigured, end-of-life, or something else goes wrong. It is also possible that your relay might get rejected from the network due to a missing valid contact address.
-Oct 21 09:40:40.220 [notice] Based on detected system memory, MaxMemInQueues is set to 6436 MB. You can override this by setting MaxMemInQueues by hand.
-Oct 21 09:40:40.220 [warn] You have used DirAuthority or AlternateDirAuthority to specify alternate directory authorities in your configuration. This is potentially dangerous: it can make you look different from all other Tor users, and hurt your anonymity. Even if you've specified the same authorities as Tor uses by default, the defaults could change in the future. Be sure you know what you're doing.
-Oct 21 09:40:40.220 [warn] TestingTorNetwork is set. This will make your node almost unusable in the public Tor network, and is therefore only advised if you are building a testing Tor network!
+Oct 21 11:25:19.928 [notice] Tor 0.4.9.14 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc.
+Oct 21 11:25:19.928 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+Oct 21 11:25:19.928 [notice] Read configuration file "/etc/tor/torrc-lab".
+Oct 21 11:25:19.930 [warn] Your ContactInfo config option is not set. Please strongly consider setting it, so we can contact you if your relay is misconfigured, end-of-life, or something else goes wrong. It is also possible that your relay might get rejected from the network due to a missing valid contact address.
+Oct 21 11:25:19.930 [notice] Based on detected system memory, MaxMemInQueues is set to 6436 MB. You can override this by setting MaxMemInQueues by hand.
+Oct 21 11:25:19.930 [warn] You have used DirAuthority or AlternateDirAuthority to specify alternate directory authorities in your configuration. This is potentially dangerous: it can make you look different from all other Tor users, and hurt your anonymity. Even if you've specified the same authorities as Tor uses by default, the defaults could change in the future. Be sure you know what you're doing.
+Oct 21 11:25:19.930 [warn] TestingTorNetwork is set. This will make your node almost unusable in the public Tor network, and is therefore only advised if you are building a testing Tor network!
 Configuration was valid
-+ echo 'verify-config(lab) rc=0'
-+ echo '--- package version (expect suffix +tor41339.4)'
 verify-config(lab) rc=0
---- package version (expect suffix +tor41339.4)
+--- package version (expect suffix +tor41339.5)
++ rc=0
++ echo 'verify-config(lab) rc=0'
++ check '[' 0 -eq 0 ']'
++ '[' 0 -eq 0 ']'
++ echo '--- package version (expect suffix +tor41339.5)'
 ++ dpkg-query -W '-f=${Version}' tor
-+ V=0.4.9.14-1~noble+1+tor41339.4
-+ echo 0.4.9.14-1~noble+1+tor41339.4
-+ case "$V" in
-+ echo VERSION_OK=1
++ V=0.4.9.14-1~noble+1+tor41339.5
++ echo 0.4.9.14-1~noble+1+tor41339.5
++ check '[' 5 = 5 ']'
++ '[' 5 = 5 ']'
 + echo '--- new option defaults (expect every defense off: auto with no consensus parameter, or 0)'
-+ install -d -m 700 /tmp/dc
-0.4.9.14-1~noble+1+tor41339.4
-VERSION_OK=1
+0.4.9.14-1~noble+1+tor41339.5
 --- new option defaults (expect every defense off: auto with no consensus parameter, or 0)
++ install -d -m 700 /tmp/dc
 + printf 'DataDirectory /tmp/dc\nSocksPort 0\nLog notice stdout\n'
 + OPTS='HSDirOneRequestPerCircuit|HSDirRefuseUnknownPrevHop|DoSBeginDirLimitEnabled|DoSBeginDirMaxStreams|HSDirDescriptorFetchLimit|HSDirDescriptorFetchRate|HSDirDescriptorFetchBurst'
-+ tor --defaults-torrc /dev/null -f /tmp/dc.torrc --dump-config full
 + grep -E '^(HSDirOneRequestPerCircuit|HSDirRefuseUnknownPrevHop|DoSBeginDirLimitEnabled|DoSBeginDirMaxStreams|HSDirDescriptorFetchLimit|HSDirDescriptorFetchRate|HSDirDescriptorFetchBurst|RefuseUnknownExits) '
++ tor --defaults-torrc /dev/null -f /tmp/dc.torrc --dump-config full
 DoSBeginDirLimitEnabled auto
 DoSBeginDirMaxStreams 0
 HSDirDescriptorFetchBurst 20
@@ -65,20 +68,25 @@ HSDirRefuseUnknownPrevHop auto
 RefuseUnknownExits auto
 ++ tor --list-torrc-options
 ++ grep -cxE 'HSDirOneRequestPerCircuit|HSDirRefuseUnknownPrevHop|DoSBeginDirLimitEnabled|DoSBeginDirMaxStreams|HSDirDescriptorFetchLimit|HSDirDescriptorFetchRate|HSDirDescriptorFetchBurst'
-+ echo 'NEW_OPTIONS=7 (expect 7)'
-+ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}'
-+ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop)"\}'
-+ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop)"\}'
-+ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}'
-+ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}'
-+ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}'
 NEW_OPTIONS=7 (expect 7)
-+ tor -f /etc/tor/torrc-lab
-+ TORPID=390
++ NO=7
++ echo 'NEW_OPTIONS=7 (expect 7)'
++ check '[' 7 -eq 7 ']'
++ '[' 7 -eq 7 ']'
++ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}'
++ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop|refused)"\}'
++ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}'
++ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}'
++ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}'
++ SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}'
++ TORPID=389
 + sleep 20
---- after 20s: Seccomp state of packaged tor (pid 390)
-+ echo '--- after 20s: Seccomp state of packaged tor (pid 390)'
-+ grep -E '^Seccomp' /proc/390/status
++ tor -f /etc/tor/torrc-lab
+--- after 20s: Seccomp state of packaged tor (pid 389)
++ check kill -0 389
++ kill -0 389
++ echo '--- after 20s: Seccomp state of packaged tor (pid 389)'
++ grep -E '^Seccomp' /proc/389/status
 Seccomp:	2
 Seccomp_filters:	2
 + for i in 1 2 3 4
@@ -86,190 +94,200 @@ Seccomp_filters:	2
 --- metrics at +45s
 + echo '--- metrics at +45s'
 + curl -s http://127.0.0.1:9650/metrics
-+ grep -E '^(tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}) '
++ grep -E '^(tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}) '
+tor_relay_hsdir_post_total{action="success"} 0
+tor_relay_hsdir_post_total{action="bad_url"} 0
+tor_relay_hsdir_post_total{action="invalid"} 0
+tor_relay_hsdir_post_total{action="not_newer"} 0
+tor_relay_hsdir_post_total{action="single_hop"} 0
+tor_relay_hsdir_post_total{action="refused"} 0
+tor_relay_dir_server_conns{state="command_wait"} 0
+tor_relay_dir_server_conns{state="writing_hs_descriptor"} 0
+tor_relay_dir_server_conns{state="writing_other"} 0
+tor_relay_dir_server_conns{state="draining"} 0
+tor_relay_hsdir_get_total{action="success"} 0
+tor_relay_hsdir_get_total{action="not_found"} 0
+tor_relay_hsdir_get_total{action="single_hop"} 0
+tor_relay_hsdir_get_total{action="refused"} 0
+tor_relay_dir_requests_total{type="non_hs"} 0
+tor_relay_dir_requests_total{type="unparsed"} 0
+tor_relay_dir_responses_total{type="hs_descriptor"} 0
+tor_relay_dir_responses_total{type="other"} 0
 tor_relay_dos_total{type="hsdir_request_total"} 0
 tor_relay_dos_total{type="hsdir_req_reused"} 0
 tor_relay_dos_total{type="hsdir_circ_reused"} 0
 tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
 tor_relay_dos_total{type="begindir_over_max"} 0
 tor_relay_dos_total{type="hsdir_fetch_over_rate"} 0
-tor_relay_dir_requests_total{type="non_hs"} 0
-tor_relay_dir_requests_total{type="unparsed"} 0
-tor_relay_dir_server_conns{state="command_wait"} 0
-tor_relay_dir_server_conns{state="writing_hs_descriptor"} 0
-tor_relay_dir_server_conns{state="writing_other"} 0
-tor_relay_dir_server_conns{state="draining"} 0
-tor_relay_hsdir_post_total{action="success"} 0
-tor_relay_hsdir_post_total{action="bad_url"} 0
-tor_relay_hsdir_post_total{action="invalid"} 0
-tor_relay_hsdir_post_total{action="not_newer"} 0
-tor_relay_hsdir_post_total{action="single_hop"} 0
-tor_relay_dir_responses_total{type="hs_descriptor"} 0
-tor_relay_dir_responses_total{type="other"} 0
-tor_relay_hsdir_get_total{action="success"} 0
-tor_relay_hsdir_get_total{action="not_found"} 0
-tor_relay_hsdir_get_total{action="single_hop"} 0
 + for i in 1 2 3 4
 + sleep 25
 + echo '--- metrics at +70s'
 --- metrics at +70s
++ grep -E '^(tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}) '
 + curl -s http://127.0.0.1:9650/metrics
-+ grep -E '^(tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}) '
+tor_relay_hsdir_post_total{action="success"} 0
+tor_relay_hsdir_post_total{action="bad_url"} 0
+tor_relay_hsdir_post_total{action="invalid"} 0
+tor_relay_hsdir_post_total{action="not_newer"} 0
+tor_relay_hsdir_post_total{action="single_hop"} 0
+tor_relay_hsdir_post_total{action="refused"} 0
+tor_relay_dir_server_conns{state="command_wait"} 0
+tor_relay_dir_server_conns{state="writing_hs_descriptor"} 0
+tor_relay_dir_server_conns{state="writing_other"} 0
+tor_relay_dir_server_conns{state="draining"} 0
+tor_relay_hsdir_get_total{action="success"} 0
+tor_relay_hsdir_get_total{action="not_found"} 0
+tor_relay_hsdir_get_total{action="single_hop"} 0
+tor_relay_hsdir_get_total{action="refused"} 0
+tor_relay_dir_requests_total{type="non_hs"} 0
+tor_relay_dir_requests_total{type="unparsed"} 0
+tor_relay_dir_responses_total{type="hs_descriptor"} 0
+tor_relay_dir_responses_total{type="other"} 0
 tor_relay_dos_total{type="hsdir_request_total"} 0
 tor_relay_dos_total{type="hsdir_req_reused"} 0
 tor_relay_dos_total{type="hsdir_circ_reused"} 0
 tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
 tor_relay_dos_total{type="begindir_over_max"} 0
 tor_relay_dos_total{type="hsdir_fetch_over_rate"} 0
-tor_relay_dir_requests_total{type="non_hs"} 0
-tor_relay_dir_requests_total{type="unparsed"} 0
-tor_relay_dir_server_conns{state="command_wait"} 0
-tor_relay_dir_server_conns{state="writing_hs_descriptor"} 0
-tor_relay_dir_server_conns{state="writing_other"} 0
-tor_relay_dir_server_conns{state="draining"} 0
-tor_relay_hsdir_post_total{action="success"} 0
-tor_relay_hsdir_post_total{action="bad_url"} 0
-tor_relay_hsdir_post_total{action="invalid"} 0
-tor_relay_hsdir_post_total{action="not_newer"} 0
-tor_relay_hsdir_post_total{action="single_hop"} 0
-tor_relay_dir_responses_total{type="hs_descriptor"} 0
-tor_relay_dir_responses_total{type="other"} 0
-tor_relay_hsdir_get_total{action="success"} 0
-tor_relay_hsdir_get_total{action="not_found"} 0
-tor_relay_hsdir_get_total{action="single_hop"} 0
 + for i in 1 2 3 4
 + sleep 25
 + echo '--- metrics at +95s'
 --- metrics at +95s
 + curl -s http://127.0.0.1:9650/metrics
-+ grep -E '^(tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}) '
++ grep -E '^(tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}) '
+tor_relay_hsdir_post_total{action="success"} 0
+tor_relay_hsdir_post_total{action="bad_url"} 0
+tor_relay_hsdir_post_total{action="invalid"} 0
+tor_relay_hsdir_post_total{action="not_newer"} 0
+tor_relay_hsdir_post_total{action="single_hop"} 0
+tor_relay_hsdir_post_total{action="refused"} 0
+tor_relay_dir_server_conns{state="command_wait"} 0
+tor_relay_dir_server_conns{state="writing_hs_descriptor"} 0
+tor_relay_dir_server_conns{state="writing_other"} 0
+tor_relay_dir_server_conns{state="draining"} 0
+tor_relay_hsdir_get_total{action="success"} 0
+tor_relay_hsdir_get_total{action="not_found"} 0
+tor_relay_hsdir_get_total{action="single_hop"} 0
+tor_relay_hsdir_get_total{action="refused"} 0
+tor_relay_dir_requests_total{type="non_hs"} 0
+tor_relay_dir_requests_total{type="unparsed"} 0
+tor_relay_dir_responses_total{type="hs_descriptor"} 0
+tor_relay_dir_responses_total{type="other"} 0
 tor_relay_dos_total{type="hsdir_request_total"} 0
 tor_relay_dos_total{type="hsdir_req_reused"} 0
 tor_relay_dos_total{type="hsdir_circ_reused"} 0
 tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
 tor_relay_dos_total{type="begindir_over_max"} 0
 tor_relay_dos_total{type="hsdir_fetch_over_rate"} 0
-tor_relay_dir_requests_total{type="non_hs"} 0
-tor_relay_dir_requests_total{type="unparsed"} 0
-tor_relay_dir_server_conns{state="command_wait"} 0
-tor_relay_dir_server_conns{state="writing_hs_descriptor"} 0
-tor_relay_dir_server_conns{state="writing_other"} 0
-tor_relay_dir_server_conns{state="draining"} 0
-tor_relay_hsdir_post_total{action="success"} 0
-tor_relay_hsdir_post_total{action="bad_url"} 0
-tor_relay_hsdir_post_total{action="invalid"} 0
-tor_relay_hsdir_post_total{action="not_newer"} 0
-tor_relay_hsdir_post_total{action="single_hop"} 0
-tor_relay_dir_responses_total{type="hs_descriptor"} 0
-tor_relay_dir_responses_total{type="other"} 0
-tor_relay_hsdir_get_total{action="success"} 0
-tor_relay_hsdir_get_total{action="not_found"} 0
-tor_relay_hsdir_get_total{action="single_hop"} 0
 + for i in 1 2 3 4
 + sleep 25
 + echo '--- metrics at +120s'
 --- metrics at +120s
 + curl -s http://127.0.0.1:9650/metrics
-+ grep -E '^(tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}) '
++ grep -E '^(tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}) '
+tor_relay_hsdir_post_total{action="success"} 0
+tor_relay_hsdir_post_total{action="bad_url"} 0
+tor_relay_hsdir_post_total{action="invalid"} 0
+tor_relay_hsdir_post_total{action="not_newer"} 0
+tor_relay_hsdir_post_total{action="single_hop"} 0
+tor_relay_hsdir_post_total{action="refused"} 0
+tor_relay_dir_server_conns{state="command_wait"} 0
+tor_relay_dir_server_conns{state="writing_hs_descriptor"} 0
+tor_relay_dir_server_conns{state="writing_other"} 0
+tor_relay_dir_server_conns{state="draining"} 0
+tor_relay_hsdir_get_total{action="success"} 0
+tor_relay_hsdir_get_total{action="not_found"} 0
+tor_relay_hsdir_get_total{action="single_hop"} 0
+tor_relay_hsdir_get_total{action="refused"} 0
+tor_relay_dir_requests_total{type="non_hs"} 0
+tor_relay_dir_requests_total{type="unparsed"} 0
+tor_relay_dir_responses_total{type="hs_descriptor"} 0
+tor_relay_dir_responses_total{type="other"} 0
 tor_relay_dos_total{type="hsdir_request_total"} 0
 tor_relay_dos_total{type="hsdir_req_reused"} 0
 tor_relay_dos_total{type="hsdir_circ_reused"} 0
 tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
 tor_relay_dos_total{type="begindir_over_max"} 0
 tor_relay_dos_total{type="hsdir_fetch_over_rate"} 0
-tor_relay_dir_requests_total{type="non_hs"} 0
-tor_relay_dir_requests_total{type="unparsed"} 0
-tor_relay_dir_server_conns{state="command_wait"} 0
-tor_relay_dir_server_conns{state="writing_hs_descriptor"} 0
-tor_relay_dir_server_conns{state="writing_other"} 0
-tor_relay_dir_server_conns{state="draining"} 0
-tor_relay_hsdir_post_total{action="success"} 0
-tor_relay_hsdir_post_total{action="bad_url"} 0
-tor_relay_hsdir_post_total{action="invalid"} 0
-tor_relay_hsdir_post_total{action="not_newer"} 0
-tor_relay_hsdir_post_total{action="single_hop"} 0
-tor_relay_dir_responses_total{type="hs_descriptor"} 0
-tor_relay_dir_responses_total{type="other"} 0
-tor_relay_hsdir_get_total{action="success"} 0
-tor_relay_hsdir_get_total{action="not_found"} 0
-tor_relay_hsdir_get_total{action="single_hop"} 0
 ++ curl -s http://127.0.0.1:9650/metrics
-++ grep -cE '^(tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}) '
-+ N=22
-+ echo 'NEW_METRIC_SERIES=22 (expect 22)'
-NEW_METRIC_SERIES=22 (expect 22)
+++ grep -cE '^(tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}|tor_relay_dir_responses_total\{type="(hs_descriptor|other)"\}|tor_relay_dir_server_conns\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}) '
++ N=24
++ echo 'NEW_METRIC_SERIES=24 (expect 24)'
++ check '[' 24 -eq 24 ']'
++ '[' 24 -eq 24 ']'
+NEW_METRIC_SERIES=24 (expect 24)
 + curl -s http://127.0.0.1:9650/metrics
 + grep -E '^# TYPE tor_relay_(hsdir|dir)_'
-# TYPE tor_relay_dir_requests_total counter
-# TYPE tor_relay_dir_server_conns gauge
 # TYPE tor_relay_hsdir_post_total counter
-# TYPE tor_relay_dir_responses_total counter
+# TYPE tor_relay_dir_server_conns gauge
 # TYPE tor_relay_hsdir_get_total counter
---- bootstrap
+# TYPE tor_relay_dir_requests_total counter
+# TYPE tor_relay_dir_responses_total counter
 + echo '--- bootstrap'
-+ grep -E 'Bootstrapped 100%' /var/lib/tor-lab/notice.log
-+ tail -n1
-Oct 21 09:40:42.000 [notice] Bootstrapped 100% (done): Done
++ check grep -qE 'Bootstrapped 100%' /var/lib/tor-lab/notice.log
++ grep -qE 'Bootstrapped 100%' /var/lib/tor-lab/notice.log
+--- bootstrap
 --- notice log
 + echo '--- notice log'
 + cat /var/lib/tor-lab/notice.log
-Oct 21 09:40:40.000 [notice] Tor 0.4.9.14 opening new log file.
-Oct 21 09:40:40.250 [notice] We compiled with OpenSSL 300000d0: OpenSSL 3.0.13 30 Jan 2024 and we are running with OpenSSL 300000d0: 3.0.13. These two versions should be binary compatible.
-Oct 21 09:40:40.253 [notice] Tor 0.4.9.14 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc.
-Oct 21 09:40:40.253 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
-Oct 21 09:40:40.253 [notice] Read configuration file "/etc/tor/torrc-lab".
-Oct 21 09:40:40.255 [warn] Your ContactInfo config option is not set. Please strongly consider setting it, so we can contact you if your relay is misconfigured, end-of-life, or something else goes wrong. It is also possible that your relay might get rejected from the network due to a missing valid contact address.
-Oct 21 09:40:40.255 [notice] Based on detected system memory, MaxMemInQueues is set to 6436 MB. You can override this by setting MaxMemInQueues by hand.
-Oct 21 09:40:40.255 [warn] You have used DirAuthority or AlternateDirAuthority to specify alternate directory authorities in your configuration. This is potentially dangerous: it can make you look different from all other Tor users, and hurt your anonymity. Even if you've specified the same authorities as Tor uses by default, the defaults could change in the future. Be sure you know what you're doing.
-Oct 21 09:40:40.255 [warn] TestingTorNetwork is set. This will make your node almost unusable in the public Tor network, and is therefore only advised if you are building a testing Tor network!
-Oct 21 09:40:40.255 [notice] Opening Metrics listener on 127.0.0.1:9650
-Oct 21 09:40:40.255 [notice] Opened Metrics listener connection (ready) on 127.0.0.1:9650
-Oct 21 09:40:40.255 [notice] Opening OR listener on 127.0.0.1:5650
-Oct 21 09:40:40.255 [notice] Opened OR listener connection (ready) on 127.0.0.1:5650
-Oct 21 09:40:40.000 [notice] Configured to measure directory request statistics, but no GeoIP database found. Please specify a GeoIP database using the GeoIPFile option.
-Oct 21 09:40:40.000 [notice] You are running a new relay. Thanks for helping the Tor network! If you wish to know what will happen in the upcoming weeks regarding its usage, have a look at https://blog.torproject.org/lifecycle-of-a-new-relay
-Oct 21 09:40:40.000 [notice] It looks like I need to generate and sign a new medium-term signing key, because I don't have one. To do that, I need to load (or create) the permanent master identity key. If the master identity key was not moved or encrypted with a passphrase, this will be done automatically and no further action is required. Otherwise, provide the necessary data using 'tor --keygen' to do it manually.
-Oct 21 09:40:40.000 [notice] Set list of supported TLS groups to: P-256:X25519:P-224
-Oct 21 09:40:40.000 [notice] Your Tor server's identity key fingerprint is 'deblab 13147157164ADFD38D6850074928FC51A721E755'
-Oct 21 09:40:40.000 [notice] Your Tor server's identity key ed25519 fingerprint is 'deblab /hiPI8mHRcDwoVF5SXBAaO9tdMGzd4edCcjzZ6Xef3o'
-Oct 21 09:40:40.000 [notice] Bootstrapped 0% (starting): Starting
-Oct 21 09:40:40.000 [notice] Starting with guard context "default"
-Oct 21 09:40:41.000 [notice] I learned some more directory information, but not enough to build a circuit: We have no usable consensus.
-Oct 21 09:40:41.000 [notice] I learned some more directory information, but not enough to build a circuit: We have no usable consensus.
-Oct 21 09:40:41.000 [notice] The current consensus has no exit nodes. Tor can only build internal paths, such as paths to onion services.
-Oct 21 09:40:41.000 [notice] I learned some more directory information, but not enough to build a circuit: We need more microdescriptors: we have 0/6, and can only build 0% of likely paths. (We have 0% of guards bw, 0% of midpoint bw, and 0% of end bw (no exits in consensus, using mid) = 0% of path bw.)
-Oct 21 09:40:41.000 [notice] Bootstrapped 5% (conn): Connecting to a relay
-Oct 21 09:40:41.000 [notice] Bootstrapped 10% (conn_done): Connected to a relay
-Oct 21 09:40:41.000 [notice] Bootstrapped 14% (handshake): Handshaking with a relay
-Oct 21 09:40:41.000 [notice] Bootstrapped 15% (handshake_done): Handshake with a relay done
-Oct 21 09:40:41.000 [notice] Bootstrapped 45% (requesting_descriptors): Asking for relay descriptors
-Oct 21 09:40:41.000 [notice] Bootstrapped 50% (loading_descriptors): Loading relay descriptors
-Oct 21 09:40:41.000 [notice] The current consensus contains exit nodes. Tor can build exit and internal paths.
-Oct 21 09:40:41.000 [notice] Bootstrapped 75% (enough_dirinfo): Loaded enough directory info to build circuits
-Oct 21 09:40:42.000 [notice] All current guards excluded by path restriction type 2; using an additional guard.
-Oct 21 09:40:42.000 [notice] Bootstrapped 80% (ap_conn): Connecting to a relay to build circuits
-Oct 21 09:40:42.000 [notice] Bootstrapped 85% (ap_conn_done): Connected to a relay to build circuits
-Oct 21 09:40:42.000 [notice] Bootstrapped 89% (ap_handshake): Finishing handshake with a relay to build circuits
-Oct 21 09:40:42.000 [notice] Bootstrapped 90% (ap_handshake_done): Handshake finished with a relay to build circuits
-Oct 21 09:40:42.000 [notice] Bootstrapped 95% (circuit_create): Establishing a Tor circuit
-Oct 21 09:40:42.000 [notice] Bootstrapped 100% (done): Done
-Oct 21 09:41:16.000 [notice] Self-testing indicates your ORPort 127.0.0.1:5650 is reachable from the outside. Excellent.
-Oct 21 09:41:17.000 [notice] Performing bandwidth self-test...done.
-Oct 21 09:41:42.000 [notice] All current guards excluded by path restriction type 0; using an additional guard. [11 similar message(s) suppressed in last 60 seconds]
-Oct 21 09:42:04.000 [notice] All routers are down or won't exit -- choosing a doomed exit at random.
-Oct 21 09:42:04.000 [warn] Failed to choose an exit server
-Oct 21 09:42:04.000 [notice] Our circuit 0 (id: 27) died due to an invalid selected path, purpose General-purpose client. This may be a torrc configuration issue, or a bug.
-Oct 21 09:42:15.000 [notice] All routers are down or won't exit -- choosing a doomed exit at random.
-Oct 21 09:42:15.000 [warn] Failed to choose an exit server
-+ kill -TERM 390
+Oct 21 11:25:19.000 [notice] Tor 0.4.9.14 opening new log file.
+Oct 21 11:25:19.959 [notice] We compiled with OpenSSL 300000d0: OpenSSL 3.0.13 30 Jan 2024 and we are running with OpenSSL 300000d0: 3.0.13. These two versions should be binary compatible.
+Oct 21 11:25:19.960 [notice] Tor 0.4.9.14 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc.
+Oct 21 11:25:19.960 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+Oct 21 11:25:19.960 [notice] Read configuration file "/etc/tor/torrc-lab".
+Oct 21 11:25:19.961 [warn] Your ContactInfo config option is not set. Please strongly consider setting it, so we can contact you if your relay is misconfigured, end-of-life, or something else goes wrong. It is also possible that your relay might get rejected from the network due to a missing valid contact address.
+Oct 21 11:25:19.961 [notice] Based on detected system memory, MaxMemInQueues is set to 6436 MB. You can override this by setting MaxMemInQueues by hand.
+Oct 21 11:25:19.962 [warn] You have used DirAuthority or AlternateDirAuthority to specify alternate directory authorities in your configuration. This is potentially dangerous: it can make you look different from all other Tor users, and hurt your anonymity. Even if you've specified the same authorities as Tor uses by default, the defaults could change in the future. Be sure you know what you're doing.
+Oct 21 11:25:19.962 [warn] TestingTorNetwork is set. This will make your node almost unusable in the public Tor network, and is therefore only advised if you are building a testing Tor network!
+Oct 21 11:25:19.962 [notice] Opening Metrics listener on 127.0.0.1:9650
+Oct 21 11:25:19.962 [notice] Opened Metrics listener connection (ready) on 127.0.0.1:9650
+Oct 21 11:25:19.962 [notice] Opening OR listener on 127.0.0.1:5650
+Oct 21 11:25:19.962 [notice] Opened OR listener connection (ready) on 127.0.0.1:5650
+Oct 21 11:25:19.000 [notice] Configured to measure directory request statistics, but no GeoIP database found. Please specify a GeoIP database using the GeoIPFile option.
+Oct 21 11:25:20.000 [notice] You are running a new relay. Thanks for helping the Tor network! If you wish to know what will happen in the upcoming weeks regarding its usage, have a look at https://blog.torproject.org/lifecycle-of-a-new-relay
+Oct 21 11:25:20.000 [notice] It looks like I need to generate and sign a new medium-term signing key, because I don't have one. To do that, I need to load (or create) the permanent master identity key. If the master identity key was not moved or encrypted with a passphrase, this will be done automatically and no further action is required. Otherwise, provide the necessary data using 'tor --keygen' to do it manually.
+Oct 21 11:25:20.000 [notice] Set list of supported TLS groups to: P-256:X25519:P-224
+Oct 21 11:25:20.000 [notice] Your Tor server's identity key fingerprint is 'deblab 42BF40D6EAB4529AC6299F2B06F47D5C7F2430F9'
+Oct 21 11:25:20.000 [notice] Your Tor server's identity key ed25519 fingerprint is 'deblab adj/eEu22ZDOvRpseqBVaj9H1qR+a3ofUQvf36OOdF8'
+Oct 21 11:25:20.000 [notice] Bootstrapped 0% (starting): Starting
+Oct 21 11:25:20.000 [notice] Starting with guard context "default"
+Oct 21 11:25:21.000 [notice] I learned some more directory information, but not enough to build a circuit: We have no usable consensus.
+Oct 21 11:25:21.000 [notice] I learned some more directory information, but not enough to build a circuit: We have no usable consensus.
+Oct 21 11:25:21.000 [notice] The current consensus has no exit nodes. Tor can only build internal paths, such as paths to onion services.
+Oct 21 11:25:21.000 [notice] I learned some more directory information, but not enough to build a circuit: We need more microdescriptors: we have 0/6, and can only build 0% of likely paths. (We have 0% of guards bw, 0% of midpoint bw, and 0% of end bw (no exits in consensus, using mid) = 0% of path bw.)
+Oct 21 11:25:21.000 [notice] Bootstrapped 5% (conn): Connecting to a relay
+Oct 21 11:25:21.000 [notice] Bootstrapped 10% (conn_done): Connected to a relay
+Oct 21 11:25:21.000 [notice] Bootstrapped 14% (handshake): Handshaking with a relay
+Oct 21 11:25:21.000 [notice] Bootstrapped 15% (handshake_done): Handshake with a relay done
+Oct 21 11:25:21.000 [notice] Bootstrapped 45% (requesting_descriptors): Asking for relay descriptors
+Oct 21 11:25:21.000 [notice] Bootstrapped 50% (loading_descriptors): Loading relay descriptors
+Oct 21 11:25:21.000 [notice] The current consensus contains exit nodes. Tor can build exit and internal paths.
+Oct 21 11:25:21.000 [notice] Bootstrapped 75% (enough_dirinfo): Loaded enough directory info to build circuits
+Oct 21 11:25:22.000 [notice] Bootstrapped 80% (ap_conn): Connecting to a relay to build circuits
+Oct 21 11:25:22.000 [notice] All current guards excluded by path restriction type 2; using an additional guard.
+Oct 21 11:25:22.000 [notice] Bootstrapped 90% (ap_handshake_done): Handshake finished with a relay to build circuits
+Oct 21 11:25:22.000 [notice] Bootstrapped 95% (circuit_create): Establishing a Tor circuit
+Oct 21 11:25:22.000 [notice] Bootstrapped 100% (done): Done
+Oct 21 11:25:32.000 [notice] Self-testing indicates your ORPort 127.0.0.1:5650 is reachable from the outside. Excellent.
+Oct 21 11:25:32.000 [notice] Performing bandwidth self-test...done.
+Oct 21 11:26:38.000 [notice] All current guards excluded by path restriction type 0; using an additional guard. [5 similar message(s) suppressed in last 120 seconds]
++ kill -TERM 389
 + sleep 5
-++ kill -0 390
+++ kill -0 389
 ++ echo exited
 + echo 'SIGTERM exit check: exited'
-+ kill -KILL 390
++ kill -KILL 389
 SIGTERM exit check: exited
 ++ cat /var/lib/tor-lab/notice.log /var/lib/tor-lab/stdout.log
 ++ grep -c 'Caught a bad syscall'
++ BAD=0
 + echo 'bad syscalls: 0'
++ check '[' 0 -eq 0 ']'
++ '[' 0 -eq 0 ']'
 bad syscalls: 0
+++ '[' 0 -eq 0 ']'
+++ echo PASS
++ echo 'RESULT: PASS'
++ exit 0
+RESULT: PASS
 container rc=0

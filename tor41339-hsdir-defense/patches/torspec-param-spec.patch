@@ -1,4 +1,4 @@
-From bb1263a65806c98d342994e7e6c1e5aae1712551 Mon Sep 17 00:00:00 2001
+From d69add475b165f664e286422c58fc31c2ae9fdfb Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 09:09:03 +0000
 Subject: [PATCH] param-spec, rend-spec: Document HSDir and BEGIN_DIR DoS
@@ -6,19 +6,21 @@ Subject: [PATCH] param-spec, rend-spec: Document HSDir and BEGIN_DIR DoS
 
 Add the "DoSBeginDirLimitEnabled", "DoSBeginDirMaxStreams",
 "HSDirOneRequestPerCircuit" and "HSDirRefuseUnknownPrevHop" consensus
-parameters, note that HSV3MaxDescriptorSize also bounds the request
-body a non-authority directory server will buffer, and state in
-rend-spec that each descriptor fetch and upload is made on its own
-circuit.
+parameters, and note that HSV3MaxDescriptorSize also bounds the request
+body a non-authority directory server will buffer. In rend-spec, state
+that each descriptor fetch and upload is made on its own circuit, that
+HSDirs may close or refuse requests that break this or come from an
+unknown previous hop, or rate-limit fetches, and that clients should
+then try another HSDir.
 
 Companion to tor#41339.
 ---
- spec/param-spec.md              | 35 +++++++++++++++++++++++++++++++++
- spec/rend-spec/deriving-keys.md |  8 ++++++++
- 2 files changed, 43 insertions(+)
+ spec/param-spec.md              | 36 +++++++++++++++++++++++++++++++++
+ spec/rend-spec/deriving-keys.md | 11 ++++++++++
+ 2 files changed, 47 insertions(+)
 
 diff --git a/spec/param-spec.md b/spec/param-spec.md
-index 6a86178..2d4bd6d 100644
+index 6a86178..9d7a532 100644
 --- a/spec/param-spec.md
 +++ b/spec/param-spec.md
 @@ -347,6 +347,11 @@ will upload its descriptor to.
@@ -26,28 +28,29 @@ index 6a86178..2d4bd6d 100644
  
  "HSV3MaxDescriptorSize" -- Maximum descriptor size (in bytes).
 +On relays that are not directory authorities, this also bounds the body of
-+an HTTP request that the directory server will buffer: a request whose
-+declared or actual body is at least this many bytes (or at least 16 MB, if
-+that is smaller) is rejected without being fully buffered. Directory
-+authorities keep the 16 MB limit.
++an HTTP request that the directory server will buffer: once a request body
++reaches this many bytes (or 16 MB, if that is smaller), the request is
++rejected before more of it is buffered. Directory authorities keep the
++16 MB limit.
  Min: 1. Max: INT32_MAX. Default: 50000
  
  "hs_service_max_rdv_failures" -- This parameter determines the
-@@ -492,6 +497,36 @@ First appeared: 0.4.9.0-alpha-dev.
+@@ -492,6 +497,37 @@ First appeared: 0.4.9.0-alpha-dev.
      First appeared: 0.4.9.0-alpha-dev.
  ```
  
 +"DoSBeginDirLimitEnabled" -- If 1, a public relay refuses a BEGIN_DIR
 +stream on a circuit that already has "DoSBeginDirMaxStreams" open
-+directory streams. Relays count such streams whatever the value. The relay
-+torrc option of the same name (0, 1, or auto) overrides this parameter.
++directory streams. Tor clients treat such a refusal as a failed directory
++request. Relays count such streams whatever the value. The relay torrc
++option of the same name (0, 1, or auto) overrides this parameter.
 +Min: 0. Max: 1. Default: 0.
 +First appeared: TBD.
 +
 +"DoSBeginDirMaxStreams" -- The maximum number of open directory streams on
 +a circuit. See "DoSBeginDirLimitEnabled". A nonzero relay torrc option of
 +the same name overrides this parameter.
-+Min: 1. Max: INT32_MAX. Default: 20.
++Min: 1. Max: INT32_MAX. Default: 64.
 +First appeared: TBD.
 +
 +"HSDirOneRequestPerCircuit" -- If 1, a public onion service directory
@@ -71,10 +74,10 @@ index 6a86178..2d4bd6d 100644
  
  ## Padding-related parameters {#padding}
 diff --git a/spec/rend-spec/deriving-keys.md b/spec/rend-spec/deriving-keys.md
-index 066f34d..feff507 100644
+index 066f34d..2c0571c 100644
 --- a/spec/rend-spec/deriving-keys.md
 +++ b/spec/rend-spec/deriving-keys.md
-@@ -433,6 +433,14 @@ version which is "3" in this case.
+@@ -433,6 +433,17 @@ version which is "3" in this case.
  
  These requests must be made anonymously, on circuits not used for
  anything else.
@@ -86,6 +89,9 @@ index 066f34d..feff507 100644
 +[parameter specification](../param-spec.md)), and MAY refuse a request whose
 +previous hop it does not recognize as a relay (see
 +"HSDirRefuseUnknownPrevHop").
++It MAY also close the circuit of a fetch of a descriptor whose fetches it
++is rate-limiting.
++Clients SHOULD then try another responsible onion service directory.
  
  The legacy [".z" suffix][dot-z] is **not** supported for these URLs.
  

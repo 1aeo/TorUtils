@@ -1,4 +1,4 @@
-From e7d676c6e9a8fe0145ba47c96adee600a47e5677 Mon Sep 17 00:00:00 2001
+From cf2c4df24587f87555ba713a5ccbcf73c8561c5a Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:43:08 +0000
 Subject: [PATCH 07/13] relay_metrics: Count tunneled directory requests and
@@ -28,11 +28,11 @@ Part of #41339.
  changes/ticket41339_dir_requests  |  6 +++
  src/feature/dircache/dircache.c   |  8 ++++
  src/feature/dircommon/directory.c |  9 +++++
- src/feature/relay/relay_metrics.c | 56 +++++++++++++++++++++++++++
+ src/feature/relay/relay_metrics.c | 56 ++++++++++++++++++++++++++
  src/feature/relay/relay_metrics.h | 31 +++++++++++++++
  src/feature/relay/relay_stub.c    | 12 ++++++
- src/test/test_hs_cache.c          | 64 +++++++++++++++++++++++++++++++
- 7 files changed, 186 insertions(+)
+ src/test/test_hs_cache.c          | 65 +++++++++++++++++++++++++++++++
+ 7 files changed, 187 insertions(+)
  create mode 100644 changes/ticket41339_dir_requests
 
 diff --git a/changes/ticket41339_dir_requests b/changes/ticket41339_dir_requests
@@ -270,10 +270,10 @@ index 4531096316..3dd0e0b4a2 100644
 +  (void)type;
 +}
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 2c32181eb1..3a8e972f34 100644
+index 4cdd7f3189..f9e557a38d 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
-@@ -953,6 +953,68 @@ test_downloaded_counter_non_hs(void *arg)
+@@ -961,6 +961,69 @@ test_downloaded_counter_non_hs(void *arg)
    connection_free_minimal(TO_CONN(conn));
  }
  
@@ -306,17 +306,18 @@ index 2c32181eb1..3a8e972f34 100644
 +  hsdir_request_on_new_circ(chan, GET("/tor/robots.txt"), NULL);
 +  hsdir_request_on_new_circ(chan, "POST /tor/ HTTP/1.0\r\n\r\n", "x");
 +  hsdir_request_on_new_circ(chan, "GET\r\n\r\n", NULL);
++  hsdir_request_on_new_circ(chan, "POST\r\n\r\n", "x");
 +  tt_i64_op(DIR_REQUEST_METRIC("non_hs"), OP_EQ, non_hs0 + 2);
-+  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 1);
++  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 2);
 +
 +  /* Closed while waiting for a request: counted only if tunneled. */
 +  TO_CONN(conn)->purpose = DIR_PURPOSE_SERVER;
 +  TO_CONN(conn)->state = DIR_CONN_STATE_SERVER_COMMAND_WAIT;
 +  connection_dir_about_to_close(conn);
-+  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 1);
++  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 2);
 +  TO_CONN(conn)->linked = 1;
 +  connection_dir_about_to_close(conn);
-+  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 2);
++  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 3);
 +
 +  /* A response is counted once it has been handed to its stream. */
 +  TO_CONN(conn)->state = DIR_CONN_STATE_SERVER_WRITING;
@@ -342,7 +343,7 @@ index 2c32181eb1..3a8e972f34 100644
  struct testcase_t hs_cache[] = {
    /* Encoding tests. */
    { "directory", test_directory, TT_FORK,
-@@ -967,6 +1029,8 @@ struct testcase_t hs_cache[] = {
+@@ -975,6 +1038,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "hsdir_get_post_metrics", test_hsdir_get_post_metrics, TT_FORK,
      NULL, NULL },

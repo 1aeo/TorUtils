@@ -46,27 +46,31 @@ param-spec and rend-spec text for the four new consensus parameters.
 | 0008 | Metrics | Gauge `tor_relay_dir_server_conns{state}`: tunneled dir server connections by state. | always on |
 | 0009 | Refactor | Make `fill_dos_values()` table-driven (no functional change). | — |
 | 0010 | Metrics | `tor_relay_dos_total` types `hsdir_request_total`, `hsdir_req_reused`, `hsdir_circ_reused`, `hsdir_unknown_prev_hop`. | always on |
-| 0011 | Enforcement | `HSDirOneRequestPerCircuit` (close a circuit on its second HS request) and `HSDirRefuseUnknownPrevHop` (503 if the previous hop isn't a known relay). AUTOBOOL torrc options over consensus parameters of the same name. | **off** |
-| 0012 | Enforcement | `DoSBeginDirLimitEnabled` and `DoSBeginDirMaxStreams` (20): refuse a BEGIN_DIR on a circuit that already has that many open directory streams. Counted as `begindir_over_max`. | **off** |
-| 0013 | Enforcement | `HSDirDescriptorFetchLimit` with `HSDirDescriptorFetchRate` (5/s) and `HSDirDescriptorFetchBurst` (20): per-descriptor fetch limit. Torrc only, because anyone can use up a descriptor's shared bucket. Counted as `hsdir_fetch_over_rate`. | **off** |
+| 0011 | Enforcement | `HSDirOneRequestPerCircuit` (close a circuit on its second HS request) and `HSDirRefuseUnknownPrevHop` (503 if the previous hop isn't a known relay). AUTOBOOL torrc options over consensus parameters of the same name. Refusals are counted as action `refused` of the 0006 families. | **off** |
+| 0012 | Enforcement | `DoSBeginDirLimitEnabled` and `DoSBeginDirMaxStreams` (64): refuse a BEGIN_DIR on a circuit that already has that many open directory streams. Counted as `begindir_over_max`. | **off** |
+| 0013 | Enforcement | `HSDirDescriptorFetchLimit` with `HSDirDescriptorFetchRate` (5/s) and `HSDirDescriptorFetchBurst` (20): per-descriptor fetch limit. Torrc only: while it is enabled, anyone can use up a descriptor's shared bucket, and learn how often others fetch it from this HSDir. Counted as `hsdir_fetch_over_rate`. | **off** |
 
 The metrics (0006–0010) only count, and count only tunneled (linked)
 connections, so DirPort traffic stays out. Each defense (0011–0013) counts what
 it would refuse whether or not it is enabled, so operators can measure before
-enabling it; enabled defenses apply on public relays only, and the DoS
+enabling it; 0011 and 0012 apply only on public relays, and the DoS
 heartbeat shows their counts. Enabling one takes `SETCONF` or a reload, with no
 restart.
 
 Upstream merge requests, each built from fresh `main`: 0001–0003 (0002 needs
-0001's context), 0004, 0005, then the stack 0006–0010 on 0005, and each of
-0011, 0012 and 0013 on top of that for separate discussion. The commits are
+0001's context), 0004, 0005, then the stack 0006–0010 on 0005, then 0011,
+0012 and 0013, each on the one before (0012 reuses 0011's option helper),
+for separate discussion. Build the 0006–0010 stack with `git am -3`, since
+0007's context includes a line from 0003. The commits are
 upstream style (`subsystem: Summary`, `changes/` entries that pass
 `lintChanges.py`, `check-spaces` clean). Each commit builds with
 `--enable-fatal-warnings` and passes `make test`. They add no new
-`practracker` problem kinds, but they grow three functions and two files that
-stock already lists as over the limit.
+`practracker` problem kinds, but they grow two functions
+(`connection_exit_begin_conn()`, `directory_handle_command_post()`) and two
+files (`connection_edge.c`, `hs_descriptor.c`) that stock already has over
+the limit.
 
-`packages/` holds the `+tor41339.4` `.deb`s for Ubuntu 24.04 and 26.04, built
+`packages/` holds the `+tor41339.5` `.deb`s for Ubuntu 24.04 and 26.04, built
 from all 13 patches with every defense off (see `packages/BUILD-INFO.txt`). The
 earlier `+tor41339.3` canary packages were built from a legacy 7-patch series
 that exported only the four `hsdir_*` counters of 0010 and the 0011 rules. See the [final canary plan](operator/CANARY-MEASUREMENT-PLAN.md) for
