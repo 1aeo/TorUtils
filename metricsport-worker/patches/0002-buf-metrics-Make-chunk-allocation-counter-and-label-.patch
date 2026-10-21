@@ -1,0 +1,130 @@
+From 60538c2e912b9a6cb2162a41427e842d0dc9d4c1 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Tue, 20 Oct 2026 22:40:28 -0700
+Subject: [PATCH 2/3] buf, metrics: Make chunk allocation counter and label
+ formatter thread-safe
+
+Use Tor's atomic_counter_t for total_bytes_allocated_in_chunks in
+src/lib/buf/buffers.c (matching src/lib/compress/compress.c) so that
+allocating and freeing buf_t chunks on a worker thread cannot race with
+the main thread's consistency assertions in buf_chunk_free_unchecked() or
+buf_get_total_allocation().
+
+In metrics_format_label(), index a two-slot static buffer by
+in_main_thread() so main-thread hidden service metric updates
+(hs_metrics_update_by_service()) cannot clobber label formatting on the
+MetricsPort worker thread.
+---
+ src/lib/buf/.may_include         |  1 +
+ src/lib/buf/buffers.c            | 17 ++++++++++-------
+ src/lib/metrics/metrics_common.c |  8 +++++---
+ 3 files changed, 16 insertions(+), 10 deletions(-)
+
+diff --git a/src/lib/buf/.may_include b/src/lib/buf/.may_include
+index c4be73b..d971d49 100644
+--- a/src/lib/buf/.may_include
++++ b/src/lib/buf/.may_include
+@@ -7,4 +7,5 @@ lib/malloc/*.h
+ lib/testsupport/*.h
+ lib/log/*.h
+ lib/string/*.h
++lib/thread/*.h
+ lib/time/*.h
+diff --git a/src/lib/buf/buffers.c b/src/lib/buf/buffers.c
+index e0faa84..d5ae269 100644
+--- a/src/lib/buf/buffers.c
++++ b/src/lib/buf/buffers.c
+@@ -32,6 +32,7 @@
+ #include "lib/ctime/di_ops.h"
+ #include "lib/malloc/malloc.h"
+ #include "lib/string/printf.h"
++#include "lib/thread/threads.h"
+ #include "lib/time/compat_time.h"
+ 
+ #ifdef HAVE_UNISTD_H
+@@ -124,7 +125,7 @@ chunk_repack(chunk_t *chunk)
+ }
+ 
+ /** Keep track of total size of allocated chunks for consistency asserts */
+-static size_t total_bytes_allocated_in_chunks = 0;
++static atomic_counter_t total_bytes_allocated_in_chunks;
+ static void
+ buf_chunk_free_unchecked(chunk_t *chunk)
+ {
+@@ -133,9 +134,10 @@ buf_chunk_free_unchecked(chunk_t *chunk)
+ #ifdef DEBUG_CHUNK_ALLOC
+   tor_assert(CHUNK_ALLOC_SIZE(chunk->memlen) == chunk->DBG_alloc);
+ #endif
+-  tor_assert(total_bytes_allocated_in_chunks >=
++  tor_assert(atomic_counter_get(&total_bytes_allocated_in_chunks) >=
+              CHUNK_ALLOC_SIZE(chunk->memlen));
+-  total_bytes_allocated_in_chunks -= CHUNK_ALLOC_SIZE(chunk->memlen);
++  atomic_counter_sub(&total_bytes_allocated_in_chunks,
++                     CHUNK_ALLOC_SIZE(chunk->memlen));
+   tor_free(chunk);
+ }
+ static inline chunk_t *
+@@ -149,7 +151,7 @@ chunk_new_with_alloc_size(size_t alloc)
+   ch->DBG_alloc = alloc;
+ #endif
+   ch->memlen = CHUNK_SIZE_WITH_ALLOC(alloc);
+-  total_bytes_allocated_in_chunks += alloc;
++  atomic_counter_add(&total_bytes_allocated_in_chunks, alloc);
+   ch->data = &ch->mem[0];
+   CHUNK_SET_SENTINEL(ch, alloc);
+   return ch;
+@@ -173,7 +175,7 @@ chunk_grow(chunk_t *chunk, size_t sz)
+   tor_assert(chunk->DBG_alloc == orig_alloc);
+   chunk->DBG_alloc = new_alloc;
+ #endif
+-  total_bytes_allocated_in_chunks += new_alloc - orig_alloc;
++  atomic_counter_add(&total_bytes_allocated_in_chunks, new_alloc - orig_alloc);
+   CHUNK_SET_SENTINEL(chunk, new_alloc);
+   return chunk;
+ }
+@@ -436,7 +438,8 @@ static chunk_t *
+ chunk_copy(const chunk_t *in_chunk)
+ {
+   chunk_t *newch = tor_memdup(in_chunk, CHUNK_ALLOC_SIZE(in_chunk->memlen));
+-  total_bytes_allocated_in_chunks += CHUNK_ALLOC_SIZE(in_chunk->memlen);
++  atomic_counter_add(&total_bytes_allocated_in_chunks,
++                     CHUNK_ALLOC_SIZE(in_chunk->memlen));
+ #ifdef DEBUG_CHUNK_ALLOC
+   newch->DBG_alloc = CHUNK_ALLOC_SIZE(in_chunk->memlen);
+ #endif
+@@ -515,7 +518,7 @@ buf_get_oldest_chunk_timestamp(const buf_t *buf, uint32_t now)
+ size_t
+ buf_get_total_allocation(void)
+ {
+-  return total_bytes_allocated_in_chunks;
++  return atomic_counter_get(&total_bytes_allocated_in_chunks);
+ }
+ 
+ /** Append <b>string_len</b> bytes from <b>string</b> to the end of
+diff --git a/src/lib/metrics/metrics_common.c b/src/lib/metrics/metrics_common.c
+index 5836a58..5c650d9 100644
+--- a/src/lib/metrics/metrics_common.c
++++ b/src/lib/metrics/metrics_common.c
+@@ -12,6 +12,7 @@
+ 
+ #include "lib/log/util_bug.h"
+ #include "lib/string/printf.h"
++#include "lib/thread/threads.h"
+ 
+ #include "lib/metrics/metrics_common.h"
+ 
+@@ -38,7 +39,8 @@ metrics_type_to_str(const metrics_type_t type)
+ const char *
+ metrics_format_label(const char *key, const char *value)
+ {
+-  static char buf[128];
+-  tor_snprintf(buf, sizeof(buf), "%s=\"%s\"", key, value);
+-  return buf;
++  static char buf[2][128];
++  char *b = buf[in_main_thread() ? 1 : 0];
++  tor_snprintf(b, sizeof(buf[0]), "%s=\"%s\"", key, value);
++  return b;
+ }
+-- 
+2.39.5 (Apple Git-154)
+
