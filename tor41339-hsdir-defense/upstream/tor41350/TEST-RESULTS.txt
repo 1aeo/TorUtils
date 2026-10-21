@@ -1,24 +1,25 @@
 Test results for upstream/tor41350/ (revision 2)
 =================================================
 
-Baseline: tor-0.4.9.14 (8fe2745). Also applied to maint-0.4.9 (ccd9eb8)
-and main (8dbbbe6). Build: ./configure --disable-asciidoc --disable-manpage
---disable-html-manual --enable-fatal-warnings, Ubuntu 24.04 x86_64,
-OpenSSL 3.0, Python 3.13. Every test and lab run was done offline, inside a
-network namespace that only has loopback (unshare -n; ip link set lo up).
+Baseline: tor-0.4.9.14 (8fe2745). Build: ./configure --disable-asciidoc
+--disable-manpage --disable-html-manual --enable-fatal-warnings, Ubuntu
+24.04 x86_64, OpenSSL 3.0, Python 3.13. Every test and lab run was done
+offline, inside a network namespace that only has loopback
+(unshare -n; ip link set lo up).
 
-Patches
--------
+Patch
+-----
 
 0001-conn-Only-uncount-connections-that-were-counted-as-o.patch   (tor#41350)
-  +23/-6 lines of C outside tests and changes/, in 5 files: one bit opened_in_rephist in
-  connection_t, set by note_connection() and listener_connection_new(); the
-  rep_hist_note_conn_closed() call in connection_mark_for_close_internal_()
-  only runs if the bit is set, and clears it; connection_ext_or_transition()
-  moves a counted connection from the EXT_OR to the OR counters.
+  +23/-6 lines of C outside tests and changes/, in 5 files: one bit
+  opened_in_rephist in connection_t, set by note_connection() and
+  listener_connection_new(); the rep_hist_note_conn_closed() call in
+  connection_mark_for_close_internal_() only runs if the bit is set, and
+  clears it; connection_ext_or_transition() moves a counted connection
+  from the EXT_OR to the OR counters.
   Tests:
-    connection/opened_counter (test_connection.c), with canaries so that the
-    0 clamp cannot hide a stray decrement:
+    connection/opened_counter (new, test_connection.c), with canaries so
+    that the 0 clamp cannot hide a stray decrement:
       - a listener is counted, then uncounted when marked;
       - an accepted OR connection whose (mocked) TLS handshake fails inside
         connection_init_accepted_conn() leaves OR/received unchanged;
@@ -27,42 +28,28 @@ Patches
       - marking an uncounted socketless EXIT connection leaves
         Exit/initiated unchanged;
       - the created counter is unchanged.
-    extorport/handshake (test_extorport.c), three new assertions: the counted
-    Extended OR connection is in EXT_OR before the transition, and in OR
-    (not EXT_OR) after it.
-  Not covered by unit tests: TransPort (AP) init failure and linked AP+DIR
-  pairs, which take the same code path as the cases above, and the real
-  SSL_accept() failure, which the lab below covers.
-
-0002-metrics-Count-onion-service-descriptor-uploads-by-ou.patch
-  tor_relay_hsdir_post_total{action="success|bad_url|invalid|not_newer|
-  single_hop"}, intro1-style counter in relay_metrics.c, counted only in
-  dircache.c. hs_cache_store_as_dir() returns -2 for "valid but not newer".
-  Tests:
-    hs_cache/hsdir_post_metrics (test_hs_cache.c): drives every action
-    through handle_post_hs_descriptor() and directory_handle_command_post(),
-    and reads the values back from relay_metrics_get_stores().
-    hs_cache/directory and stats/rephist_v3_onions: the not-newer
-    assertion changes from -1 to -2.
-
-hsdir-series/0002-metrics-...patch
-  The same commit, for stacking after patches/0001-0007 and 0001 above.
-  The only difference is two test includes, which patches/0002 already adds.
+    extorport/handshake (existing, test_extorport.c), three new assertions:
+    the counted Extended OR connection is in EXT_OR before the transition,
+    and in OR (not EXT_OR) after it.
+  Not covered by unit tests: TransPort (AP) init failure, the DIR side of
+  linked BEGIN_DIR and AP+DIR pairs, and outbound directory connections whose
+  connect() fails right away. These all take the same mark-without-count path
+  as the socketless EXIT case above. The real SSL_accept() failure is covered
+  by the lab below.
 
 Applying
 --------
 
-git am, with no conflicts:
-  tor-0.4.9.14 + 0001 + 0002
-  maint-0.4.9 (ccd9eb8) + 0001 + 0002
-  main (8dbbbe6) + 0001 + 0002
-  tor-0.4.9.14 + patches/0001-0007 + 0001 + hsdir-series/0002
-0001 and 0002 are independent and can each be applied alone.
+git am, with no conflicts, onto:
+  tor-0.4.9.14
+  maint-0.4.9 (ccd9eb8)
+  main (8dbbbe6)
+  tor-0.4.9.14 + patches/0001-0007
 
 Tests fail without the fix
 --------------------------
 
-With the test changes from 0001 applied on unpatched 0.4.9.14 source:
+With the test changes applied on unpatched 0.4.9.14 source:
   FAIL src/test/test_connection.c: OR/received opened 1 vs 2 expected
        (the failed accepted handshake pulled the gauge down)
   FAIL src/test/test_extorport.c: EXT_OR opened 1 vs 0 expected
@@ -73,53 +60,42 @@ With the fix: 2 tests ok.
 Full results
 ------------
 
-                               tor-0.4.9.14 + 0001 + 0002  + patches/0001-0007
-./src/test/test (8 parts)      1604 ok, 24 skipped         1615 ok
+                               tor-0.4.9.14 + 0001         + patches/0001-0007
+./src/test/test (8 parts)      1603 ok, 24 skipped         1614 ok
 make check                     32 PASS, 1 SKIP, 1 FAIL     32 PASS, 1 SKIP, 1 FAIL
 make check-spaces              exit 0                      exit 0
 make check-changes             exit 0                      exit 0
-practracker problems           same set as stock           same set as without 0001/0002
+practracker problems           same set as stock           same set as the series alone
 
 make check SKIP: src/test/fuzz_static_testcases.sh (needs TOR_FUZZ_CORPORA).
 make check FAIL: scripts/maint/practracker/test_practracker.sh. It fails the
   same way on unpatched tor-0.4.9.14 in this environment ("make check
   TESTS=scripts/maint/practracker/test_practracker.sh" on stock: FAIL). Its
   fixture output comes out in a different line order ("Unusual pattern
-  permitted.h" line) under Python 3.13. It is unrelated to these patches.
-practracker: practracker.py exits 98 on unpatched tor-0.4.9.14 here (167
-  problems, exceptions.txt behind the release). With the patches the problem
-  set is identical; only two already-listed counts grow:
-  connection.c file-size 6026 -> 6030, and the
-  directory_handle_command_post() warning-level function size 125 -> 126.
-  (Revision 1 reported "exit code 0", which stock does not reproduce here.)
-
---disable-module-relay build of 0001 + 0002: builds and links (counting is
-only in dircache.c, which is compiled only with the relay module, so no
-relay_stub.c stub is needed); connection/.. extorport/.. hs_cache/.. stats/..
-34 tests ok.
+  permitted.h" line) under Python 3.13. It is unrelated to this patch.
+practracker: practracker.py exits 98 on unpatched tor-0.4.9.14 here (98
+  problems and 67 warnings, exceptions.txt behind the release). With the
+  patch the problem set is identical; the only change is the
+  already-listed connection.c file-size count, 6026 -> 6030. (Revision 1
+  reported "exit code 0", which stock does not reproduce here.)
 
 Offline lab: Path 1a (lab/path1a_offline_repro.py)
 -------------------------------------------------
 
 One relay. 7 real TLS connections; then SIGSTOP while 5 connections that
-send "GET / HTTP/1.0" and 5 that only send FIN wait in the accept backlog;
-then SIGCONT. "opened" is tor_relay_connections{type="OR",
-direction="received",state="opened",family="ipv4"}; "ESTAB" counts
-established sockets on the ORPort.
+send "GET / HTTP/1.0" and 5 that only send FIN (or, with --rst, 10 that
+reset) wait in the accept backlog; then SIGCONT. "opened" is
+tor_relay_connections{type="OR",direction="received",state="opened",
+family="ipv4"}; "ESTAB" counts established sockets on the ORPort.
 
 == tor-0.4.9.14
-after startup                          gauge(opened)=0   created=0   kernel ESTAB=0
 7 real TLS connections open            gauge(opened)=7   created=7   kernel ESTAB=7
 +5 non-TLS +5 FIN while stalled        gauge(opened)=0   created=7   kernel ESTAB=7
 real connections closed                gauge(opened)=0   created=7   kernel ESTAB=0
 == 0.4.9.14 + 0001
-after startup                          gauge(opened)=0   created=0   kernel ESTAB=0
 7 real TLS connections open            gauge(opened)=7   created=7   kernel ESTAB=7
 +5 non-TLS +5 FIN while stalled        gauge(opened)=7   created=7   kernel ESTAB=7
 real connections closed                gauge(opened)=0   created=7   kernel ESTAB=0
-
-Same with --rst (the 10 connections are closed with an RST, SO_LINGER 0):
-
 == tor-0.4.9.14 --rst
 7 real TLS connections open            gauge(opened)=7   created=7   kernel ESTAB=7
 +10 RST while stalled                  gauge(opened)=0   created=7   kernel ESTAB=7

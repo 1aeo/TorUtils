@@ -1,16 +1,17 @@
-# `tor#41350` (`tor_relay_connections{state="opened"}` drift) and HS descriptor POST outcomes
+# `tor#41350`: `tor_relay_connections{state="opened"}` drift
 
 Revision 2. This replaces revision 1 of this file. An adversarial review
 (`analysis/tor41350-review.md`) re-checked every claim against the source and
 found many wrong line numbers, two falsified mechanisms, and a patch design
-that was larger than it needed to be. Both patches in `upstream/tor41350/`
-were rewritten; the errata are listed at the end of this file.
+that was larger than it needed to be. The patch in `upstream/tor41350/` was
+rewritten; the errata are listed at the end of this file. Revision 1 also
+proposed HS descriptor POST metrics; that work is handled elsewhere and is out
+of scope here.
 
 **Baseline.** C Tor `tor-0.4.9.14` (`8fe2745`). All `path:line` references are
 to that tag. Upstream `main` (`8dbbbe6`) and `maint-0.4.9` (`ccd9eb8`) have
 identical code at every cited location. The only differences in the cited
-files are comment typo fixes, and the one in `hs_descriptor.c` shifts lines
-after `:1468` by −1 on `main`.
+files are comment typo fixes.
 
 **How this was checked.** Source reading on all three trees, unit tests, and
 an offline single-relay lab run in a loopback-only network namespace
@@ -19,7 +20,7 @@ couldn't be re-run for this revision, so they were removed.
 
 ---
 
-## Part A: `tor_relay_connections{state="opened"}` drift (`tor#41350`)
+## `tor_relay_connections{state="opened"}` drift
 
 ### A.1 Where the gauge moves
 
@@ -262,148 +263,13 @@ feature.
 
 ---
 
-## Part B: HS descriptor POST outcomes
+## Upstream plan
 
-### B.1 Outcome table (stock 0.4.9.14)
-
-These are all the outcomes of a `POST /tor/hs/3/publish` that reaches a
-directory cache over a `BEGIN_DIR` stream. A DirPort POST starts at the
-`directory_handle_command()` rows.
-
-| # | Stage | Result | `path:line` | Condition | Legitimate service? |
-|-|-|-|-|-|-|
-| 1 | `BEGIN_DIR` gate | `END` (`EXITPOLICY`, `NOTDIRECTORY`, `HIBERNATING`) or silent drop, no HTTP | `connection_edge.c:4191-4198`, `:4239-4247`, `:4317-4321`; drops in `relay.c:1670-1687`, `:2091-2101` | Not in server mode, `!directory_permits_begindir_requests()`, conflux circuit, purpose ≠ OR, or hibernating. All before the `BEGIN_DIR` stream counter (`:4697`). | A hibernating HSDir, or one that left directory mode while still listed |
-| 2 | HTTP framing | Stream closed, no response | `dircache.c:1748-1754` → `directory.c:489-492` | Headers > `MAX_HEADERS_SIZE` (50000, `or.h:122`), body > `MAX_DIR_UL_SIZE` (16 MB − 1, `dircache.c:48`), or a malformed `Content-Length` (`proto_http.c:92-96`). A stream that ends before the request is complete is also closed without a response. | Only if the circuit dies mid-upload |
-| 3 | Method | Stream closed, no response | `dircache.c:1772-1777` | Neither `GET` nor `POST` | No |
-| 4 | Public relay check | `503 Not acting as a public relay` | `dircache.c:1591-1597` | `!public_server_mode()`, checked before the URL is parsed | Briefly, after a relay leaves public mode |
-| 5 | URL | `400 Bad request` | `dircache.c:1599-1602` | `parse_http_command()` fails (`directory.c:304-351`): a missing token, or a version that isn't `HTTP/1.<n>\r`. A URL without the `/tor/` prefix is rewritten (`dircache.c:76-84`), not rejected. | No |
-| 6 | Anonymity | `503 Rejecting single hop HS descriptor post` | `dircache.c:1609-1612`; `connection_dir_is_anonymous()` at `directory.c:201-265` | Not linked (DirPort), linked edge closed, origin or closing circuit, no `p_chan`, or the previous hop is a client (`channel_is_client()`) | No |
-| 7 | HS URL | `400 Invalid HS descriptor. Rejected.` | `dircache.c:1543-1552`, `:1562-1564` | Version doesn't parse, command doesn't start with `/publish` (`strcmpstart()`, so `/publishX` passes), or version ≠ 3 | Only obsolete v2 software |
-| 8 | Decode | `400 Invalid HS descriptor. Rejected.` | `hs_cache.c:390-393` → `cache_dir_desc_new()` (`:110-135`) → `hs_desc_decode_plaintext()` (`hs_descriptor.c:2666`) | Plaintext layer only: size (≥ `HSV3MaxDescriptorSize`, a consensus parameter defaulting to `HS_DESC_MAX_LEN` = 50000), tokens and version, lifetime (maximum 12 h, no minimum), signing-key certificate (type, signing key, signature and expiry), revision counter field, superencrypted object type and minimum length, signature. The HSDir never decrypts the superencrypted layer; it can't, because it doesn't have the subcredential. | Only if the HSDir's clock is ≥ ~54 h ahead: services mint a fresh `HS_DESC_CERT_LIFETIME` (54 h) certificate per upload (`hs_service.c:1793-1796`) |
-| 9 | Revision counter | `400 Invalid HS descriptor. Rejected.` | `hs_cache.c:182-193` (`cache_store_v3_as_dir()`), after the OOM prune at `:158-177` | Valid descriptor, cached one has a revision counter ≥ this one. Logged at info level only, with the counters cast to `int`. | **Yes**, for several instances publishing for the same address, or after a clock step back. A single C Tor instance always uploads increasing counters: they are an order-preserving encryption, under a fixed key, of the seconds since the start of the shared-random protocol run that the descriptor uses, recomputed before each upload (`hs_service.c:3235-3274`, `:3550`). Onionbalance and Arti were not checked. |
-| 10 | Stored | `200 HS descriptor stored successfully.` | `dircache.c:1614-1621`, `hs_cache.c:210-221` | New key, or a strictly higher revision counter | Yes |
-
-Rows 7-9 send the same status and phrase. The service logs any 400 as
-"Malformed hidden service descriptor?" (`dirclient.c:2809-2817`), and C Tor
-doesn't retry that HSDir until its next upload, 60-120 min later
-(`hs_service.h:34-36`). `hs_cache_store_as_dir()` returns 0
-on success and −1 for **both** rows 8 and 9 (`hs_cache.c:378-411`), and its
-only non-test caller checks `< 0` (`dircache.c:1556`). Revision 1 claimed it
-already returned a tri-state 1/0/−1; that is false. So the split cannot be
-done in `dircache.c` alone without changing that return value.
-
-**With `patches/0001`-`0007`.** `connection_dir_allow_hs_request()`
-(`directory.c:293-337` in that tree) runs right after row 6. It **counts**
-every HS request in `tor_relay_dos_total{type="hsdir_request_total"}`,
-repeats in `type="hsdir_req_reused"` (and circuits in
-`type="hsdir_circ_reused"`), and unknown previous hops in
-`type="hsdir_unknown_prev_hop"`, whether or not enforcement is on. When
-enforcing, which is off by default, it closes a reused circuit
-(`END_CIRC_REASON_RESOURCELIMIT`, checked first) or answers `503 Rejecting HS
-request: previous hop is not a known relay`. Refused requests never reach rows
-7-10; with enforcement off, they are counted there as usual. Note for the
-series (not for these patches): patch 0003 only throttles HTTP-framing
-warnings. Row 8 still logs one unthrottled `log_warn` per junk descriptor
-(for example "Service descriptor is not parseable", stock
-`hs_descriptor.c:2692`, `:2703`, `:2708`), so a POST flood of junk descriptors
-can still flood the log. With patch 0004, the `:2682` size warning is no
-longer reachable on non-authorities. Patch 0004 lowers the row 2
-body limit for non-authorities to the HS descriptor maximum. Patch 0006 moves
-the signature-length check ahead of the certificate check in row 8. Patches
-0003, 0005 and 0007 don't change POST outcomes.
-
-`dos_note_refuse_single_hop_client()` is only called from
-`src/feature/rend/rendmid.c:53` (the single-hop `ESTABLISH_RENDEZVOUS` refusal in `rend_mid_establish_rendezvous()`), so
-`tor_relay_dos_total{type="single_hop_refused"}` never counts row 6 (nor the
-GET-side check at `dircache.c:1364`).
-
-### B.2 Metric (`upstream/tor41350/0002-metrics-Count-onion-service-descriptor-uploads-by-ou.patch`)
-
-```
-tor_relay_hsdir_post_total{action="success"}     row 10 (200)
-tor_relay_hsdir_post_total{action="bad_url"}     row 7  (400)
-tor_relay_hsdir_post_total{action="invalid"}     row 8  (400)
-tor_relay_hsdir_post_total{action="not_newer"}   row 9  (400)
-tor_relay_hsdir_post_total{action="single_hop"}  row 6  (503)
-```
-
-Design choices and why:
-
-- **Modelled on `tor_relay_intro1_total` / `tor_relay_est_rend_total`.** An
-  enum and `relay_increment_hsdir_post_action()` in `relay_metrics.h`, a
-  `static uint64_t hsdir_post_actions[]` and an `action` label in
-  `relay_metrics.c`. Upstream moved exactly these counters out of `rephist.c`
-  into `relay_metrics.c` during review (`1899b6230d`, "Removed getter
-  abstraction and moved from rephist to relay_metrics"), so revision 1's
-  `rephist.c` counters and getters went against that review.
-- **One `action` label, not `status` + `reason`.** Each action maps to one
-  HTTP status, so a `status` label would be redundant, and the precedent uses
-  `action`. This is asked upstream.
-- **All counting in `dircache.c`.** Revision 1 put three of its four hooks in
-  `hs_cache.c`. `hs_cache.c` is always compiled, but `relay_metrics.c` is
-  only compiled with the relay module (`src/feature/relay/include.am:44-47`),
-  and upstream CI has a `debian-disable-relay` job. Calling relay metrics from
-  `hs_cache.c` would have needed a `relay_stub.c` stub. `dircache.c` is
-  compiled only with the relay module (`configure.ac:394-400`). The price is
-  that `hs_cache_store_as_dir()` returns −2 for row 9. Its only caller checks
-  `< 0`, and two existing assertions (`test_hs_cache.c:83`,
-  `test_stats.c:576`) change from −1 to −2.
-- **`single_hop` included.** It is one line, in the same function, and it is
-  the only way to see row 6. `INTRO1_SINGLE_HOP` and `EST_REND_SINGLE_HOP`
-  are the naming precedent. It also counts DirPort uploads, which aren't
-  tunneled.
-- **Rows 1-5 not counted.** Rows 1-3 happen before the request is known to be
-  an HS upload, and rows 4-5 before the URL is parsed.
-
-**Test.** `hs_cache/hsdir_post_metrics` drives every action through
-`handle_post_hs_descriptor()` and `directory_handle_command_post()`, and reads
-the values from the real store (`relay_metrics_get_stores()`), so it also
-checks the exported name and label.
-
-### B.3 How this fits with `BEGIN_DIR`
-
-`tor_relay_streams_total{type="BEGIN_DIR"}` is incremented in
-`connection_exit_connect_dir()` (`connection_edge.c:4697`), after the row 1
-gate. A directory server answers one request per stream and then closes it,
-so:
-
-```
-BEGIN_DIR streams = streams still waiting for their request   (COMMAND_WAIT)
-                  + closed without a response                 (rows 2-3)
-                  + answered GET (HS descriptor and other)
-                  + answered POST: rows 4-5, non-HS POSTs,
-                                   series refusals (with 0001/0002),
-                                   and Σ tor_relay_hsdir_post_total minus DirPort single_hop
-```
-
-Revision 1's identity (`unparsed + non_hs + hs + single_hop_rejected +
-command_wait`) used terms that no metric exports. With `0002`, the HS POST
-term becomes observable. The GET side, which is where the `tor#41339` flood
-was, still needs a counterpart (asked in the new issue).
-
----
-
-## Part C: commit structure and upstream plan
-
-1. **`0001` is a standalone bugfix MR for `tor#41350`** against `maint-0.4.9`
-   (milestone `0.4.9.x-post-stable`). It applies with `git am` to
-   `maint-0.4.9`, `main` and `tor-0.4.9.14`, and does not depend on `0002` or
-   on the HSDir series. Post the comment in
-   `upstream/tor41350/gitlab-41350-comment.md` first.
-2. **`0002` is a separate feature MR against `main`.** File the issue in
-   `upstream/tor41350/gitlab-new-issue-hsdir-post-metrics.md` first, wait for
-   naming feedback, then rename `changes/hsdir_post_metrics` to
-   `changes/ticketNNNNN` with "Closes ticket NNNNN." (it says "Part of ticket
-   41339" for now). It does not depend on `0001`.
-3. **Stacking on the HSDir series.** `0002` comes after `patches/0007`.
-   `patches/0002` already adds two of its test includes (`relay_metrics.h`,
-   `metrics_store.h`). `upstream/tor41350/hsdir-series/` has the
-   variant with those includes deduplicated, tested on
-   `tor-0.4.9.14 + patches/0001-0007 + 0001`. `single_hop` requests never
-   reach the series' guard, and requests the guard refuses never get an
-   `action`. With enforcement off (the default), the guard only counts and
-   the request still gets its `action`, so the two metrics answer different
-   questions and don't need to add up.
+1. Post `upstream/tor41350/gitlab-41350-comment.md` on `tor#41350`.
+2. Open `0001` as a standalone bugfix MR against `maint-0.4.9` (milestone
+   `0.4.9.x-post-stable`). It applies with `git am` to `maint-0.4.9`, `main`
+   and `tor-0.4.9.14`, and on top of `patches/0001-0007` (the HSDir series),
+   and depends on neither.
 
 See `upstream/tor41350/TEST-RESULTS.txt` for build and test results.
 
@@ -420,19 +286,11 @@ See `upstream/tor41350/TEST-RESULTS.txt` for build and test results.
 - **Wrong line numbers**, including `connection.c:2079` / `:2099` / `:2059` /
   `:2058` / `:2284`, `connection_or.c:1761` as the closer,
   `connection_edge.c:3651` / `:3666` / `:4706` / `:4718` / `:760`,
-  `dircache.c:1319` / `:1545-1579`, `hs_cache.c:295-336`,
-  `hs_descriptor.c:2249-2437`, `relay_metrics.c:411-452`,
-  `rephist.c:1753-1771`, `status.c:146-162`, and
-  `directory.c:2168` / `:2243`.
+  `relay_metrics.c:411-452`, `rephist.c:1753-1771` and `status.c:146-162`.
 - **Falsified mechanisms.**
   - The `IPV6_V6ONLY=0` family mismatch doesn't exist.
   - DNS failures don't drift.
   - "Path 7" leaks are unreachable.
-  - `hs_cache_store_as_dir()` is not tri-state.
-  - The HSDir doesn't decode the superencrypted layer.
-  - The Part B reason phrases were not the strings Tor sends.
-  - `MAX_HEADERS_SIZE` is 50000, not 24576, and `MAX_DIR_UL_SIZE` is 16 MB −
-    1, not 20 MB.
   - Post-flood paired closes don't "subtract further".
 - **The field observation was misquoted** (A.3).
 - **The patch descriptions didn't match the patches.** The analysis named

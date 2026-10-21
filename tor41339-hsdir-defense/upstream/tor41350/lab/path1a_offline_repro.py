@@ -144,8 +144,16 @@ def main():
         time.sleep(2)
         snapshot("real connections closed")
     finally:
+        try:
+            os.kill(tor.pid, signal.SIGCONT)
+        except ProcessLookupError:
+            pass
         tor.terminate()
-        tor.wait(timeout=30)
+        try:
+            tor.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            tor.kill()
+            tor.wait()
         shutil.rmtree(datadir, ignore_errors=True)
 
 

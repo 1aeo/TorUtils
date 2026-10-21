@@ -1,8 +1,7 @@
-From ee1bfe1ba9c39d0b16dcbf1996f0f6e83796557a Mon Sep 17 00:00:00 2001
+From 27c17dfc39bfac9465ddec2977e0eae92aec36f3 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 06:59:42 +0000
-Subject: [PATCH 1/2] conn: Only uncount connections that were counted as
- opened
+Subject: [PATCH] conn: Only uncount connections that were counted as opened
 
 rep_hist_note_conn_opened() is called from listener_connection_new(),
 and through note_connection() once an accepted connection has passed
@@ -14,14 +13,15 @@ pulled tor_relay_connections{state="opened"} down towards 0:
 
   - Accepted OR connections whose TLS handshake fails right away in
     connection_init_accepted_conn(), because the peer had already sent
-    non-TLS bytes or closed before we called accept(). This happens a
-    lot when the main loop is too busy to accept quickly.
+    non-TLS bytes, a FIN or an RST before we called accept(). This is
+    more likely when the main loop is too busy to accept quickly.
   - Transparent proxy connections rejected in
     connection_init_accepted_conn().
   - Connections without a socket that never go through connect(): the
     linked exit and directory connections of every BEGIN_DIR stream,
-    the linked AP and directory connections of tunneled directory
-    requests, exit streams closed while resolving, and DNSPort requests.
+    the linked directory connection of tunneled directory requests, and
+    exit streams closed while resolving. (Linked and DNSPort AP
+    connections are uncounted too, but from a bucket nothing counts.)
   - Outbound directory connections whose connect() fails right away.
 
 Also, Extended ORPort connections are counted as such when accepted but
