@@ -1,0 +1,94 @@
+From ad413c405c02dacde890ea527e97b59281481296 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Wed, 21 Oct 2026 07:11:10 +0000
+Subject: [PATCH 2/4] net: Add tor_accept_socket_nonblocking_unlimited()
+
+tor_accept_socket_with_extensions() refuses new sockets once we have
+max_sockets - 1 open, even though set_max_file_descriptors() keeps
+ULIMIT_BUFFER more file descriptors than that. The MetricsPort worker
+thread added in a later commit needs to accept its one client at that
+point, since running out of sockets is one of the overloads that
+operators scrape the MetricsPort to see.
+
+Add a variant that skips the limit check, sharing the code of
+tor_accept_socket_with_extensions(). Its callers must bound how many
+sockets they hold.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018ZfqW8PgStnaE5cg75wM9u
+---
+ src/lib/net/socket.c | 31 ++++++++++++++++++++++++++-----
+ src/lib/net/socket.h |  3 +++
+ 2 files changed, 29 insertions(+), 5 deletions(-)
+
+diff --git a/src/lib/net/socket.c b/src/lib/net/socket.c
+index e36e3a0..454c82f 100644
+--- a/src/lib/net/socket.c
++++ b/src/lib/net/socket.c
+@@ -372,16 +372,18 @@ tor_accept_socket_nonblocking(tor_socket_t sockfd, struct sockaddr *addr,
+ /** As accept(), but counts the number of open sockets and handles
+  * socket creation with either of SOCK_CLOEXEC and SOCK_NONBLOCK specified.
+  * <b>cloexec</b> and <b>nonblock</b> should be either 0 or 1 to indicate
+- * if the corresponding extension should be used.*/
+-tor_socket_t
+-tor_accept_socket_with_extensions(tor_socket_t sockfd, struct sockaddr *addr,
+-                                 socklen_t *len, int cloexec, int nonblock)
++ * if the corresponding extension should be used. If <b>check_limit</b> is
++ * true, fail with EMFILE once we have max_sockets - 1 open sockets. */
++static tor_socket_t
++tor_accept_socket_impl(tor_socket_t sockfd, struct sockaddr *addr,
++                       socklen_t *len, int cloexec, int nonblock,
++                       int check_limit)
+ {
+   tor_socket_t s;
+ 
+   /* We are about to create a new file descriptor so make sure we have
+    * enough of them. */
+-  if (get_n_open_sockets() >= max_sockets - 1) {
++  if (check_limit && get_n_open_sockets() >= max_sockets - 1) {
+ #ifdef _WIN32
+     WSASetLastError(WSAEMFILE);
+ #else
+@@ -435,6 +437,25 @@ tor_accept_socket_with_extensions(tor_socket_t sockfd, struct sockaddr *addr,
+   return s;
+ }
+ 
++/** As tor_accept_socket_impl(), with the max_sockets limit. */
++tor_socket_t
++tor_accept_socket_with_extensions(tor_socket_t sockfd, struct sockaddr *addr,
++                                 socklen_t *len, int cloexec, int nonblock)
++{
++  return tor_accept_socket_impl(sockfd, addr, len, cloexec, nonblock, 1);
++}
++
++/** As tor_accept_socket_nonblocking(), but accept even when we already have
++ * max_sockets - 1 open sockets, using the ULIMIT_BUFFER headroom. Only for
++ * code that holds a fixed, small number of such sockets, like the MetricsPort
++ * worker thread, which serves one client at a time. */
++tor_socket_t
++tor_accept_socket_nonblocking_unlimited(tor_socket_t sockfd,
++                                        struct sockaddr *addr, socklen_t *len)
++{
++  return tor_accept_socket_impl(sockfd, addr, len, 1, 1, 0);
++}
++
+ /** Return the number of sockets we currently have opened. */
+ int
+ get_n_open_sockets(void)
+diff --git a/src/lib/net/socket.h b/src/lib/net/socket.h
+index bb44d49..d16505d 100644
+--- a/src/lib/net/socket.h
++++ b/src/lib/net/socket.h
+@@ -38,6 +38,9 @@ tor_socket_t tor_accept_socket_with_extensions(tor_socket_t sockfd,
+                                                struct sockaddr *addr,
+                                                socklen_t *len,
+                                                int cloexec, int nonblock);
++tor_socket_t tor_accept_socket_nonblocking_unlimited(tor_socket_t sockfd,
++                                                     struct sockaddr *addr,
++                                                     socklen_t *len);
+ MOCK_DECL(tor_socket_t, tor_connect_socket,(tor_socket_t socket,
+                                             const struct sockaddr *address,
+                                             socklen_t address_len));
+-- 
+2.43.0
+

@@ -1,0 +1,479 @@
+From db4fce4e3d9566a79e12644e0a1cc94b1f8264d9 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Wed, 21 Oct 2026 06:26:32 +0000
+Subject: [PATCH 4/4] metrics: Answer MetricsPort requests from a dedicated
+ thread
+
+The MetricsPort is served by the main event loop, so a relay whose main
+thread is overloaded, or which has reached its socket limit, stops
+answering scrapes exactly when its operator most needs them.
+
+Hand the MetricsPort listener to a worker thread instead, much like
+dnsserv_configure_listener() hands DNSPort listeners to evdns. The
+worker never touches main thread state: the main thread rebuilds the
+HTTP response once per second from a periodic timer, and the worker
+accepts one client at a time, checks MetricsPortPolicy, and sends it a
+copy of that response. When the main loop is stalled, scrapes still
+succeed and get the last response, whose Date header tells its age.
+
+In more detail:
+
+  - The worker is started from the timer, in the main loop, so that it
+    runs under the Sandbox seccomp filter, which only applies to threads
+    created after sandbox_init().
+  - The worker accepts with tor_accept_socket_nonblocking_unlimited(),
+    so that scrapes still work when tor has max_sockets - 1 sockets
+    open. It holds only one client at a time.
+  - metrics_close_listener() runs before a MetricsPort listener socket
+    is closed, and calls shutdown() on it: on Linux, a socket that
+    another thread is polling stays bound after close(), which made
+    rebinding the same port on SIGHUP fail. The worker exits within a
+    second once it has no listener.
+  - After a failed accept(), as when out of file descriptors, the worker
+    sleeps for a second instead of spinning on the readable listener.
+  - Windows has no poll(), so it keeps serving the MetricsPort from the
+    main loop.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018ZfqW8PgStnaE5cg75wM9u
+---
+ changes/ticket_metricsport_worker |   5 +
+ src/core/mainloop/connection.c    |   9 +-
+ src/feature/metrics/metrics.c     | 203 ++++++++++++++++++++++++++++++
+ src/feature/metrics/metrics.h     |   7 ++
+ src/test/test_metrics.c           |  88 +++++++++++++
+ 5 files changed, 310 insertions(+), 2 deletions(-)
+ create mode 100644 changes/ticket_metricsport_worker
+
+diff --git a/changes/ticket_metricsport_worker b/changes/ticket_metricsport_worker
+new file mode 100644
+index 0000000..74d7826
+--- /dev/null
++++ b/changes/ticket_metricsport_worker
+@@ -0,0 +1,5 @@
++  o Minor features (metrics, relay):
++    - Answer MetricsPort requests from a dedicated thread, using a copy of
++      the metrics that the main thread refreshes every second, so that
++      scrapes still succeed when the main event loop is overloaded or tor
++      is at its socket limit.
+diff --git a/src/core/mainloop/connection.c b/src/core/mainloop/connection.c
+index cd71bb8..580b792 100644
+--- a/src/core/mainloop/connection.c
++++ b/src/core/mainloop/connection.c
+@@ -941,6 +941,7 @@ connection_free_minimal(connection_t *conn)
+ 
+   if (SOCKET_OK(conn->s)) {
+     log_debug(LD_NET,"closing fd %d.",(int)conn->s);
++    metrics_close_listener(conn);
+     tor_close_socket(conn->s);
+     conn->s = TOR_INVALID_SOCKET;
+   }
+@@ -1079,8 +1080,10 @@ connection_close_immediate(connection_t *conn)
+   conn->read_blocked_on_bw = 0;
+   conn->write_blocked_on_bw = 0;
+ 
+-  if (SOCKET_OK(conn->s))
++  if (SOCKET_OK(conn->s)) {
++    metrics_close_listener(conn);
+     tor_close_socket(conn->s);
++  }
+   conn->s = TOR_INVALID_SOCKET;
+   if (conn->linked)
+     conn->linked_conn_is_closed = 1;
+@@ -1775,7 +1778,9 @@ connection_listener_new(const struct sockaddr *listensockaddr,
+          conn_type_to_string(type), gotPort);
+ 
+   conn->state = LISTENER_STATE_READY;
+-  if (start_reading) {
++  if (type == CONN_TYPE_METRICS_LISTENER) {
++    metrics_configure_listener(conn);
++  } else if (start_reading) {
+     connection_start_reading(conn);
+   } else {
+     tor_assert(type == CONN_TYPE_AP_DNS_LISTENER);
+diff --git a/src/feature/metrics/metrics.c b/src/feature/metrics/metrics.c
+index b8946d5..56d5f0a 100644
+--- a/src/feature/metrics/metrics.c
++++ b/src/feature/metrics/metrics.c
+@@ -6,15 +6,19 @@
+  * @brief Metrics subsystem.
+  **/
+ 
++#define METRICS_PRIVATE
++
+ #include "orconfig.h"
+ 
+ #include "core/or/or.h"
+ 
+ #include "lib/encoding/confline.h"
++#include "lib/evloop/compat_libevent.h"
+ #include "lib/log/util_bug.h"
+ #include "lib/malloc/malloc.h"
+ #include "lib/metrics/metrics_store.h"
+ #include "lib/net/resolve.h"
++#include "lib/net/socket.h"
+ #include "lib/string/printf.h"
+ #include "lib/net/nettypes.h"
+ #include "lib/net/address.h"
+@@ -32,6 +36,10 @@
+ #include "app/config/config.h"
+ #include "app/main/subsysmgr.h"
+ 
++#ifndef _WIN32
++#include <poll.h>
++#endif
++
+ /** Metrics format driver set by the MetricsPort option. */
+ static metrics_format_t the_format = METRICS_FORMAT_PROMETHEUS;
+ 
+@@ -173,6 +181,199 @@ metrics_connection_process_inbuf(connection_t *conn)
+   return ret;
+ }
+ 
++#ifndef _WIN32
++/** Seconds that a client of the worker thread has to send its request and
++ * read the response. */
++#define METRICS_WORKER_TIMEOUT 10
++
++/** Protects the worker_* variables, which the main thread and the MetricsPort
++ * worker thread share. Created with the first listener and never freed. */
++static tor_mutex_t *worker_mutex = NULL;
++/** Listener that the worker thread serves, or TOR_INVALID_SOCKET. */
++static tor_socket_t worker_listener = TOR_INVALID_SOCKET;
++/** Latest metrics_get_http_response() output for the worker thread, and its
++ * length. */
++static char *worker_response = NULL;
++static size_t worker_response_len = 0;
++/** True while the worker thread runs. */
++static bool worker_running = false;
++/** Main thread timer refreshing worker_response while we have a listener. */
++static periodic_timer_t *worker_timer = NULL;
++
++/** Worker thread helper: wait up to a second for <b>events</b> on <b>s</b>
++ * with worker_mutex released, and return what poll() returned. */
++static int
++worker_wait(tor_socket_t s, short events)
++{
++  struct pollfd pfd = { .fd = s, .events = events };
++  tor_mutex_release(worker_mutex);
++  const int r = poll(&pfd, 1, 1000);
++  tor_mutex_acquire(worker_mutex);
++  return r;
++}
++
++/** Worker thread helper: accept a client on <b>listener</b> and answer it
++ * from worker_response. Called with worker_mutex held. */
++static void
++metrics_worker_serve(tor_socket_t listener)
++{
++  struct sockaddr_storage ss;
++  socklen_t ss_len = sizeof(ss);
++  tor_addr_t addr;
++  char req[1024], *out = NULL;
++  size_t len = 0, out_len = 0;
++  ssize_t n;
++  const time_t deadline = time(NULL) + METRICS_WORKER_TIMEOUT;
++
++  /* Ignore max_sockets: we hold one client at a time, and running out of
++   * sockets is one of the things operators scrape us to see. */
++  const tor_socket_t s = tor_accept_socket_nonblocking_unlimited(listener,
++                                         (struct sockaddr *) &ss, &ss_len);
++  if (!SOCKET_OK(s)) {
++    /* Don't spin while the listener stays readable, as when out of fds:
++     * poll() ignores a negative fd, so this just sleeps. */
++    worker_wait(TOR_INVALID_SOCKET, 0);
++    return;
++  }
++  if (tor_addr_from_sockaddr(&addr, (struct sockaddr *) &ss, NULL) < 0 ||
++      !metrics_request_allowed(&addr)) {
++    goto done;
++  }
++
++  /* Read the headers, up to 1024 bytes as on the main thread. */
++  while (!tor_memstr(req, len, "\r\n\r\n")) {
++    if (len == sizeof(req) - 1 || time(NULL) >= deadline) {
++      goto done;
++    }
++    if (worker_wait(s, POLLIN) <= 0) {
++      continue;
++    }
++    if ((n = tor_socket_recv(s, req + len, sizeof(req) - 1 - len, 0)) <= 0) {
++      goto done;
++    }
++    len += n;
++  }
++  req[len] = '\0';
++
++  const char *errmsg = metrics_check_http_request(req);
++  if (!errmsg && !worker_response) {
++    goto done;
++  }
++  out_len = errmsg ? strlen(errmsg) : worker_response_len;
++  out = tor_memdup(errmsg ? errmsg : worker_response, out_len);
++  for (len = 0; len < out_len && time(NULL) < deadline; ) {
++    if (worker_wait(s, POLLOUT) <= 0) {
++      continue;
++    }
++    if ((n = tor_socket_send(s, out + len, out_len - len, 0)) < 0) {
++      break;
++    }
++    len += n;
++  }
++
++ done:
++  tor_free(out);
++  tor_close_socket(s);
++}
++
++/** Worker thread: serve clients one at a time while we have a listener. */
++static void
++metrics_worker_main(void *arg)
++{
++  (void) arg;
++  tor_mutex_acquire(worker_mutex);
++  while (SOCKET_OK(worker_listener)) {
++    const tor_socket_t listener = worker_listener;
++    if (worker_wait(listener, POLLIN) > 0 && listener == worker_listener) {
++      metrics_worker_serve(listener);
++    }
++  }
++  worker_running = false;
++  tor_mutex_release(worker_mutex);
++}
++
++/** Main thread timer callback: refresh worker_response, and start the worker
++ * thread if needed. Starting it here, in the main loop, rather than when the
++ * listener is opened in tor_init(), puts it under the Sandbox filter. */
++STATIC void
++metrics_worker_refresh(periodic_timer_t *timer, void *arg)
++{
++  buf_t *buf = metrics_get_http_response();
++  size_t len;
++  char *response = buf_extract(buf, &len);
++
++  (void) timer;
++  (void) arg;
++  buf_free(buf);
++  tor_mutex_acquire(worker_mutex);
++  tor_free(worker_response);
++  worker_response = response;
++  worker_response_len = len;
++  if (!worker_running) {
++    worker_running = spawn_func(metrics_worker_main, NULL) == 0;
++    if (!worker_running) {
++      log_warn(LD_BUG, "Unable to start the MetricsPort worker thread.");
++    }
++  }
++  tor_mutex_release(worker_mutex);
++}
++#endif /* !defined(_WIN32) */
++
++/** Serve the MetricsPort listener <b>conn</b> from a worker thread, so that
++ * scrapes are answered even when the main loop is too busy to. */
++void
++metrics_configure_listener(connection_t *conn)
++{
++#ifdef _WIN32
++  /* No poll(): keep serving it from the main loop. */
++  connection_start_reading(conn);
++#else
++  static const struct timeval one_second = { 1, 0 };
++
++  if (!worker_mutex) {
++    worker_mutex = tor_mutex_new_nonrecursive();
++  }
++  tor_mutex_acquire(worker_mutex);
++  worker_listener = conn->s;
++  tor_mutex_release(worker_mutex);
++  if (!worker_timer) {
++    worker_timer = periodic_timer_new(tor_libevent_get_base(), &one_second,
++                                      metrics_worker_refresh, NULL);
++  }
++#endif /* defined(_WIN32) */
++}
++
++/** Called before closing the socket of <b>conn</b>: if the worker thread
++ * serves it, stop. If <b>conn</b> is NULL, stop serving any listener, and
++ * free worker_response. */
++void
++metrics_close_listener(const connection_t *conn)
++{
++#ifndef _WIN32
++  if (!worker_mutex || (conn && conn->type != CONN_TYPE_METRICS_LISTENER)) {
++    return;
++  }
++  tor_mutex_acquire(worker_mutex);
++  const tor_socket_t s = conn ? conn->s : worker_listener;
++  /* On Linux, a listener stays bound after we close it while the worker is
++   * still polling it, even if it was just replaced, and then rebinding its
++   * port fails: shutdown() unbinds it and wakes the worker up. */
++  if (SOCKET_OK(s)) {
++    shutdown(s, SHUT_RD);
++  }
++  if (s == worker_listener) {
++    worker_listener = TOR_INVALID_SOCKET;
++    periodic_timer_free(worker_timer);
++  }
++  if (!conn) {
++    tor_free(worker_response);
++  }
++  tor_mutex_release(worker_mutex);
++#else
++  (void) conn;
++#endif /* !defined(_WIN32) */
++}
++
+ /** Parse metrics ports from options. On success, add the port to the ports
+  * list and return 0. On failure, set err_msg_out to a newly allocated string
+  * describing the problem and return -1. */
+@@ -282,4 +483,6 @@ metrics_init(void)
+ void
+ metrics_cleanup(void)
+ {
++  /* The worker thread, if any, exits within a second. */
++  metrics_close_listener(NULL);
+ }
+diff --git a/src/feature/metrics/metrics.h b/src/feature/metrics/metrics.h
+index 33e15f8..98f3f0a 100644
+--- a/src/feature/metrics/metrics.h
++++ b/src/feature/metrics/metrics.h
+@@ -29,9 +29,16 @@ buf_t *metrics_get_output(const metrics_format_t fmt);
+ int metrics_connection_process_inbuf(struct connection_t *conn);
+ int metrics_connection_reached_eof(struct connection_t *conn);
+ int metrics_connection_finished_flushing(struct connection_t *conn);
++void metrics_configure_listener(struct connection_t *conn);
++void metrics_close_listener(const struct connection_t *conn);
+ 
+ /* Configuration. */
+ int metrics_parse_ports(or_options_t *options, smartlist_t *ports,
+                         char **err_msg_out);
+ 
++#if defined(METRICS_PRIVATE) && !defined(_WIN32)
++struct periodic_timer_t;
++STATIC void metrics_worker_refresh(struct periodic_timer_t *timer, void *arg);
++#endif
++
+ #endif /* !defined(TOR_FEATURE_METRICS_METRICS_H) */
+diff --git a/src/test/test_metrics.c b/src/test/test_metrics.c
+index 0e79e32..8e687a5 100644
+--- a/src/test/test_metrics.c
++++ b/src/test/test_metrics.c
+@@ -9,6 +9,7 @@
+ #define CONFIG_PRIVATE
+ #define CONNECTION_PRIVATE
+ #define MAINLOOP_PRIVATE
++#define METRICS_PRIVATE
+ #define METRICS_STORE_ENTRY_PRIVATE
+ 
+ #include "test/test.h"
+@@ -27,6 +28,7 @@
+ 
+ #include "lib/encoding/confline.h"
+ #include "lib/metrics/metrics_store.h"
++#include "lib/net/socket.h"
+ 
+ #include <limits.h>
+ 
+@@ -181,6 +183,89 @@ test_connection(void *arg)
+   connection_free_minimal(conn);
+ }
+ 
++#ifndef _WIN32
++/** Send <b>request</b> to 127.0.0.1:<b>port</b> and return the start of the
++ * reply, up to when the server closes the connection. */
++static char *
++worker_request(uint16_t port, const char *request)
++{
++  struct sockaddr_in sin = { .sin_family = AF_INET, .sin_port = htons(port),
++                             .sin_addr.s_addr = htonl(INADDR_LOOPBACK) };
++  char reply[256] = "";
++  size_t len = 0;
++  ssize_t n;
++  const struct timeval timeout = { 10, 0 };
++  /* Not tor_open_socket(), so that tests can lower max_sockets. */
++  int s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
++
++  /* Fail rather than hang if the worker thread doesn't answer. */
++  setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
++  tor_assert(connect(s, (struct sockaddr *) &sin, sizeof(sin)) == 0);
++  tor_assert(send(s, request, strlen(request), 0) > 0);
++  while (len < sizeof(reply) - 1 &&
++         (n = recv(s, reply + len, sizeof(reply) - 1 - len, 0)) > 0) {
++    len += n;
++  }
++  close(s);
++  return tor_strdup(reply);
++}
++
++static void
++test_worker(void *arg)
++{
++  struct sockaddr_in sin = { .sin_family = AF_INET,
++                             .sin_addr.s_addr = htonl(INADDR_LOOPBACK) };
++  socklen_t sin_len = sizeof(sin);
++  char *reply = NULL;
++  connection_t *conn = connection_new(CONN_TYPE_METRICS_LISTENER, AF_INET);
++  or_options_t *options = get_options_mutable();
++
++  (void) arg;
++
++  conn->s = tor_open_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
++  tt_int_op(bind(conn->s, (struct sockaddr *) &sin, sizeof(sin)), OP_EQ, 0);
++  tt_int_op(listen(conn->s, 8), OP_EQ, 0);
++  tt_int_op(getsockname(conn->s, (struct sockaddr *) &sin, &sin_len), OP_EQ,
++            0);
++  const uint16_t port = ntohs(sin.sin_port);
++
++  /* The first refresh starts the worker thread. */
++  metrics_configure_listener(conn);
++  metrics_worker_refresh(NULL, NULL);
++
++  /* MetricsPortPolicy only accepts 1.2.3.4: no reply. */
++  set_metrics_port(options);
++  reply = worker_request(port, "GET /metrics HTTP/1.0\r\n\r\n");
++  tt_str_op(reply, OP_EQ, "");
++  tor_free(reply);
++
++  config_free_lines(options->MetricsPortPolicy);
++  config_get_lines("MetricsPortPolicy accept 127.0.0.1",
++                   &options->MetricsPortPolicy, 0);
++  policies_parse_from_options(options);
++  reply = worker_request(port, "GET /metrics HTTP/1.0\r\n\r\n");
++  tt_assert(!strcmpstart(reply, "HTTP/1.0 200 OK\r\n"));
++  tor_free(reply);
++
++  /* Still answered when we are out of sockets. */
++  const int max_sockets = get_max_sockets();
++  set_max_sockets(get_n_open_sockets());
++  reply = worker_request(port, "GET /metrics HTTP/1.0\r\n\r\n");
++  set_max_sockets(max_sockets);
++  tt_assert(!strcmpstart(reply, "HTTP/1.0 200 OK\r\n"));
++  tor_free(reply);
++
++  reply = worker_request(port, "GET /badpath HTTP/1.0\r\n\r\n");
++  tt_str_op(reply, OP_EQ, "HTTP/1.0 404 Not Found\r\n\r\n");
++
++ done:
++  tor_free(reply);
++  connection_free_minimal(conn);
++  metrics_cleanup();
++  or_options_free(options);
++}
++#endif /* !defined(_WIN32) */
++
+ static void
+ test_prometheus(void *arg)
+ {
+@@ -412,6 +497,9 @@ struct testcase_t metrics_tests[] = {
+ 
+   { "config", test_config, TT_FORK, NULL, NULL },
+   { "connection", test_connection, TT_FORK, NULL, NULL },
++#ifndef _WIN32
++  { "worker", test_worker, TT_FORK, NULL, NULL },
++#endif
+   { "prometheus", test_prometheus, TT_FORK, NULL, NULL },
+   { "prometheus_histogram", test_prometheus_histogram, TT_FORK, NULL, NULL },
+   { "store", test_store, TT_FORK, NULL, NULL },
+-- 
+2.43.0
+
