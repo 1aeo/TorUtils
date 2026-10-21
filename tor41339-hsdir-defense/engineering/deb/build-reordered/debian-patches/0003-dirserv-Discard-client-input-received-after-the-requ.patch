@@ -1,7 +1,7 @@
-From 5963ac64ab612f132147341745b1527ce4e016c0 Mon Sep 17 00:00:00 2001
+From 616b3881fe5b2eca737b730ef04bff2837bbb260 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 03/11] dirserv: Discard client input received after the
+Subject: [PATCH 03/13] dirserv: Discard client input received after the
  request
 
 A directory server handles one request per connection, but it keeps
@@ -11,46 +11,39 @@ buffered whatever else the client sent, up to MAX_DIRECTORY_OBJECT_SIZE
 data received" warning. So a client that stops reading its answer but
 keeps sending could make a relay hold about 10 MB per stream.
 
-Discard that input instead, and do it immediately: the old code only
-cleared the buffer on a later read, so bytes that arrived in the same
-read as the request lingered until then. Once directory_handle_command()
-has consumed the request and moved the connection to SERVER_WRITING, we
-clear the input in that same pass; a still-incomplete request is left in
+Discard that input instead. Once directory_handle_command() has consumed
+the request and moved the connection to SERVER_WRITING, we clear the
+input in that same pass, so bytes that arrived together with the request
+are dropped too; a still-incomplete request is left in
 SERVER_COMMAND_WAIT and kept.
 
 We don't close the connection, so a client that sends a stray CRLF after
 its request still gets its answer, and we don't stop reading, since
-linked connections only notice EOF while reading. Memory stays bounded
-because each read is discarded at once, so we add no byte cap; a client
-that streams forever without reading its answer is still closed by the
+linked connections only notice EOF while reading. A client that keeps
+sending without reading its answer is still closed by the
 TestingDirConnectionMaxStall timeout, and the OOM handler still covers
 these connections.
 
-As with the previous commit, this limits memory per stream, not in
-total. Hardening related to bug 41339; it does not affect the HSDir
-fetch flood in that ticket.
+Related to #41339.
 ---
- changes/dirserv_extra_input       |  7 ++++
+ changes/dirserv_extra_input       |  4 ++
  src/feature/dircommon/directory.c | 17 +++++++++
- src/test/test_dir_handle_get.c    | 61 +++++++++++++++++++++++++++++++
- 3 files changed, 85 insertions(+)
+ src/test/test_dir_handle_get.c    | 63 +++++++++++++++++++++++++++++++
+ 3 files changed, 84 insertions(+)
  create mode 100644 changes/dirserv_extra_input
 
 diff --git a/changes/dirserv_extra_input b/changes/dirserv_extra_input
 new file mode 100644
-index 0000000..fdde98d
+index 0000000000..449cdfb7f7
 --- /dev/null
 +++ b/changes/dirserv_extra_input
-@@ -0,0 +1,7 @@
+@@ -0,0 +1,4 @@
 +  o Minor features (directory server, denial of service):
 +    - Directory servers now discard anything a client sends after its
-+      request, as soon as the request is read, instead of buffering up to
-+      10 MB of it per connection while they send their answer. Memory stays
-+      bounded because each read is discarded at once; a client that keeps
-+      sending without reading its answer is closed by the directory
-+      connection stall timeout. Part of ticket 41339.
++      request, instead of buffering up to 10 MB of it per connection while
++      they send their answer. Related to ticket 41339.
 diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
-index 6b5c38c..b8b0197 100644
+index 6b5c38c7c1..b8b01973ba 100644
 --- a/src/feature/dircommon/directory.c
 +++ b/src/feature/dircommon/directory.c
 @@ -18,6 +18,7 @@
@@ -85,10 +78,10 @@ index 6b5c38c..b8b0197 100644
    }
  
 diff --git a/src/test/test_dir_handle_get.c b/src/test/test_dir_handle_get.c
-index a2d6cd4..99f1cb7 100644
+index b4e69d19b6..6c75b9d935 100644
 --- a/src/test/test_dir_handle_get.c
 +++ b/src/test/test_dir_handle_get.c
-@@ -2792,6 +2792,66 @@ test_dir_handle_get_hs_post_size_limit(void *data)
+@@ -2785,6 +2785,68 @@ test_dir_handle_get_hs_post_size_limit(void *data)
    UNMOCK(connection_write_to_buf_impl_);
  }
  
@@ -118,6 +111,8 @@ index a2d6cd4..99f1cb7 100644
 +static void
 +test_dir_handle_get_server_discards_extra_input(void *data)
 +{
++  /* Content-Length: 0 bounds the body, so TRAILING survives the HTTP parser
++   * and only the discard can remove it. */
 +  const char *req_trail =
 +    "GET / HTTP/1.0\r\nContent-Length: 0\r\n\r\nTRAILING";
 +  const char *req = "GET / HTTP/1.0\r\n\r\n";
@@ -155,7 +150,7 @@ index a2d6cd4..99f1cb7 100644
  #define DIR_HANDLE_CMD(name,flags) \
    { #name, test_dir_handle_get_##name, (flags), NULL, NULL }
  
-@@ -2864,5 +2924,6 @@ struct testcase_t dir_handle_get_tests[] = {
+@@ -2857,5 +2919,6 @@ struct testcase_t dir_handle_get_tests[] = {
    DIR_HANDLE_CMD(parse_accept_encoding, 0),
    DIR_HANDLE_CMD(malformed_warn_ratelim, TT_FORK),
    DIR_HANDLE_CMD(hs_post_size_limit, TT_FORK),
@@ -163,5 +158,5 @@ index a2d6cd4..99f1cb7 100644
    END_OF_TESTCASES
  };
 -- 
-2.39.5 (Apple Git-154)
+2.43.0
 

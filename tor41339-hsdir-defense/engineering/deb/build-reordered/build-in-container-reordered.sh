@@ -12,16 +12,20 @@ cp /in/tor_0.4.9.14.orig.tar.gz "/in/tor_${BASE}.diff.gz" "/in/tor_${BASE}.dsc" 
 dpkg-source -x "tor_${BASE}.dsc"
 cd tor-0.4.9.14
 mkdir -p debian/patches
-cp /in/0000-restore-doc-nofooter.conf.patch debian/patches/
-for p in /in/000[1-7]*.patch; do cp "$p" debian/patches/; done
-( cd debian/patches && ls 000*.patch > series && cat series )
+# Every numbered patch in /in (0000 first, then the series in order). Fail
+# unless exactly EXPECT_PATCHES were staged, so a stale or partial staging
+# directory can never silently drop or add patches.
+for p in /in/[0-9][0-9][0-9][0-9]-*.patch; do cp "$p" debian/patches/; done
+( cd debian/patches && ls [0-9][0-9][0-9][0-9]-*.patch > series && cat series )
+N=$(grep -c . debian/patches/series)
+[ "$N" -eq "${EXPECT_PATCHES:?set EXPECT_PATCHES to 1 + the series length}" ] || { echo "staged $N patches, expected $EXPECT_PATCHES" >&2; exit 1; }
 export QUILT_PATCHES=debian/patches
 quilt push -a
 quilt pop -a
-DEBFULLNAME="1aeo" DEBEMAIL="github@1aeo.com" dch -v "${BASE}+tor41339.3" -D "$SUITE" \
-  "Apply tor#41339 HSDir-flood defensive series (patches 0001-0007, v3 reordered, upstream-polish refactors): known-prev-hop rule, one HS dir request per circuit, count-only hsdir_* MetricsPort counters incl. hsdir_req_reused and hsdir_request_total; restore doc/nofooter.conf."
+DEBFULLNAME="1aeo" DEBEMAIL="github@1aeo.com" dch -v "${BASE}+tor41339.${REV:?set REV, e.g. 4}" -D "$SUITE" \
+  "${CHANGELOG_MSG:?set CHANGELOG_MSG}"
 mk-build-deps -i -r -t "apt-get -y -q --no-install-recommends" debian/control
 dpkg-buildpackage -us -uc -b -j"$(nproc)" 2>&1 | tee /out/dpkg-buildpackage.log
-cp ../*.deb ../*.buildinfo ../*.changes /out/ || true
+cp ../tor_*_amd64.deb ../tor-geoipdb_*_all.deb ../*.buildinfo ../*.changes /out/
 cp -r debian/patches /out/debian-patches
 cp debian/changelog /out/changelog

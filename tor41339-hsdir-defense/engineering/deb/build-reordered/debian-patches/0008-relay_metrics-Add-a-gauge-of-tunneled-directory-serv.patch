@@ -1,0 +1,216 @@
+From 456e66ca8dcaf630712ad590b6dd33b602a718da Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Wed, 21 Oct 2026 08:45:05 +0000
+Subject: [PATCH 08/13] relay_metrics: Add a gauge of tunneled directory server
+ connections
+
+Each BEGIN_DIR stream holds a linked exit and directory connection pair
+with no socket, so tor_relay_connections doesn't count them, and nothing
+else shows how many a relay holds or what they are doing. During a
+BEGIN_DIR flood they can pile up in the connection array, and the cost of
+walking it grows with them.
+
+Add the gauge tor_relay_dir_server_conns{state=...}, filled at scrape time
+in one pass over the connection array. Each open BEGIN_DIR stream is in
+exactly one state: its directory connection is waiting for a request
+("command_wait"), writing an onion service descriptor
+("writing_hs_descriptor") or anything else ("writing_other"), or it is
+gone and only the stream is left, draining onto the circuit
+("draining"). Direct (DirPort) connections are not counted.
+
+Part of #41339.
+---
+ changes/ticket41339_dir_server_conns |  5 +++
+ src/feature/relay/relay_metrics.c    | 45 ++++++++++++++++++++++++
+ src/feature/relay/relay_metrics.h    |  2 ++
+ src/test/test_hs_cache.c             | 51 ++++++++++++++++++++++++++++
+ 4 files changed, 103 insertions(+)
+ create mode 100644 changes/ticket41339_dir_server_conns
+
+diff --git a/changes/ticket41339_dir_server_conns b/changes/ticket41339_dir_server_conns
+new file mode 100644
+index 0000000000..67ded561fc
+--- /dev/null
++++ b/changes/ticket41339_dir_server_conns
+@@ -0,0 +1,5 @@
++  o Minor features (metrics port, relay):
++    - Report the tunneled directory connections a relay has open, by state,
++      as the gauge tor_relay_dir_server_conns{state=...}. These connections
++      have no socket, so tor_relay_connections doesn't show them. Part of
++      ticket 41339.
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index c94a36616b..90c951ccc0 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -20,6 +20,7 @@
+ #include "core/or/circuitlist.h"
+ #include "core/or/dos.h"
+ #include "core/or/relay.h"
++#include "core/or/connection_st.h"
+ 
+ #include "app/config/config.h"
+ 
+@@ -29,6 +30,8 @@
+ #include "lib/math/fp.h"
+ #include "lib/metrics/metrics_store.h"
+ 
++#include "feature/dircommon/dir_connection_st.h"
++#include "feature/dircommon/directory.h"
+ #include "feature/hs/hs_dos.h"
+ #include "feature/nodelist/nodelist.h"
+ #include "feature/nodelist/node_st.h"
+@@ -71,6 +74,7 @@ static void fill_hsdir_get_values(void);
+ static void fill_hsdir_post_values(void);
+ static void fill_dir_request_values(void);
+ static void fill_dir_response_values(void);
++static void fill_dir_server_conns_values(void);
+ 
+ /** The base metrics that is a static array of metrics added to the metrics
+  * store.
+@@ -274,6 +278,13 @@ static const relay_metrics_entry_t base_metrics[] =
+     .help = "Total number of tunneled directory responses we handed off",
+     .fill_fn = fill_dir_response_values,
+   },
++  {
++    .key = RELAY_METRICS_DIR_SERVER_CONNS,
++    .type = METRICS_TYPE_GAUGE,
++    .name = METRICS_NAME(relay_dir_server_conns),
++    .help = "Open tunneled directory server connections",
++    .fill_fn = fill_dir_server_conns_values,
++  },
+ };
+ static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
+ 
+@@ -1377,6 +1388,40 @@ fill_dir_response_values(void)
+                       DIR_RESPONSE_TYPE_COUNT);
+ }
+ 
++/** Fill the RELAY_METRICS_DIR_SERVER_CONNS gauge. Each open BEGIN_DIR stream
++ * is in exactly one state: its directory connection is waiting for a request
++ * or writing a response, or that connection is gone and only the stream is
++ * left, draining what it was handed onto the circuit. */
++static void
++fill_dir_server_conns_values(void)
++{
++  enum { WAITING, WRITING_HS, WRITING_OTHER, DRAINING, N_STATES };
++  static const char *const names[] = {
++    [WAITING] = "command_wait",
++    [WRITING_HS] = "writing_hs_descriptor",
++    [WRITING_OTHER] = "writing_other",
++    [DRAINING] = "draining",
++  };
++  uint64_t counts[N_STATES] = {0};
++
++  SMARTLIST_FOREACH_BEGIN(get_connection_array(), const connection_t *, c) {
++    if (c->marked_for_close || !c->linked)
++      continue;
++    if (c->type == CONN_TYPE_DIR && DIR_CONN_IS_SERVER(c)) {
++      if (c->state == DIR_CONN_STATE_SERVER_COMMAND_WAIT)
++        counts[WAITING]++;
++      else if (c->state == DIR_CONN_STATE_SERVER_WRITING)
++        counts[CONST_TO_DIR_CONN(c)->hs_ident ? WRITING_HS : WRITING_OTHER]++;
++    } else if (c->type == CONN_TYPE_EXIT &&
++               (!c->linked_conn || c->linked_conn->marked_for_close)) {
++      counts[DRAINING]++;
++    }
++  } SMARTLIST_FOREACH_END(c);
++
++  fill_labeled_values(&base_metrics[RELAY_METRICS_DIR_SERVER_CONNS], "state",
++                      names, counts, N_STATES);
++}
++
+ /** Fill the metrics store for the RELAY_METRICS_CIRC_DROP_CELL counter. */
+ static void
+ fill_relay_drop_cell(void)
+diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
+index f793c890e2..efa9413342 100644
+--- a/src/feature/relay/relay_metrics.h
++++ b/src/feature/relay/relay_metrics.h
+@@ -71,6 +71,8 @@ typedef enum {
+   RELAY_METRICS_NUM_DIR_REQUESTS,
+   /** Tunneled directory responses handed to their stream, by type. */
+   RELAY_METRICS_NUM_DIR_RESPONSES,
++  /** Open tunneled directory server connections, by state. */
++  RELAY_METRICS_DIR_SERVER_CONNS,
+ } relay_metrics_key_t;
+ 
+ /** The metadata of a relay metric. */
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index 3a8e972f34..8335e80508 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -20,6 +20,7 @@
+ #include "feature/hs/hs_ident.h"
+ #include "feature/nodelist/networkstatus.h"
+ #include "core/mainloop/connection.h"
++#include "core/mainloop/mainloop.h"
+ #include "core/proto/proto_http.h"
+ #include "app/config/config.h"
+ #include "core/or/circuitlist.h"
+@@ -1015,6 +1016,54 @@ test_dir_request_response_metrics(void *arg)
+   tor_free(chan);
+ }
+ 
++#define DIR_CONN_GAUGE(state) \
++  get_metric(METRICS_NAME(relay_dir_server_conns), "state", (state))
++
++/* The tunneled directory server connection gauge puts each open BEGIN_DIR
++ * stream in exactly one state, and ignores direct and closing connections. */
++static void
++test_dir_server_conns_gauge(void *arg)
++{
++  const char *states[] = { "command_wait", "writing_hs_descriptor",
++                           "writing_other", "draining" };
++  int64_t before[ARRAY_LENGTH(states)];
++  connection_t *conns[6];
++  edge_connection_t *edge = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
++  ed25519_public_key_t pk;
++  (void) arg;
++
++  memset(&pk, 0, sizeof(pk));
++  for (size_t i = 0; i < 5; i++) {
++    conns[i] = TO_CONN(dir_connection_new(AF_INET));
++    conns[i]->purpose = DIR_PURPOSE_SERVER;
++    conns[i]->linked = 1;
++  }
++  conns[0]->state = DIR_CONN_STATE_SERVER_COMMAND_WAIT;
++  conns[1]->state = DIR_CONN_STATE_SERVER_WRITING;
++  TO_DIR_CONN(conns[1])->hs_ident = hs_ident_server_dir_conn_new(&pk);
++  conns[2]->state = DIR_CONN_STATE_SERVER_WRITING;
++  conns[3]->state = DIR_CONN_STATE_SERVER_WRITING;
++  conns[3]->linked = 0; /* Direct, not tunneled. */
++  conns[4]->state = DIR_CONN_STATE_SERVER_COMMAND_WAIT;
++  conns[4]->marked_for_close = 1;
++  /* A stream whose directory connection is gone. */
++  conns[5] = TO_CONN(edge);
++  conns[5]->linked = 1;
++
++  for (size_t i = 0; i < ARRAY_LENGTH(states); i++)
++    before[i] = DIR_CONN_GAUGE(states[i]);
++  for (size_t i = 0; i < ARRAY_LENGTH(conns); i++)
++    smartlist_add(get_connection_array(), conns[i]);
++  for (size_t i = 0; i < ARRAY_LENGTH(states); i++)
++    tt_i64_op(DIR_CONN_GAUGE(states[i]), OP_EQ, before[i] + 1);
++
++ done:
++  for (size_t i = 0; i < ARRAY_LENGTH(conns); i++) {
++    smartlist_remove(get_connection_array(), conns[i]);
++    connection_free_minimal(conns[i]);
++  }
++}
++
+ struct testcase_t hs_cache[] = {
+   /* Encoding tests. */
+   { "directory", test_directory, TT_FORK,
+@@ -1031,6 +1080,8 @@ struct testcase_t hs_cache[] = {
+     NULL, NULL },
+   { "dir_request_response_metrics", test_dir_request_response_metrics,
+     TT_FORK, NULL, NULL },
++  { "dir_server_conns_gauge", test_dir_server_conns_gauge, TT_FORK,
++    NULL, NULL },
+   { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
+     NULL, NULL },
+   { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
+-- 
+2.43.0
+

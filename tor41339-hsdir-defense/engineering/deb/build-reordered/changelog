@@ -1,12 +1,12 @@
-tor (0.4.9.14-1~noble+1+tor41339.3) noble; urgency=medium
+tor (0.4.9.14-1~noble+1+tor41339.4) noble; urgency=medium
 
-  * Apply tor#41339 HSDir-flood defensive series (patches 0001-0007, v3
-    reordered, upstream-polish refactors): known-prev-hop rule, one HS
-    dir request per circuit, count-only hsdir_* MetricsPort counters
-    incl. hsdir_req_reused and hsdir_request_total; restore
+  * Apply the tor#41339 HSDir defensive series (patches 0001-0013): HTTP
+    and onion service descriptor hardening, MetricsPort counters for
+    HSDir fetches and uploads and tunneled directory requests, and HSDir
+    and BEGIN_DIR defenses, all off by default; restore
     doc/nofooter.conf.
 
- -- 1aeo <github@1aeo.com>  Wed, 14 Oct 2026 14:37:36 +0000
+ -- 1aeo <github@1aeo.com>  Wed, 21 Oct 2026 09:17:38 +0000
 
 tor (0.4.9.14-1~noble+1) noble-backport; urgency=medium
 

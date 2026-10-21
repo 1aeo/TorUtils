@@ -2,22 +2,22 @@ Format: 1.0
 Source: tor
 Binary: tor tor-dbgsym tor-geoipdb
 Architecture: all amd64
-Version: 0.4.9.14-1~noble+1+tor41339.3
+Version: 0.4.9.14-1~noble+1+tor41339.4
 Checksums-Md5:
- 532fef49484c950c570bb51ec1a5bcca 6925564 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.3_amd64.ddeb
- 5924ec0a6b9bb79c55a5166f53bc15d6 2824606 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.3_all.deb
- 44ab49e4a5c9bf0cb119f06b9c2d6109 1757600 tor_0.4.9.14-1~noble+1+tor41339.3_amd64.deb
+ 11c6706d1f3e825a017c2fb1c2a4fdae 6938854 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.4_amd64.ddeb
+ de8d73aa1bcffa0f239dfb04ca9cca4e 2883916 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.4_all.deb
+ 3d286d5a114b5f9ea949c963ff61ff26 1759410 tor_0.4.9.14-1~noble+1+tor41339.4_amd64.deb
 Checksums-Sha1:
- 775eeea53efe505dc7dbddfaa859ccbd75535ea8 6925564 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.3_amd64.ddeb
- a9a306e4909066894fe5e6f06aad0117921314fc 2824606 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.3_all.deb
- 0703066a0a51653a5653c552c535177c53a679d1 1757600 tor_0.4.9.14-1~noble+1+tor41339.3_amd64.deb
+ 8c6a61b14fb739229d2901380b710245c3973fe2 6938854 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.4_amd64.ddeb
+ 9763e02bd6781550cb500bcd61d85826aec19078 2883916 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.4_all.deb
+ f40572627e771a3000ef7dc71ef8e48c84041c92 1759410 tor_0.4.9.14-1~noble+1+tor41339.4_amd64.deb
 Checksums-Sha256:
- 22ec1d99ce3653639947cb8bde2e9d18226dda89b75d83a5418f1b353d832f53 6925564 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.3_amd64.ddeb
- ac019b7cad8a76049a554d9a7e25739c833697cc8a74ad6448dc0983027c6335 2824606 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.3_all.deb
- 76da7e80ae5e2180640c99dc9323b256d3c4776a8bf0a1f4bd8c8c89f19d0a78 1757600 tor_0.4.9.14-1~noble+1+tor41339.3_amd64.deb
+ dc72a865496302bdb3a1731bbe0229cfa2d26ca0bac84fbb6bb9d72d85dd714c 6938854 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.4_amd64.ddeb
+ a497122dc1eb4caf92f21ee308306e05b01d55f3d19db5d56361793d3ada98e5 2883916 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.4_all.deb
+ effb76c64fc921c7099a20c7d27d2d4e5584403c9fde8d5e099e5daf2b57fc88 1759410 tor_0.4.9.14-1~noble+1+tor41339.4_amd64.deb
 Build-Origin: Ubuntu
 Build-Architecture: amd64
-Build-Date: Wed, 14 Oct 2026 14:49:02 +0000
+Build-Date: Wed, 21 Oct 2026 09:27:37 +0000
 Build-Path: /build/tor-0.4.9.14
 Build-Tainted-By:
  merged-usr-via-aliased-dirs
@@ -137,8 +137,8 @@ Installed-Build-Depends:
  libjansson4 (= 2.14-2build2),
  liblsan0 (= 14.2.0-4ubuntu2~24.04.1),
  liblz4-1 (= 1.9.4-1build1.1),
- liblzma-dev (= 5.6.1+really5.4.5-1ubuntu0.3),
- liblzma5 (= 5.6.1+really5.4.5-1ubuntu0.3),
+ liblzma-dev (= 5.6.1+really5.4.5-1ubuntu0.4),
+ liblzma5 (= 5.6.1+really5.4.5-1ubuntu0.4),
  libmagic-mgc (= 1:5.45-3build1),
  libmagic1t64 (= 1:5.45-3build1),
  libmd0 (= 1.1.0-2build1.1),
@@ -220,15 +220,15 @@ Installed-Build-Depends:
  sgml-data (= 2.0.11+nmu1),
  sysvinit-utils (= 3.08-6ubuntu3),
  tar (= 1.35+dfsg-3ubuntu0.4),
- tzdata (= 2026c-0ubuntu0.24.04.1),
+ tzdata (= 2026e-0ubuntu0.24.04.1),
  util-linux (= 2.39.3-9ubuntu6.6),
  xml-core (= 0.19),
  xmlto (= 0.0.28-2.1),
  xsltproc (= 1.1.39-0exp1ubuntu0.24.04.3),
- xz-utils (= 5.6.1+really5.4.5-1ubuntu0.3),
+ xz-utils (= 5.6.1+really5.4.5-1ubuntu0.4),
  zlib1g (= 1:1.3.dfsg-3.1ubuntu2.2),
  zlib1g-dev (= 1:1.3.dfsg-3.1ubuntu2.2)
 Environment:
  DEB_BUILD_OPTIONS="parallel=4"
  DEB_BUILD_PROFILES="noudeb"
- SOURCE_DATE_EPOCH="1791988656"
+ SOURCE_DATE_EPOCH="1792574258"

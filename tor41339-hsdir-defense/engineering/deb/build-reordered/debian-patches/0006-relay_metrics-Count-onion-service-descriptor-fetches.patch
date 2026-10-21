@@ -1,0 +1,480 @@
+From 26d072705916beb8ef7c657adf1afb05c16801fc Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Wed, 21 Oct 2026 08:40:13 +0000
+Subject: [PATCH 06/13] relay_metrics: Count onion service descriptor fetches
+ and uploads
+
+An HSDir answers every rejected descriptor upload with the same 400,
+whether the descriptor didn't parse or validate, or it was valid but not
+newer than the one in our cache, which happens without any fault when
+several instances publish for the same onion address. Descriptor fetches
+and refused single-hop requests aren't counted at all, so during a fetch
+flood an operator can't tell cache hits from misses.
+
+Add tor_relay_hsdir_get_total{action="success|not_found|single_hop"} and
+tor_relay_hsdir_post_total{action="success|bad_url|invalid|not_newer|
+single_hop"}, in the same way as tor_relay_intro1_total. To tell
+"invalid" from "not_newer", make hs_cache_store_as_dir() return -2 when
+the descriptor is valid but not newer; its only caller checks for a
+negative value. Only tunneled (BEGIN_DIR) requests are counted.
+
+Part of #41339.
+---
+ changes/ticket41339_hsdir_outcomes |   6 ++
+ src/feature/dircache/dircache.c    |  19 ++++-
+ src/feature/hs/hs_cache.c          |   8 ++-
+ src/feature/relay/relay_metrics.c  |  76 ++++++++++++++++++++
+ src/feature/relay/relay_metrics.h  |  40 +++++++++++
+ src/test/test_hs_cache.c           | 110 ++++++++++++++++++++++++++++-
+ src/test/test_stats.c              |   2 +-
+ 7 files changed, 255 insertions(+), 6 deletions(-)
+ create mode 100644 changes/ticket41339_hsdir_outcomes
+
+diff --git a/changes/ticket41339_hsdir_outcomes b/changes/ticket41339_hsdir_outcomes
+new file mode 100644
+index 0000000000..29f85cbbed
+--- /dev/null
++++ b/changes/ticket41339_hsdir_outcomes
+@@ -0,0 +1,6 @@
++  o Minor features (metrics port, relay):
++    - Count onion service descriptor fetches and uploads on HSDirs by
++      outcome, as tor_relay_hsdir_get_total and tor_relay_hsdir_post_total.
++      Uploads that are valid but not newer than the cached descriptor, which
++      happens without any fault when several instances publish for the same
++      address, are counted apart from invalid ones. Part of ticket 41339.
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index 836d33f155..d34b217563 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -31,6 +31,7 @@
+ #include "feature/nodelist/networkstatus.h"
+ #include "feature/nodelist/routerlist.h"
+ #include "feature/relay/relay_config.h"
++#include "feature/relay/relay_metrics.h"
+ #include "feature/relay/routermode.h"
+ #include "feature/stats/geoip_stats.h"
+ #include "feature/stats/rephist.h"
+@@ -1362,6 +1363,8 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+   /* Reject non anonymous dir connections (which also tests if encrypted). We
+    * do not allow single hop clients to query an HSDir. */
+   if (!connection_dir_is_anonymous(conn)) {
++    if (TO_CONN(conn)->linked)
++      relay_increment_hsdir_get_action(HSDIR_GET_SINGLE_HOP);
+     write_short_http_response(conn, 503,
+                               "Rejecting single hop HS v3 descriptor request");
+     goto done;
+@@ -1375,11 +1378,13 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+   retval = hs_cache_lookup_as_dir(HS_VERSION_THREE,
+                                   pubkey_str, &desc_str);
+   if (retval <= 0 || desc_str == NULL) {
++    relay_increment_hsdir_get_action(HSDIR_GET_NOT_FOUND);
+     write_short_http_response(conn, 404, "Not found");
+     goto done;
+   }
+ 
+   /* Found requested descriptor! Pass it to this nice client. */
++  relay_increment_hsdir_get_action(HSDIR_GET_SUCCESS);
+   write_http_response_header(conn, strlen(desc_str), NO_METHOD, 0);
+   connection_buf_add(desc_str, strlen(desc_str), TO_CONN(conn));
+ 
+@@ -1536,6 +1541,7 @@ handle_post_hs_descriptor(const char *url, const char *body)
+ {
+   int version;
+   const char *end_pos;
++  hsdir_post_action_t action = HSDIR_POST_BAD_URL;
+ 
+   tor_assert(url);
+   tor_assert(body);
+@@ -1553,7 +1559,14 @@ handle_post_hs_descriptor(const char *url, const char *body)
+ 
+   switch (version) {
+   case HS_VERSION_THREE:
+-    if (hs_cache_store_as_dir(body) < 0) {
++    switch (hs_cache_store_as_dir(body)) {
++    case 0:
++      break;
++    case -2:
++      action = HSDIR_POST_NOT_NEWER;
++      goto err;
++    default:
++      action = HSDIR_POST_INVALID;
+       goto err;
+     }
+     log_info(LD_REND, "Publish request for HS descriptor handled "
+@@ -1564,9 +1577,11 @@ handle_post_hs_descriptor(const char *url, const char *body)
+     goto err;
+   }
+ 
++  relay_increment_hsdir_post_action(HSDIR_POST_SUCCESS);
+   return 200;
+  err:
+   /* Bad request. */
++  relay_increment_hsdir_post_action(action);
+   return 400;
+ }
+ 
+@@ -1607,6 +1622,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+    * post a descriptor onto an HSDir. */
+   if (!strcmpstart(url, "/tor/hs/")) {
+     if (!connection_dir_is_anonymous(conn)) {
++      if (TO_CONN(conn)->linked)
++        relay_increment_hsdir_post_action(HSDIR_POST_SINGLE_HOP);
+       write_short_http_response(conn, 503,
+                                 "Rejecting single hop HS descriptor post");
+       goto done;
+diff --git a/src/feature/hs/hs_cache.c b/src/feature/hs/hs_cache.c
+index cead515ec0..3d43bdb74b 100644
+--- a/src/feature/hs/hs_cache.c
++++ b/src/feature/hs/hs_cache.c
+@@ -376,11 +376,12 @@ cache_clean_v3_as_dir(time_t now, time_t global_cutoff)
+ }
+ 
+ /** Given an encoded descriptor, store it in the directory cache depending on
+- * which version it is. Return a negative value on error. On success, 0 is
+- * returned. */
++ * which version it is. On success, 0 is returned. Return -2 if the descriptor
++ * is valid but not newer than the one in our cache, else -1 on error. */
+ int
+ hs_cache_store_as_dir(const char *desc)
+ {
++  int ret = -1;
+   hs_cache_dir_descriptor_t *dir_desc = NULL;
+ 
+   tor_assert(desc);
+@@ -399,6 +400,7 @@ hs_cache_store_as_dir(const char *desc)
+   case HS_VERSION_THREE:
+   default:
+     if (cache_store_v3_as_dir(dir_desc) < 0) {
++      ret = -2;
+       goto err;
+     }
+     break;
+@@ -407,7 +409,7 @@ hs_cache_store_as_dir(const char *desc)
+ 
+  err:
+   cache_dir_desc_free(dir_desc);
+-  return -1;
++  return ret;
+ }
+ 
+ /** Using the query, lookup in our directory cache the entry. If found, 1 is
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index 492a5945b8..c333e22e40 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -67,6 +67,8 @@ static void fill_est_intro_cells(void);
+ static void fill_est_rend_cells(void);
+ static void fill_intro1_cells(void);
+ static void fill_rend1_cells(void);
++static void fill_hsdir_get_values(void);
++static void fill_hsdir_post_values(void);
+ 
+ /** The base metrics that is a static array of metrics added to the metrics
+  * store.
+@@ -242,6 +244,20 @@ static const relay_metrics_entry_t base_metrics[] =
+     .help = "Total number of DROP cell we received",
+     .fill_fn = fill_relay_drop_cell,
+   },
++  {
++    .key = RELAY_METRICS_NUM_HSDIR_GET,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_hsdir_get_total),
++    .help = "Total number of onion service descriptor fetches we received",
++    .fill_fn = fill_hsdir_get_values,
++  },
++  {
++    .key = RELAY_METRICS_NUM_HSDIR_POST,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_hsdir_post_total),
++    .help = "Total number of onion service descriptor uploads we received",
++    .fill_fn = fill_hsdir_post_values,
++  },
+ };
+ static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
+ 
+@@ -1245,6 +1261,66 @@ fill_relay_destroy_cell(void)
+                              (int64_t) stats_n_destroy_cells_processed);
+ }
+ 
++/** Add one entry of the metric <b>rentry</b> per element of <b>values</b>,
++ * labeled <b>label</b>=<b>names</b>[i]. */
++static void
++fill_labeled_values(const relay_metrics_entry_t *rentry, const char *label,
++                    const char *const *names, const uint64_t *values,
++                    size_t n_values)
++{
++  for (size_t i = 0; i < n_values; ++i) {
++    metrics_store_entry_t *sentry = metrics_store_add(
++        the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
++    metrics_store_entry_add_label(sentry,
++                                  metrics_format_label(label, names[i]));
++    metrics_store_entry_update(sentry, values[i]);
++  }
++}
++
++static uint64_t hsdir_get_actions[HSDIR_GET_ACTION_COUNT];
++static const char *const hsdir_get_action_names[] = {
++  [HSDIR_GET_SUCCESS] = "success",
++  [HSDIR_GET_NOT_FOUND] = "not_found",
++  [HSDIR_GET_SINGLE_HOP] = "single_hop",
++};
++
++void
++relay_increment_hsdir_get_action(hsdir_get_action_t action)
++{
++  hsdir_get_actions[action]++;
++}
++
++static void
++fill_hsdir_get_values(void)
++{
++  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_HSDIR_GET], "action",
++                      hsdir_get_action_names, hsdir_get_actions,
++                      HSDIR_GET_ACTION_COUNT);
++}
++
++static uint64_t hsdir_post_actions[HSDIR_POST_ACTION_COUNT];
++static const char *const hsdir_post_action_names[] = {
++  [HSDIR_POST_SUCCESS] = "success",
++  [HSDIR_POST_BAD_URL] = "bad_url",
++  [HSDIR_POST_INVALID] = "invalid",
++  [HSDIR_POST_NOT_NEWER] = "not_newer",
++  [HSDIR_POST_SINGLE_HOP] = "single_hop",
++};
++
++void
++relay_increment_hsdir_post_action(hsdir_post_action_t action)
++{
++  hsdir_post_actions[action]++;
++}
++
++static void
++fill_hsdir_post_values(void)
++{
++  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_HSDIR_POST], "action",
++                      hsdir_post_action_names, hsdir_post_actions,
++                      HSDIR_POST_ACTION_COUNT);
++}
++
+ /** Fill the metrics store for the RELAY_METRICS_CIRC_DROP_CELL counter. */
+ static void
+ fill_relay_drop_cell(void)
+diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
+index e7b5b660fa..3c0eedacf6 100644
+--- a/src/feature/relay/relay_metrics.h
++++ b/src/feature/relay/relay_metrics.h
+@@ -63,6 +63,10 @@ typedef enum {
+   RELAY_METRICS_CIRC_PROTO_VIOLATION,
+   /** Number of drop cell seen. */
+   RELAY_METRICS_CIRC_DROP_CELL,
++  /** Onion service descriptor fetches, by outcome. */
++  RELAY_METRICS_NUM_HSDIR_GET,
++  /** Onion service descriptor uploads, by outcome. */
++  RELAY_METRICS_NUM_HSDIR_POST,
+ } relay_metrics_key_t;
+ 
+ /** The metadata of a relay metric. */
+@@ -136,4 +140,40 @@ typedef enum {
+ 
+ void relay_increment_rend1_action(rend1_action_t);
+ 
++/** Outcome of an onion service descriptor fetch (GET /tor/hs/3/). */
++typedef enum {
++  /** Found in our cache and queued: 200. */
++  HSDIR_GET_SUCCESS,
++  /** Not in our cache, or not a valid blinded key: 404. */
++  HSDIR_GET_NOT_FOUND,
++  /** Not over an anonymous circuit (see connection_dir_is_anonymous()): 503.
++   * This includes requests whose stream or circuit was already closing. */
++  HSDIR_GET_SINGLE_HOP,
++
++  HSDIR_GET_ACTION_COUNT
++} hsdir_get_action_t;
++
++void relay_increment_hsdir_get_action(hsdir_get_action_t);
++
++/** Outcome of an onion service descriptor upload (POST /tor/hs/). */
++typedef enum {
++  /** Stored: 200. */
++  HSDIR_POST_SUCCESS,
++  /** Unsupported version or command in the URL: 400. */
++  HSDIR_POST_BAD_URL,
++  /** Descriptor didn't parse or validate: 400. */
++  HSDIR_POST_INVALID,
++  /** Valid descriptor, but its revision counter is not greater than the one
++   * we have cached: 400. This happens without any fault when several
++   * instances publish for the same onion address. */
++  HSDIR_POST_NOT_NEWER,
++  /** Not over an anonymous circuit (see connection_dir_is_anonymous()): 503.
++   * This includes requests whose stream or circuit was already closing. */
++  HSDIR_POST_SINGLE_HOP,
++
++  HSDIR_POST_ACTION_COUNT
++} hsdir_post_action_t;
++
++void relay_increment_hsdir_post_action(hsdir_post_action_t);
++
+ #endif /* !defined(TOR_FEATURE_RELAY_RELAY_METRICS_H) */
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index 14008a4f88..2c32181eb1 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -21,11 +21,16 @@
+ #include "feature/nodelist/networkstatus.h"
+ #include "core/mainloop/connection.h"
+ #include "core/proto/proto_http.h"
++#include "app/config/config.h"
+ #include "core/or/circuitlist.h"
+ #include "core/or/channel.h"
++#include "feature/relay/relay_metrics.h"
++#include "lib/metrics/metrics_store.h"
++#include "lib/metrics/metrics_store_entry.h"
+ #include "lib/crypt_ops/crypto_format.h"
+ #include "lib/crypt_ops/crypto_rand.h"
+ 
++#include "app/config/or_options_st.h"
+ #include "core/or/edge_connection_st.h"
+ #include "core/or/or_circuit_st.h"
+ #include "core/or/or_connection_st.h"
+@@ -82,7 +87,7 @@ test_directory(void *arg)
+     tt_int_op(ret, OP_EQ, 0);
+     /* Re-add, it should fail since we already have it. */
+     ret = hs_cache_store_as_dir(desc1_str);
+-    tt_int_op(ret, OP_EQ, -1);
++    tt_int_op(ret, OP_EQ, -2);
+     /* Try to clean now which should be fine, there is at worst few seconds
+      * between the store and this call. */
+     hs_cache_clean_as_dir(time(NULL));
+@@ -343,6 +348,107 @@ helper_fetch_desc_from_hsdir(const ed25519_public_key_t *blinded_key)
+   return received_desc;
+ }
+ 
++/* Return the value of <b>name</b>{<b>key</b>="<b>value</b>"} in the relay
++ * metrics store, or -1 if there is no such entry. */
++static int64_t
++get_metric(const char *name, const char *key, const char *value)
++{
++  const smartlist_t *entries =
++    metrics_store_get_all(smartlist_get(relay_metrics_get_stores(), 0), name);
++  const metrics_store_entry_t *entry =
++    metrics_store_find_entry_with_label(entries,
++                                        metrics_format_label(key, value));
++  return entry ? metrics_store_entry_get_value(entry) : -1;
++}
++#define GET_METRIC(action) \
++  get_metric(METRICS_NAME(relay_hsdir_get_total), "action", (action))
++#define POST_METRIC(action) \
++  get_metric(METRICS_NAME(relay_hsdir_post_total), "action", (action))
++
++/* Make the GET request <b>req</b>, or POST it with <b>body</b> if not NULL,
++ * on a dir connection tunneled over a new OR circuit whose previous hop is
++ * <b>chan</b>. */
++static void
++hsdir_request_on_new_circ(channel_t *chan, const char *req, const char *body)
++{
++  dir_connection_t *conn = dir_connection_new(AF_INET);
++  edge_connection_t *edge_conn = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
++  or_circuit_t *circ = or_circuit_new(0, NULL);
++
++  circ->p_chan = chan;
++  edge_conn->on_circuit = TO_CIRCUIT(circ);
++  TO_CONN(conn)->linked = 1;
++  TO_CONN(conn)->linked_conn = TO_CONN(edge_conn);
++  tor_addr_from_ipv4h(&TO_CONN(conn)->addr, 0x7f000001);
++  if (body)
++    directory_handle_command_post(conn, req, body, strlen(body));
++  else
++    directory_handle_command_get(conn, req, NULL, 0);
++  connection_free_minimal(TO_CONN(edge_conn));
++  connection_free_minimal(TO_CONN(conn));
++}
++
++/* HSDirs count descriptor fetches and uploads by outcome. */
++static void
++test_hsdir_get_post_metrics(void *arg)
++{
++  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
++  ed25519_keypair_t signing_kp;
++  hs_descriptor_t *desc = NULL;
++  char *desc_str = NULL, *get = NULL;
++  char key[ED25519_BASE64_LEN+1];
++  const char *post = "POST /tor/hs/3/publish HTTP/1.0\r\n\r\n";
++  const char *get_actions[] = { "success", "not_found", "single_hop" };
++  const char *post_actions[] = { "success", "not_newer", "invalid", "bad_url",
++                                 "single_hop" };
++  int64_t get0[ARRAY_LENGTH(get_actions)];
++  int64_t post0[ARRAY_LENGTH(post_actions)];
++  (void) arg;
++
++  init_test();
++  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
++  get_options_mutable()->ORPort_set = 1; /* Accept descriptor uploads. */
++  /* Other tests may have counted requests before we forked. */
++  for (size_t i = 0; i < ARRAY_LENGTH(get_actions); i++)
++    get0[i] = GET_METRIC(get_actions[i]);
++  for (size_t i = 0; i < ARRAY_LENGTH(post_actions); i++)
++    post0[i] = POST_METRIC(post_actions[i]);
++  tt_int_op(ed25519_keypair_generate(&signing_kp, 0), OP_EQ, 0);
++  desc = hs_helper_build_hs_desc_with_ip(&signing_kp);
++  tt_int_op(hs_desc_encode_descriptor(desc, &signing_kp, NULL, &desc_str),
++            OP_EQ, 0);
++  ed25519_public_to_base64(key, &desc->plaintext_data.blinded_pubkey);
++  tor_asprintf(&get, GET("/tor/hs/3/%s"), key);
++
++  hsdir_request_on_new_circ(chan, get, NULL); /* Not uploaded yet. */
++  hsdir_request_on_new_circ(chan, post, desc_str);
++  hsdir_request_on_new_circ(chan, post, desc_str); /* Same revision. */
++  hsdir_request_on_new_circ(chan, post, "hs-descriptor 3\nJUNK");
++  hsdir_request_on_new_circ(chan,
++                            "POST /tor/hs/2/publish HTTP/1.0\r\n\r\n",
++                            desc_str);
++  hsdir_request_on_new_circ(chan, get, NULL);
++  chan->is_client = 1; /* A one-hop client is refused. */
++  hsdir_request_on_new_circ(chan, get, NULL);
++  hsdir_request_on_new_circ(chan, post, desc_str);
++
++  /* Exactly one request of each outcome. */
++  for (size_t i = 0; i < ARRAY_LENGTH(get_actions); i++)
++    tt_i64_op(GET_METRIC(get_actions[i]), OP_EQ, get0[i] + 1);
++  for (size_t i = 0; i < ARRAY_LENGTH(post_actions); i++)
++    tt_i64_op(POST_METRIC(post_actions[i]), OP_EQ, post0[i] + 1);
++
++ done:
++  UNMOCK(connection_write_to_buf_impl_);
++  SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
++                    TO_OR_CIRCUIT(c)->p_chan = NULL);
++  circuit_free_all();
++  tor_free(chan);
++  hs_descriptor_free(desc);
++  tor_free(desc_str);
++  tor_free(get);
++}
++
+ /* Publish a descriptor to the HSDir, then fetch it. Check that the received
+    descriptor matches the published one. */
+ static void
+@@ -859,6 +965,8 @@ struct testcase_t hs_cache[] = {
+     NULL, NULL },
+   { "upload_and_download_hs_desc", test_upload_and_download_hs_desc, TT_FORK,
+     NULL, NULL },
++  { "hsdir_get_post_metrics", test_hsdir_get_post_metrics, TT_FORK,
++    NULL, NULL },
+   { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
+     NULL, NULL },
+   { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
+diff --git a/src/test/test_stats.c b/src/test/test_stats.c
+index 22d65b1e54..58a7f1eb7a 100644
+--- a/src/test/test_stats.c
++++ b/src/test/test_stats.c
+@@ -573,7 +573,7 @@ test_rephist_v3_onions(void *arg)
+ 
+   /* Check that storing the same descriptor twice does not work */
+   ret = hs_cache_store_as_dir(desc1_str);
+-  tt_int_op(ret, OP_EQ, -1);
++  tt_int_op(ret, OP_EQ, -2);
+ 
+   /* cleanup */
+   hs_descriptor_free(desc1);
+-- 
+2.43.0
+

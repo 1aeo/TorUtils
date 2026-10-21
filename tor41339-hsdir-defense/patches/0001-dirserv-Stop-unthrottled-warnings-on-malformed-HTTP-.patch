@@ -1,7 +1,7 @@
-From f519187cc1414607d4d7a62737b06b1bdc79ce98 Mon Sep 17 00:00:00 2001
+From 647b5dfaf1ff36700ca69c0ec21c27cbb80dac09 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 01/11] dirserv: Stop unthrottled warnings on malformed HTTP
+Subject: [PATCH 01/13] dirserv: Stop unthrottled warnings on malformed HTTP
  requests
 
 Anyone can make any directory server log two unthrottled warnings with
@@ -13,50 +13,47 @@ fetch_from_buf_http() warns "Content-Length is bogus; maybe someone is
 trying to crash us.", and directory_handle_command() then warns "Request
 too large from ... to DirPort. Closing."
 
-Log the parser's warn-level failures at info instead: a bogus
-Content-Length, an over-long header line, and an over-long body. (The
-parser already logged its "headers too long" and "not all here yet"
-cases at debug, and the over-long-header-line path above differs from
-the request in the example, which has a well-formed header and trips the
-bogus Content-Length check.) Rate-limit the directory server's own
+Log the parser's three warn-level failures (a bogus Content-Length, or
+headers or body over the caller's limit) at info instead; its other
+failures were already at debug. Rate-limit the directory server's own
 warning, and reword it: it also covers malformed requests, and most
 requests now arrive over BEGIN_DIR rather than the DirPort.
 
+The warning also scrubs the requester's address again unless SafeLogging
+is 0. It was scrubbed with safe_str() from 0.2.2.7-alpha until
+0.4.5.1-alpha, when it switched to connection_describe_peer(), which
+never scrubs directory connections.
+
 The parser change applies to every fetch_from_buf_http() caller.
 Directory clients and the HTTPS proxy code still warn on failure.
-HTTPTunnelPort and MetricsPort, which are local, now report a bogus
-Content-Length only at info level.
+HTTPTunnelPort and MetricsPort, which are local, now report these parser
+failures only at info level.
 
-Noticed while looking at bug 41339. This only makes a flood of bad
-requests more tolerable; it does nothing about the HSDir fetch flood in
-that ticket. This is a bugfix on all supported versions of Tor.
+Related to #41339.
 ---
- changes/dirserv_http_log_ratelim | 10 ++++++++++
+ changes/dirserv_http_log_ratelim |  7 +++++++
  src/core/proto/proto_http.c      |  6 +++---
  src/feature/dircache/dircache.c  |  8 +++++---
  src/test/test_dir_handle_get.c   | 26 ++++++++++++++++++++++++++
  src/test/test_proto_http.c       |  1 +
- 5 files changed, 45 insertions(+), 6 deletions(-)
+ 5 files changed, 42 insertions(+), 6 deletions(-)
  create mode 100644 changes/dirserv_http_log_ratelim
 
 diff --git a/changes/dirserv_http_log_ratelim b/changes/dirserv_http_log_ratelim
 new file mode 100644
-index 0000000..8100ffb
+index 0000000000..6972e684b6
 --- /dev/null
 +++ b/changes/dirserv_http_log_ratelim
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,7 @@
 +  o Minor bugfixes (logging, directory server):
-+    - Stop logging unthrottled warnings when a directory server receives a
-+      malformed or oversized HTTP request. Previously, one short request with
-+      a bogus Content-Length header made any directory server log two
-+      warnings, one from the generic HTTP parser and one from the directory
-+      server. The parser now logs its Content-Length, header-length and
-+      body-length failures at info level for all of its users, and the
-+      directory server rate-limits its own (reworded) warning. This is a
-+      bugfix on all supported versions of Tor. Noticed while looking at
-+      ticket 41339.
++    - Rate-limit the directory server's warning about oversized or
++      malformed HTTP requests, log the HTTP parser's own failures at info
++      level, and no longer log the requester's address unless SafeLogging
++      is 0. Previously one short request with a bogus Content-Length made
++      any relay log two warnings. Bugfix on all supported versions of Tor;
++      related to ticket 41339.
 diff --git a/src/core/proto/proto_http.c b/src/core/proto/proto_http.c
-index 8997eb6..d5d1f60 100644
+index 8997eb6942..d5d1f60ca9 100644
 --- a/src/core/proto/proto_http.c
 +++ b/src/core/proto/proto_http.c
 @@ -79,19 +79,19 @@ fetch_from_buf_http(buf_t *buf,
@@ -83,7 +80,7 @@ index 8997eb6..d5d1f60 100644
      return -1;
    } else if (r == 1) {
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index aee047c..bcea4c2 100644
+index aee047c105..bcea4c2169 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
 @@ -1738,6 +1738,7 @@ http_set_address_origin(const char *headers, connection_t *conn)
@@ -109,7 +106,7 @@ index aee047c..bcea4c2 100644
      case 0:
        log_debug(LD_DIRSERV,"command not all here yet.");
 diff --git a/src/test/test_dir_handle_get.c b/src/test/test_dir_handle_get.c
-index 5f93b04..a529ed7 100644
+index 5f93b04c96..a529ed7afb 100644
 --- a/src/test/test_dir_handle_get.c
 +++ b/src/test/test_dir_handle_get.c
 @@ -2722,6 +2722,31 @@ test_dir_handle_get_parse_accept_encoding(void *arg)
@@ -152,7 +149,7 @@ index 5f93b04..a529ed7 100644
    END_OF_TESTCASES
  };
 diff --git a/src/test/test_proto_http.c b/src/test/test_proto_http.c
-index 7458e40..198e70e 100644
+index 7458e40496..198e70eefb 100644
 --- a/src/test/test_proto_http.c
 +++ b/src/test/test_proto_http.c
 @@ -193,6 +193,7 @@ test_proto_http_invalid(void *arg)
@@ -164,5 +161,5 @@ index 7458e40..198e70e 100644
      buf_clear(buf);
      tor_free(h);
 -- 
-2.39.5 (Apple Git-154)
+2.43.0
 

@@ -1,54 +1,50 @@
-From 4299306f85491e37862bb98ffc0df551bf9f5d06 Mon Sep 17 00:00:00 2001
+From c68c1b832060e8bbf201c2864b9dbcca01dbabd0 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 05/11] hs_cache: Only credit HSDir downloads once the response
+Subject: [PATCH 05/13] hs_cache: Only credit HSDir downloads once the response
  is written out
 
-b628ffeb6 (40996) increments n_downloaded when the HSDir's directory
+b628ffeb6 (#40996) increments n_downloaded when the HSDir's directory
 connection closes, to raise the bar for an attacker trying to keep its
 descriptors out of the OOM cleanup. Any close counted, including a GET
-followed by END or DESTROY before the response was moved to the exit
-stream. Since 28a76bd5a the counter persists for the blinded key's
+followed by END or DESTROY before the response left the directory
+connection. Since 28a76bd5a the counter persists for the blinded key's
 lifetime, so such cheap credits last.
 
 Credit in connection_dir_finished_flushing() instead, guarded on
-hs_ident so a non-HS response still closes cleanly. The precise
-accounting boundary is now the dir connection's outbuf being fully
-flushed to the linked edge; whether that earns credit before a close
-depends on their ordering (a close that happens first still earns
-none). For BEGIN_DIR the response is moved into the exit edge's inbuf
-regardless of the circuit's package window, so this is still not proof
-that the client received the descriptor. It does not affect the fetch
-flood in 41339.
+hs_ident so a non-HS response still closes cleanly. The boundary is now
+the directory connection's outbuf being handed to the linked exit edge.
+A reading edge takes the whole response at once, however little package
+window is left, so this still does not prove that the client received
+the descriptor; only an edge already stopped by an empty package window
+or a blocked channel holds the response back, and a close that happens
+first earns no credit.
 
-Related to 41339.
+Related to #41339.
 ---
- changes/hsdir_download_credit             |  9 +++
+ changes/hsdir_download_credit             |  6 ++
  src/feature/dircache/dircache.c           |  2 +-
  src/feature/dircommon/dir_connection_st.h |  4 +-
  src/feature/dircommon/directory.c         | 18 ++---
  src/feature/hs/hs_cache.c                 |  5 +-
  src/test/test_hs_cache.c                  | 97 +++++++++++++++++++++++
- 6 files changed, 119 insertions(+), 16 deletions(-)
+ 6 files changed, 116 insertions(+), 16 deletions(-)
  create mode 100644 changes/hsdir_download_credit
 
 diff --git a/changes/hsdir_download_credit b/changes/hsdir_download_credit
 new file mode 100644
-index 0000000..6ee4013
+index 0000000000..f7a8ec8ecf
 --- /dev/null
 +++ b/changes/hsdir_download_credit
-@@ -0,0 +1,9 @@
-+  o Minor bugfixes (onion service directory cache):
-+    - On HSDirs, only count an onion service descriptor as downloaded once the
-+      directory connection has written the whole response out to the linked
-+      edge, instead of whenever it closes. Previously, requesting a descriptor
-+      and closing the stream or circuit before the response was written out was
-+      enough to raise the count that decides which descriptors are removed
-+      first when the cache is full. The new boundary is the outbuf being fully
-+      flushed, which still does not prove the client received the descriptor.
-+      Bugfix on 0.4.8.14. Related to ticket 41339.
+@@ -0,0 +1,6 @@
++  o Minor bugfixes (onion service directory):
++    - On HSDirs, count an onion service descriptor as downloaded only once
++      its response has been handed to the client's stream, not whenever the
++      request closes, so that requesting a descriptor and closing the stream
++      or circuit at once no longer protects it from cache pruning. Bugfix on
++      0.4.8.14; related to ticket 41339.
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 56caf8f..d90de27 100644
+index cc3d22cd02..836d33f155 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
 @@ -1385,7 +1385,7 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
@@ -61,7 +57,7 @@ index 56caf8f..d90de27 100644
      /* Decode blinded key. This is certain to work else
       * hs_cache_lookup_as_dir() would have failed. */
 diff --git a/src/feature/dircommon/dir_connection_st.h b/src/feature/dircommon/dir_connection_st.h
-index ee26fd3..b774d32 100644
+index ee26fd3627..b774d32cdb 100644
 --- a/src/feature/dircommon/dir_connection_st.h
 +++ b/src/feature/dircommon/dir_connection_st.h
 @@ -45,8 +45,8 @@ struct dir_connection_t {
@@ -76,7 +72,7 @@ index ee26fd3..b774d32 100644
  
    /** If this is a one-hop connection, tracks the state of the directory guard
 diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
-index b8b0197..e2c8419 100644
+index b8b01973ba..e2c84197bc 100644
 --- a/src/feature/dircommon/directory.c
 +++ b/src/feature/dircommon/directory.c
 @@ -542,17 +542,6 @@ connection_dir_about_to_close(dir_connection_t *dir_conn)
@@ -112,7 +108,7 @@ index b8b0197..e2c8419 100644
        }
        return 0;
 diff --git a/src/feature/hs/hs_cache.c b/src/feature/hs/hs_cache.c
-index 128051b..cead515 100644
+index 128051b241..cead515ec0 100644
 --- a/src/feature/hs/hs_cache.c
 +++ b/src/feature/hs/hs_cache.c
 @@ -436,8 +436,9 @@ hs_cache_lookup_as_dir(uint32_t version, const char *query,
@@ -128,7 +124,7 @@ index 128051b..cead515 100644
  hs_cache_mark_dowloaded_as_dir(const hs_ident_dir_conn_t *ident)
  {
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 100a90e..f96b9e4 100644
+index 100a90e86a..14008a4f88 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -16,6 +16,8 @@
@@ -152,13 +148,13 @@ index 100a90e..f96b9e4 100644
 +  conn->marked_for_close = 1;
 +}
 +
-+/* An HSDir counts a descriptor as downloaded only once the whole response has
-+ * been written out (connection_dir_finished_flushing()), not when the
-+ * connection closes. So closing before the response is written out -- for
-+ * example when the circuit's package window is empty and nothing has moved to
-+ * the linked edge yet -- earns no credit, and a normal flush earns exactly
-+ * one. The accounting boundary is the dir-conn outbuf being fully flushed to
-+ * the linked edge, which does not prove the client received the descriptor. */
++/* An HSDir counts a descriptor as downloaded only once its whole response has
++ * left the dir connection's outbuf (connection_dir_finished_flushing()), not
++ * when the connection closes. A connection closed before then (for example an
++ * END or DESTROY processed before the exit edge read the response, or an edge
++ * already stopped on an empty package window or a blocked channel) earns no
++ * credit; a normal flush earns exactly one. This does not prove the client
++ * received the descriptor. */
 +static void
 +test_downloaded_counter_as_dir(void *arg)
 +{
@@ -250,5 +246,5 @@ index 100a90e..f96b9e4 100644
      NULL, NULL },
    { "client_cache_decrypt", test_client_cache_decrypt, TT_FORK,
 -- 
-2.39.5 (Apple Git-154)
+2.43.0
 

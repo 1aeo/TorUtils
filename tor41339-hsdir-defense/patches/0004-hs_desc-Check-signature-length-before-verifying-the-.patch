@@ -1,51 +1,41 @@
-From ea6def3182f6591966a61657e8a039f6bbf414a3 Mon Sep 17 00:00:00 2001
+From a265f97fa8aa562d396c4c51557c6db6ef643429 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 04/11] hs_desc: Check signature length before verifying the
+Subject: [PATCH 04/13] hs_desc: Check signature length before verifying the
  signing cert
 
-desc_decode_plaintext_v3() parsed and Ed25519-verified the descriptor
-signing key certificate before desc_sig_is_valid() checked the
-signature's length. Move that length check, with its existing
-rate-limited warning, ahead of cert_parse_and_validate(). A descriptor
-whose signature has the wrong length, like the 88-character padded
-signatures uploaded to HSDirs in August 2026, is now rejected without
-any public key operation. The set of accepted descriptors does not
-change, because ed25519_signature_from_base64() rejects any other
-length anyway.
+desc_decode_plaintext_v3() verified the descriptor signing key
+certificate (one Ed25519 operation) before desc_sig_is_valid() checked
+the signature's length. Do that length check, with its existing
+rate-limited warning, before cert_parse_and_validate(), so that a
+wrong-length signature (for example base64 with "=" padding, 88
+characters) is rejected without any public key operation.
 
-This saves one Ed25519 verification per such upload, but only for the
-specific wrong-length case: a valid descriptor costs the same, and an
-attacker can simply use a valid-length (86-character) signature, so this
-only cheapens the specific 88-character padded case. A well-formed
-malicious upload still costs two verifications, and the descriptor fetch
-flood in 41339 is unaffected because it never decodes.
+The set of accepted descriptors is unchanged, since
+ed25519_signature_from_base64() already rejects other lengths. A
+valid-length forged signature still costs two verifications, and
+descriptor fetches are unaffected.
 
-Related to 41339.
+Related to #41339.
 ---
- changes/ticket41339_sigcheck   |  9 +++++++
+ changes/ticket41339_sigcheck   |  4 ++++
  src/feature/hs/hs_descriptor.c | 44 +++++++++++++++++++++-------------
- src/test/test_hs_descriptor.c  | 10 ++++++++
- 3 files changed, 47 insertions(+), 16 deletions(-)
+ src/test/test_hs_descriptor.c  | 14 ++++++++++-
+ 3 files changed, 45 insertions(+), 17 deletions(-)
  create mode 100644 changes/ticket41339_sigcheck
 
 diff --git a/changes/ticket41339_sigcheck b/changes/ticket41339_sigcheck
 new file mode 100644
-index 0000000..3a6e762
+index 0000000000..28367b18ac
 --- /dev/null
 +++ b/changes/ticket41339_sigcheck
-@@ -0,0 +1,9 @@
+@@ -0,0 +1,4 @@
 +  o Minor features (onion service directory):
-+    - Check the length of an onion service descriptor signature before
-+      parsing and verifying its signing key certificate, so a descriptor
-+      whose signature has the wrong length is rejected without any public key
-+      operation. The set of accepted descriptors is unchanged, since
-+      ed25519_signature_from_base64() rejects any other length anyway. This
-+      only makes a flood of wrong-length uploads, such as the 88-character
-+      padded signatures seen in August 2026, slightly cheaper to reject; an
-+      attacker can still send a valid-length signature. Part of ticket 41339.
++    - Reject an onion service descriptor whose signature has the wrong
++      length before verifying its signing key certificate, which saves a
++      public key operation per such upload. Related to ticket 41339.
 diff --git a/src/feature/hs/hs_descriptor.c b/src/feature/hs/hs_descriptor.c
-index 87baf40..b6deec1 100644
+index 87baf40efd..b6deec1ae5 100644
 --- a/src/feature/hs/hs_descriptor.c
 +++ b/src/feature/hs/hs_descriptor.c
 @@ -2039,6 +2039,23 @@ decode_intro_points(const hs_descriptor_t *desc,
@@ -121,7 +111,7 @@ index 87baf40..b6deec1 100644
      goto err;
    }
 diff --git a/src/test/test_hs_descriptor.c b/src/test/test_hs_descriptor.c
-index 89815f4..716e53f 100644
+index 89815f4858..2dd99e72fb 100644
 --- a/src/test/test_hs_descriptor.c
 +++ b/src/test/test_hs_descriptor.c
 @@ -654,6 +654,7 @@ static void
@@ -132,10 +122,10 @@ index 89815f4..716e53f 100644
    int ret;
  
    (void) arg;
-@@ -663,6 +664,14 @@ test_decode_bad_signature(void *arg)
-   /* Update approx time to dodge cert expiration */
+@@ -664,12 +665,23 @@ test_decode_bad_signature(void *arg)
    update_approx_time(1502661599);
  
+   setup_full_capture_of_logs(LOG_WARN);
 +  /* A padded (88-character) signature is rejected on its length, before the
 +   * signing key certificate is parsed and verified. */
 +  tor_asprintf(&padded, "%.*s==\n", (int) strlen(HS_DESC_BAD_SIG) - 1,
@@ -143,18 +133,20 @@ index 89815f4..716e53f 100644
 +  ret = hs_desc_decode_plaintext(padded, &desc_plaintext);
 +  tt_int_op(ret, OP_EQ, HS_DESC_DECODE_PLAINTEXT_ERROR);
 +  tt_ptr_op(desc_plaintext.signing_key_cert, OP_EQ, NULL);
++  expect_single_log_msg_containing("invalid signature length");
++  mock_clean_saved_logs();
 +
-   setup_full_capture_of_logs(LOG_WARN);
    ret = hs_desc_decode_plaintext(HS_DESC_BAD_SIG, &desc_plaintext);
    tt_int_op(ret, OP_EQ, HS_DESC_DECODE_PLAINTEXT_ERROR);
-@@ -670,6 +679,7 @@ test_decode_bad_signature(void *arg)
-   teardown_capture_of_logs();
+   expect_log_msg_containing("Malformed signature line. Rejecting.");
+-  teardown_capture_of_logs();
  
   done:
++  teardown_capture_of_logs();
 +  tor_free(padded);
    hs_desc_plaintext_data_free_contents(&desc_plaintext);
  }
  
 -- 
-2.39.5 (Apple Git-154)
+2.43.0
 

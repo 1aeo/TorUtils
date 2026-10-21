@@ -22,43 +22,54 @@ consult the bandwidth `write_low` check; a request only has to arrive on an
 validly-signed descriptor without a hash-ring responsibility or flag check. The
 field data (public operator reports, and the de-identified capture in `data/`)
 show the flood is **fetch** traffic (write:read ~11:1 on the attacked relay,
-~180× its baseline request rate) that reuses one circuit for many descriptor
-requests.
+~180× its baseline request rate) with several `BEGIN_DIR` requests per circuit
+built (~5.7 on one relay); whether single circuits carry several HS requests is
+not yet established (`analysis/flood-cost-and-constrained-hosts.md`).
 
 ## The series (`patches/`)
 
 Apply with `git am` onto Tor 0.4.9.14, upstream `main`, or `maint-0.4.9`. The
-11-patch series is ordered from easiest-to-merge upstream (hardening/bugfixes
-and pure observability metrics) to off-by-default enforcement;
-`patches/torspec-param-spec.patch` and `patches/torspec-draft.txt` are the
-companion consensus-parameter and rend-spec-v3 text.
+13 patches are ordered from easiest to merge upstream (bugfixes, then
+observe-only MetricsPort counters) to off-by-default enforcement, one upstream
+change per commit. `patches/torspec-param-spec.patch` is the companion
+param-spec and rend-spec text for the four new consensus parameters.
 
 | # | Theme | What it does | Default |
 |---|---|---|---|
-| 0001 | Hardening (MR !979) | Rate-limit / down-level the malformed-HTTP-request warnings a dir server logs. | — |
-| 0002 | Hardening (MR !979) | Non-authorities don't buffer an upload body larger than an HS descriptor; reject an oversized declared `Content-Length` at once. | — |
-| 0003 | Hardening (MR !979) | A dir server discards anything a client sends after its request. | — |
-| 0004 | Hardening (MR !979) | Check the descriptor signature length before the Ed25519 certificate verification. | — |
-| 0005 | Hardening (MR !979) | Credit an HSDir "download" only once the response is fully written out. | — |
-| 0006 | Metrics (request & topology) | Export `hsdir_request_total`, `hsdir_req_reused`, `hsdir_circ_reused`, `hsdir_single_hop`, `hsdir_unknown_prev_hop`, `dir_non_hs_request`, and `dir_req_unparsed` on the MetricsPort + DoS heartbeat. | count-only |
-| 0007 | Metrics (GET/POST outcomes) | Export `hsdir_get_found`, `hsdir_get_not_found`, `hsdir_get_completed`, `hsdir_post_ok`, `hsdir_post_rejected`, and `dir_resp_completed` on the MetricsPort. | count-only |
-| 0008 | Metrics (server dir gauges) | Export `dir_server_wait_conns`, `dir_server_write_conns`, `dir_server_edge_conns`, and `hsdir_writing_conns` gauges on the MetricsPort. | count-only |
-| 0009 | Enforcement (HSDir topology) | Off-by-default `HSDirRefuseUnknownPrevHop` (503 on unknown previous hop) and `HSDirOneRequestPerCircuit` (`RESOURCELIMIT` close on repeat HS request). | enforcement **off** (`auto` = 0) |
-| 0010 | Enforcement (`BEGIN_DIR` streams) | Apply `DoSStreamCreation*` token bucket and `DoSStreamCreationMaxConcurrent` (default 20) to `BEGIN_DIR` before allocating internal connections; export `begindir_rate_limited` and `begindir_live_limited`. | enforcement **off** (`auto` = 0) |
-| 0011 | Enforcement (HSDir fetch buckets) | Off-by-default per-descriptor (`HSDirDescriptorLimitEnabled`, rate 5/s, burst 20) and relay-wide (`HSDirGlobalLimitEnabled`, rate 50/s, burst 200) token buckets for cached HSv3 descriptor GET hits; export `hsdir_desc_rate_limited` and `hsdir_global_rate_limited`. | enforcement **off** (`auto` = 0) |
+| 0001 | Bugfix | Log the client-triggered HTTP parser warnings at info, and rate-limit the dir server's own warning. | — |
+| 0002 | Hardening | Non-authorities don't buffer a request body larger than an HS descriptor. | — |
+| 0003 | Hardening | A dir server discards anything a client sends after its request. | — |
+| 0004 | Hardening | Check the descriptor signature length before verifying the signing certificate. | — |
+| 0005 | Bugfix | Credit an HSDir download only once the response is written out. | — |
+| 0006 | Metrics | `tor_relay_hsdir_get_total{action}` and `tor_relay_hsdir_post_total{action}`: descriptor fetch and upload outcomes. | always on |
+| 0007 | Metrics | `tor_relay_dir_requests_total{type}` and `tor_relay_dir_responses_total{type}`: tunneled (BEGIN_DIR) requests that aren't HS, or never parse, and responses written out. | always on |
+| 0008 | Metrics | Gauge `tor_relay_dir_server_conns{state}`: tunneled dir server connections by state. | always on |
+| 0009 | Refactor | Make `fill_dos_values()` table-driven (no functional change). | — |
+| 0010 | Metrics | `tor_relay_dos_total` types `hsdir_request_total`, `hsdir_req_reused`, `hsdir_circ_reused`, `hsdir_unknown_prev_hop`. | always on |
+| 0011 | Enforcement | `HSDirOneRequestPerCircuit` (close a circuit on its second HS request) and `HSDirRefuseUnknownPrevHop` (503 if the previous hop isn't a known relay). AUTOBOOL torrc options over consensus parameters of the same name. | **off** |
+| 0012 | Enforcement | `DoSBeginDirLimitEnabled` and `DoSBeginDirMaxStreams` (20): refuse a BEGIN_DIR on a circuit that already has that many open directory streams. Counted as `begindir_over_max`. | **off** |
+| 0013 | Enforcement | `HSDirDescriptorFetchLimit` with `HSDirDescriptorFetchRate` (5/s) and `HSDirDescriptorFetchBurst` (20): per-descriptor fetch limit. Torrc only, because anyone can use up a descriptor's shared bucket. Counted as `hsdir_fetch_over_rate`. | **off** |
 
-All behavioral defenses (`0009`, `0010`, `0011`) ship **observe-only**: a binary
-with no consensus or torrc opinion only *counts* (the DoS heartbeat line plus
-the `tor_relay_dos_total` MetricsPort counters/gauges) and never closes a
-circuit or refuses a request. Each has independent controls — a torrc `AUTOBOOL`
-option overriding a consensus parameter overriding the count-only default — so
-operators and the directory authorities can measure before enabling enforcement,
-and the enforcement toggle uses live `SETCONF` with **no restart** in the canary
-runbook (the configuration mechanism also supports reloads; see
-`analysis/prevhop-false-positive.md`).
+The metrics (0006–0010) only count, and count only tunneled (linked)
+connections, so DirPort traffic stays out. Each defense (0011–0013) counts what
+it would refuse whether or not it is enabled, so operators can measure before
+enabling it; enabled defenses apply on public relays only, and the DoS
+heartbeat shows their counts. Enabling one takes `SETCONF` or a reload, with no
+restart.
 
-The initial `+tor41339.3` `.deb` canary packages were built from the 7-patch
-baseline (`0001`–`0005` + `0006` + `0009`). See the [final canary plan](operator/CANARY-MEASUREMENT-PLAN.md) for
+Upstream merge requests, each built from fresh `main`: 0001–0003 (0002 needs
+0001's context), 0004, 0005, then the stack 0006–0010 on 0005, and each of
+0011, 0012 and 0013 on top of that for separate discussion. The commits are
+upstream style (`subsystem: Summary`, `changes/` entries that pass
+`lintChanges.py`, `check-spaces` clean). Each commit builds with
+`--enable-fatal-warnings` and passes `make test`. They add no new
+`practracker` problem kinds, but they grow three functions and two files that
+stock already lists as over the limit.
+
+`packages/` holds the `+tor41339.4` `.deb`s for Ubuntu 24.04 and 26.04, built
+from all 13 patches with every defense off (see `packages/BUILD-INFO.txt`). The
+earlier `+tor41339.3` canary packages were built from a legacy 7-patch series
+that exported only the four `hsdir_*` counters of 0010 and the 0011 rules. See the [final canary plan](operator/CANARY-MEASUREMENT-PLAN.md) for
 a native Ubuntu 26.04 build supplied by the designated builder agent, one pilot
 on vipopen followed by staged expansion toward half its relays, and 7–14 usable
 HSDir days of passive collection per patched member. Stock references remain
@@ -77,22 +88,19 @@ byte volume alone is not success. **No detectable benefit and regression are
 valid outcomes**, with inconclusive reserved for insufficient evidence; all
 comparisons retain uncertainty and client-impact guardrails.
 
-The series is written to upstream conventions: one single-pass HS-request guard
-(`connection_dir_allow_hs_request()`) for GET and POST, consensus parameters
-cached in `set_dos_parameters()` (O(1) per-request check), table-driven
-MetricsPort registration, rate-limited `LOG_PROTOCOL_WARN` diagnostics on
-enforced rejections, and **zero** `practracker` exceptions.
-
 ## Measured results
 
 **Closed-lab benchmark (`simulator/results/offvson-report-x86.md`).** A
 loopback-only chutney net (4 dir auths, 6 HSDir relays, 3 onion services, stock
 + load clients), matrix of enforcement × load, 3 reps × 60 s, 80 cells:
 
-- **0001 refuses the unlisted-relay one-hop vector:** one-hop fetches from a
-  self-minted (unpublished) relay go **100% → ~3% served** under 0001, counter
+These results were measured on the legacy 7-patch series, whose two rules are
+now 0011.
+
+- **The previous-hop rule refuses the unlisted-relay one-hop vector:** one-hop fetches from a
+  self-minted (unpublished) relay go **100% → ~3% served** under it, counter
   `hsdir_unknown_prev_hop` firing, **legit traffic 1.000**.
-- **0002 caps circuit reuse at the one-per-circuit floor:** under 5- and
+- **The one-request-per-circuit rule caps circuit reuse:** under 5- and
   22-request reuse the HSDir serves at most one descriptor per circuit, so the
   pipelining test client records **~0% received** — a client-side artifact (the
   circuit-close on request #2 tears down request #1's in-flight response), not
@@ -106,7 +114,7 @@ loopback-only chutney net (4 dir auths, 6 HSDir relays, 3 onion services, stock
 - **Legit preservation:** stock-client success **1.000 across all 24 valid
   enforcement cells**.
 
-**0001 false-positive bound (`analysis/prevhop-false-positive.md`).**
+**Previous-hop rule false-positive bound (`analysis/prevhop-false-positive.md`).**
 2,416 legitimate HS fetches, **0 false refusals** (`hsdir_unknown_prev_hop`
 delta 0). This sample and the model do not establish the live canary's
 legitimate-client failure rate; report controlled-client evidence separately.
@@ -114,15 +122,15 @@ legitimate-client failure rate; report controlled-client evidence separately.
 **amd64 build + seccomp (`engineering/`, `simulator/results/seccomp-*`).**
 Native amd64 build, full unit suite, upstream CI matrix, and installable
 `.deb`s for Ubuntu 24.04 and 26.04 (same patches and build configuration).
-Under `Sandbox 1` the new enforcement branches (circuit close /
-503 refusal) add **no sandbox-denied syscall** — confirmed by an strace EPERM
+Under `Sandbox 1` the legacy series' enforcement branches (circuit close /
+503 refusal, the same kinds of action 0011–0013 take) add **no sandbox-denied syscall** — confirmed by an strace EPERM
 audit, with the method validated against a known startup EPERM and the
 pre-existing tor#41060 SIGTERM bug.
 
 **Crash-at-scale review (`operator/patch-crash-at-scale-critique.md`):**
-**0 critical / 0 high** findings; the series is cleared for the count-only
-canary. Re-verified after the call-order fix and the upstream-polish refactor
-(addendum at the top of the critique).
+**0 critical / 0 high** findings for the legacy 7-patch series (now 0001–0005
+plus the 0010 counters and 0011 rules). The new metrics (0006–0008) and 0012–0013
+have not had that review.
 
 See `analysis/claims-ledger.md` for the adjudicated claim ledger and its
 corrections.
@@ -149,8 +157,8 @@ Start with [the final plan](operator/CANARY-MEASUREMENT-PLAN.md). The kit includ
 [future probe-helper acceptance tests](operator/probe-helper-acceptance.md).
 The helper specification is **not implemented or tested** by this documentation
 update. Passive collection comes first; any controlled probe/enforcement trial
-requires a separate human decision. Keep the same native artifact and four
-counters across patched members and modes. Rollout is one pilot, then small
+requires a separate human decision. Keep the same native artifact and metric
+set across patched members and modes. Rollout is one pilot, then small
 approved batches toward half of vipopen's relays; retain stock references and
 patched-off controls. No handoff counters or extra C telemetry are planned.
 
@@ -165,10 +173,10 @@ quantities the stock (unpatched) counters can and cannot establish.
 ## Layout
 
 ```
-patches/       the 11-patch series (git am) + torspec text
+patches/       the 13-patch series (git am) + torspec patch
 simulator/     closed-lab benchmark: design, harness (scripts/), results/
 operator/      count-only canary + capture playbook + crash-at-scale review
-analysis/      claim ledger, 0002 FP measurement, live-capture interpretation,
+analysis/      claim ledger, previous-hop FP measurement, live-capture interpretation,
                flood cost on an HSDir and constrained hosts
 data/          de-identified live-relay flood capture (JSON)
 engineering/   amd64 build-check, CI matrix, seccomp audit, .deb build + install

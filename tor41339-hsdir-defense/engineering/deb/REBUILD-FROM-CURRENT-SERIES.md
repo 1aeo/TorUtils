@@ -1,10 +1,10 @@
 # Rebuild the `.deb`s (24.04 noble, 26.04 resolute) from the current series
 
-The attached packages in `../../packages/` are `+tor41339.3` for Ubuntu 24.04
-(`~noble+1`) and 26.04 (`~resolute+1`), built from `../../patches/` at branch
-commit `6ce9b53` (`2b8ae1a` before the branch was rebased) (provenance: `../../packages/BUILD-INFO.txt`). Use this
-runbook whenever `patches/` changes, bumping the suffix (`+tor41339.4`, …) so
-`dpkg` sees the new build as newer. Rebuild **both** releases from the same
+The attached packages in `../../packages/` are `+tor41339.4` for Ubuntu 24.04
+(`~noble+1`) and 26.04 (`~resolute+1`), built from `../../patches/0001`–`0013`
+(provenance: `../../packages/BUILD-INFO.txt`). Use this runbook whenever
+`patches/` changes, bumping the suffix (`+tor41339.5`, …) so `dpkg` sees the
+new build as newer. Rebuild **both** releases from the same
 series, and regenerate every artifact below together, so the binaries, the
 `debian-patches/` build copy and the docs never diverge.
 
@@ -30,25 +30,27 @@ series, and regenerate every artifact below together, so the binaries, the
   `tor_0.4.9.14-1~resolute+1.{diff.gz,dsc}`. Check the `.diff.gz` sha256
   against its `.dsc`; the two Debian packagings should differ only in the
   changelog entry (`diff <(zcat …noble…) <(zcat …resolute…)`).
-- `build-reordered/debian-patches/0000-restore-doc-nofooter.conf.patch` and the
-  current `../../patches/0001-*.patch … 0007-*.patch`.
+- Every `build-reordered/debian-patches/[0-9][0-9][0-9][0-9]-*.patch`: `0000`
+  (restores `doc/nofooter.conf`) and copies of `../../patches/0001`–`0013`.
+  Stage them into a fresh, empty directory so no stale patch is picked up.
 - The driver `build-reordered/build-in-container-reordered.sh`.
 
 ## Build
 
-1. In the driver, bump the suffix and the one-line changelog entry in the
-   `dch -v "${BASE}+tor41339.N"` line (`BASE` is derived from `SUITE`).
+1. The driver takes the suffix, the changelog entry and the expected patch
+   count from the environment, and fails if any is unset or if the staged
+   patch count differs: `REV` (the `N` in `+tor41339.N`), `CHANGELOG_MSG`, and
+   `EXPECT_PATCHES` (14 for `0000`–`0013`).
 2. Run once per release (the driver runs with `set -o pipefail`, so a failed
    `dpkg-buildpackage` fails the run):
-   - `docker run --rm --network host -e SUITE=noble -v /in:/in:ro -v /out-noble:/out ubuntu:24.04 bash /in/build-in-container-reordered.sh`
-   - `docker run --rm --network host -e SUITE=resolute -v /in:/in:ro -v /out-resolute:/out ubuntu:26.04 bash /in/build-in-container-reordered.sh`
+   - `docker run --rm --network host -e SUITE=noble -e REV=4 -e EXPECT_PATCHES=14 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-noble:/out ubuntu:24.04 bash /in/build-in-container-reordered.sh`
+   - `docker run --rm --network host -e SUITE=resolute -e REV=4 -e EXPECT_PATCHES=14 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-resolute:/out ubuntu:26.04 bash /in/build-in-container-reordered.sh`
 
-   Expect `dh_auto_test` green in both — `+tor41339.3` gave 1613 tests ok, 24
-   skipped, on both.
+   Expect `dh_auto_test` green in both (see `BUILD-INFO.txt` for the counts).
 3. Check: no compiler warning on any line the series adds (warnings in
    unchanged upstream code in touched files are listed in `BUILD-INFO.txt`),
-   and `strings usr/bin/tor` (after `dpkg-deb -x`) contains all four `hsdir_*`
-   counter names.
+   and `strings usr/bin/tor` (after `dpkg-deb -x`) contains the new option and
+   metric names.
 4. Parity: the configure feature summary (`Tor Version:` … `Configure Line:` in
    each `dpkg-buildpackage.log`), the package file lists, `Depends`, the NEEDED
    sonames, the systemd units / default torrcs, `--list-modules` and the
@@ -63,9 +65,9 @@ tor-gencert for the lab's own authorities, and `IMAGE=ubuntu:26.04` for the
 resolute package). It brings up a private chutney net, installs **only** the
 `tor` package in a fresh container of that release, runs an unpublished relay
 under `Sandbox 1`, and must report: `--verify-config` rc 0 for both torrcs,
-both options `auto`, Bootstrapped 100%, `Seccomp_filters: 2` (Docker's filter
-plus tor's), `HSDIR_COUNTER_SERIES=4`, no enforcement log lines, 0 bad
-syscalls. (Not exiting on SIGTERM under `Sandbox 1` is the pre-existing
+`VERSION_OK=1`, `NEW_OPTIONS=7` with every defense off (`auto` or `0`),
+Bootstrapped 100%, `Seccomp_filters: 2` (Docker's filter plus tor's),
+`NEW_METRIC_SERIES=22`, and 0 bad syscalls. (Not exiting on SIGTERM under `Sandbox 1` is the pre-existing
 upstream bug tor#41060; `../seccomp/sigterm-repro.sh` compares stock and
 patched.)
 
