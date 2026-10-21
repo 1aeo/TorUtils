@@ -1,0 +1,154 @@
+From 213425730442218b7ce2a8644ea0a66b4108fa63 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Tue, 20 Oct 2026 21:22:47 -0700
+Subject: [PATCH 07/11] relay_metrics: Add directory and HSDir outcome and
+ completion counters
+
+Export server directory and onion service directory outcome and
+completion counters on the MetricsPort (hsdir_get_found,
+hsdir_get_not_found, hsdir_get_completed, hsdir_post_ok,
+hsdir_post_rejected, and dir_resp_completed) to distinguish cache
+hits, cache misses, locally completed responses, and upload results.
+---
+ changes/ticket41339_metrics_outcomes |  5 +++++
+ src/core/or/dos.h                    |  6 ++++++
+ src/feature/dircache/dircache.c      |  5 ++++-
+ src/feature/dircommon/directory.c    |  2 ++
+ src/feature/relay/relay_metrics.c    | 12 ++++++++++++
+ src/test/test_hs_cache.c             |  6 ++++++
+ 6 files changed, 35 insertions(+), 1 deletion(-)
+ create mode 100644 changes/ticket41339_metrics_outcomes
+
+diff --git a/changes/ticket41339_metrics_outcomes b/changes/ticket41339_metrics_outcomes
+new file mode 100644
+index 0000000..6b08d63
+--- /dev/null
++++ b/changes/ticket41339_metrics_outcomes
+@@ -0,0 +1,5 @@
++  o Minor features (DoS-resistance, onion service directory, metrics):
++    - Export server directory and onion service directory outcome and
++      completion counters on the MetricsPort (hsdir_get_found,
++      hsdir_get_not_found, hsdir_get_completed, hsdir_post_ok,
++      hsdir_post_rejected, and dir_resp_completed). Part of ticket 41339.
+diff --git a/src/core/or/dos.h b/src/core/or/dos.h
+index fde29be..9af3caa 100644
+--- a/src/core/or/dos.h
++++ b/src/core/or/dos.h
+@@ -87,6 +87,12 @@ typedef enum dos_dir_stat_t {
+   DOS_DIR_HSDIR_REQUEST_TOTAL,
+   DOS_DIR_HSDIR_SINGLE_HOP,
+   DOS_DIR_HSDIR_UNKNOWN_PREV_HOP,
++  DOS_DIR_HSDIR_GET_FOUND,
++  DOS_DIR_HSDIR_GET_NOT_FOUND,
++  DOS_DIR_HSDIR_GET_COMPLETED,
++  DOS_DIR_HSDIR_POST_OK,
++  DOS_DIR_HSDIR_POST_REJECTED,
++  DOS_DIR_RESP_COMPLETED,
+   DOS_DIR_NON_HS_REQUEST,
+   DOS_DIR_REQ_UNPARSED,
+   DOS_DIR_STAT_MAX
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index d7d7899..0e47053 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1392,9 +1392,11 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+   retval = hs_cache_lookup_as_dir(HS_VERSION_THREE,
+                                   pubkey_str, &desc_str);
+   if (retval <= 0 || desc_str == NULL) {
++    dos_note_dir_stat(DOS_DIR_HSDIR_GET_NOT_FOUND);
+     write_short_http_response(conn, 404, "Not found");
+     goto done;
+   }
++  dos_note_dir_stat(DOS_DIR_HSDIR_GET_FOUND);
+ 
+   /* Found requested descriptor! Pass it to this nice client. */
+   write_http_response_header(conn, strlen(desc_str), NO_METHOD, 0);
+@@ -1628,8 +1630,9 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+     if (!allow_hs_dir_request(conn,
+                               "Rejecting single hop HS descriptor post"))
+       goto done;
+-    /* We most probably have a publish request for an HS descriptor. */
+     int code = handle_post_hs_descriptor(url, body);
++    dos_note_dir_stat(code == 200 ?
++                      DOS_DIR_HSDIR_POST_OK : DOS_DIR_HSDIR_POST_REJECTED);
+     write_short_http_response(conn, code, code == 200 ?
+         "HS descriptor stored successfully." :
+         "Invalid HS descriptor. Rejected.");
+diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
+index 988e047..e4d6ebd 100644
+--- a/src/feature/dircommon/directory.c
++++ b/src/feature/dircommon/directory.c
+@@ -635,7 +635,9 @@ connection_dir_finished_flushing(dir_connection_t *conn)
+          * then earns no credit. This is not proof the client received it. */
+         if (conn->hs_ident) {
+           hs_cache_mark_dowloaded_as_dir(conn->hs_ident);
++          dos_note_dir_stat(DOS_DIR_HSDIR_GET_COMPLETED);
+         }
++        dos_note_dir_stat(DOS_DIR_RESP_COMPLETED);
+         connection_mark_for_close(TO_CONN(conn));
+       }
+       return 0;
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index 537dab1..c1aea0f 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -427,6 +427,18 @@ fill_dos_values(void)
+       dos_get_dir_stat(DOS_DIR_HSDIR_SINGLE_HOP) },
+     { "hsdir_unknown_prev_hop",
+       dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP) },
++    { "hsdir_get_found",
++      dos_get_dir_stat(DOS_DIR_HSDIR_GET_FOUND) },
++    { "hsdir_get_not_found",
++      dos_get_dir_stat(DOS_DIR_HSDIR_GET_NOT_FOUND) },
++    { "hsdir_get_completed",
++      dos_get_dir_stat(DOS_DIR_HSDIR_GET_COMPLETED) },
++    { "hsdir_post_ok",
++      dos_get_dir_stat(DOS_DIR_HSDIR_POST_OK) },
++    { "hsdir_post_rejected",
++      dos_get_dir_stat(DOS_DIR_HSDIR_POST_REJECTED) },
++    { "dir_resp_completed",
++      dos_get_dir_stat(DOS_DIR_RESP_COMPLETED) },
+     { "dir_non_hs_request",
+       dos_get_dir_stat(DOS_DIR_NON_HS_REQUEST) },
+     { "dir_req_unparsed",
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index 03686f2..7763feb 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -812,6 +812,7 @@ test_downloaded_counter_as_dir(void *arg)
+   connection_mark_for_close(TO_CONN(conns[0]));
+   connection_dir_about_to_close(conns[0]);
+   tt_u64_op(entry->n_downloaded, OP_EQ, 0);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_GET_COMPLETED), OP_EQ, 0);
+ 
+   /* Normal flush: the whole response is written out, then the connection
+    * closes. Exactly one credit, and about_to_close does not add a second. */
+@@ -820,6 +821,7 @@ test_downloaded_counter_as_dir(void *arg)
+   tt_assert(TO_CONN(conns[1])->marked_for_close);
+   connection_dir_about_to_close(conns[1]);
+   tt_u64_op(entry->n_downloaded, OP_EQ, 1);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_GET_COMPLETED), OP_EQ, 1);
+ 
+  done:
+   UNMOCK(connection_mark_for_close_internal_);
+@@ -836,6 +838,8 @@ test_downloaded_counter_non_hs(void *arg)
+ {
+   dir_connection_t *conn = dir_connection_new(AF_INET);
+   const uint64_t unparsed_before = dos_get_dir_stat(DOS_DIR_REQ_UNPARSED);
++  const uint64_t completed_before =
++    dos_get_dir_stat(DOS_DIR_RESP_COMPLETED);
+   (void) arg;
+ 
+   MOCK(connection_mark_for_close_internal_, hsdir_mock_mark_for_close);
+@@ -848,6 +852,8 @@ test_downloaded_counter_non_hs(void *arg)
+   TO_CONN(conn)->state = DIR_CONN_STATE_SERVER_WRITING;
+   tt_int_op(connection_dir_finished_flushing(conn), OP_EQ, 0);
+   tt_assert(TO_CONN(conn)->marked_for_close);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_RESP_COMPLETED),
++            OP_EQ, completed_before + 1);
+ 
+  done:
+   UNMOCK(connection_mark_for_close_internal_);
+-- 
+2.39.5 (Apple Git-154)
+
