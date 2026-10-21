@@ -1,0 +1,332 @@
+From 1e303caedc93ec1589c42d6300ac6be2263c23e6 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Tue, 20 Oct 2026 23:03:37 -0700
+Subject: [PATCH 2/2] relay_metrics: Export HS descriptor POST outcome counters
+
+Add tor_relay_hsdir_post_total{status,reason} on the MetricsPort to count HS descriptor POST outcomes by HTTP status and failure reason:
+
+- status="200",reason="ok": descriptor accepted and stored in the HSDir cache (hs_cache_store_as_dir() > 0).
+
+- status="400",reason="rev_counter": descriptor passed format, certificate, and signature validation, but had a revision_counter <= the cached entry (hs_cache_store_as_dir() == 0). Legitimate services (stock C Tor re-uploads, Onionbalance frontends, or active-active standby failover) can trigger this without indicating malformed traffic.
+
+- status="400",reason="bad_url": POST path under /tor/hs/ had an unsupported version or a subpath other than /publish.
+
+- status="400",reason="invalid_desc": descriptor failed size, outer layer parse, superencrypted layer parse, descriptor signing cert, or outer signature validation (hs_cache_store_as_dir() < 0).
+
+Add unit tests in test_hs_cache.c covering all four outcome buckets.
+---
+ changes/hsdir_post_metrics        |  7 +++
+ src/feature/dircache/dircache.c   |  3 ++
+ src/feature/hs/hs_cache.c         |  3 ++
+ src/feature/relay/relay_metrics.c | 37 ++++++++++++++++
+ src/feature/relay/relay_metrics.h |  2 +
+ src/feature/stats/rephist.c       | 20 +++++++++
+ src/feature/stats/rephist.h       | 20 +++++++++
+ src/test/test_hs_cache.c          | 74 +++++++++++++++++++++++++++++++
+ 8 files changed, 166 insertions(+)
+ create mode 100644 changes/hsdir_post_metrics
+
+diff --git a/changes/hsdir_post_metrics b/changes/hsdir_post_metrics
+new file mode 100644
+index 0000000..547de4e
+--- /dev/null
++++ b/changes/hsdir_post_metrics
+@@ -0,0 +1,7 @@
++  o Minor features (relay, metrics, onion service directory):
++    - Export onion service descriptor POST outcomes on the MetricsPort as
++      tor_relay_hsdir_post_total with labels for HTTP status ("200" or "400")
++      and reason ("ok", "rev_counter", "bad_url", or "invalid_desc"),
++      separating legitimate re-uploads rejected due to a non-newer revision
++      counter from malformed URLs and invalid descriptors. Related to ticket
++      41339.
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index aee047c..43ae2c4 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1542,12 +1542,14 @@ handle_post_hs_descriptor(const char *url, const char *body)
+ 
+   version = parse_hs_version_from_post(url, "/tor/hs/", &end_pos);
+   if (version < 0) {
++    rep_hist_note_hsdir_post(HSDIR_POST_REJECTED_BAD_URL);
+     goto err;
+   }
+ 
+   /* We have a valid version number, now make sure it's a publish request. Use
+    * the end position just after the version and check for the command. */
+   if (strcmpstart(end_pos, "/publish")) {
++    rep_hist_note_hsdir_post(HSDIR_POST_REJECTED_BAD_URL);
+     goto err;
+   }
+ 
+@@ -1561,6 +1563,7 @@ handle_post_hs_descriptor(const char *url, const char *body)
+     break;
+   default:
+     /* Unsupported version, return a bad request. */
++    rep_hist_note_hsdir_post(HSDIR_POST_REJECTED_BAD_URL);
+     goto err;
+   }
+ 
+diff --git a/src/feature/hs/hs_cache.c b/src/feature/hs/hs_cache.c
+index 128051b..881509e 100644
+--- a/src/feature/hs/hs_cache.c
++++ b/src/feature/hs/hs_cache.c
+@@ -389,6 +389,7 @@ hs_cache_store_as_dir(const char *desc)
+    * is unparseable which in this case a log message will be triggered. */
+   dir_desc = cache_dir_desc_new(desc);
+   if (dir_desc == NULL) {
++    rep_hist_note_hsdir_post(HSDIR_POST_REJECTED_INVALID_DESC);
+     goto err;
+   }
+ 
+@@ -399,10 +400,12 @@ hs_cache_store_as_dir(const char *desc)
+   case HS_VERSION_THREE:
+   default:
+     if (cache_store_v3_as_dir(dir_desc) < 0) {
++      rep_hist_note_hsdir_post(HSDIR_POST_REJECTED_REV_COUNTER);
+       goto err;
+     }
+     break;
+   }
++  rep_hist_note_hsdir_post(HSDIR_POST_OK);
+   return 0;
+ 
+  err:
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index 492a594..786d8f4 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -67,6 +67,7 @@ static void fill_est_intro_cells(void);
+ static void fill_est_rend_cells(void);
+ static void fill_intro1_cells(void);
+ static void fill_rend1_cells(void);
++static void fill_hsdir_post_values(void);
+ 
+ /** The base metrics that is a static array of metrics added to the metrics
+  * store.
+@@ -242,6 +243,13 @@ static const relay_metrics_entry_t base_metrics[] =
+     .help = "Total number of DROP cell we received",
+     .fill_fn = fill_relay_drop_cell,
+   },
++  {
++    .key = RELAY_METRICS_NUM_HSDIR_POST,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_hsdir_post_total),
++    .help = "Total number of HSDir descriptor POST requests by outcome",
++    .fill_fn = fill_hsdir_post_values,
++  },
+ };
+ static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
+ 
+@@ -1271,6 +1279,35 @@ fill_relay_circ_proto_violation(void)
+   metrics_store_entry_update(sentry, circ_n_proto_violation);
+ }
+ 
++/** Fill the metrics store for the RELAY_METRICS_NUM_HSDIR_POST counter. */
++static void
++fill_hsdir_post_values(void)
++{
++  const relay_metrics_entry_t *rentry =
++    &base_metrics[RELAY_METRICS_NUM_HSDIR_POST];
++  static const struct {
++    const char *status;
++    const char *reason;
++    hsdir_post_outcome_t outcome;
++  } items[] = {
++    { "200", "ok",           HSDIR_POST_OK },
++    { "400", "rev_counter",  HSDIR_POST_REJECTED_REV_COUNTER },
++    { "400", "bad_url",      HSDIR_POST_REJECTED_BAD_URL },
++    { "400", "invalid_desc", HSDIR_POST_REJECTED_INVALID_DESC },
++  };
++
++  for (size_t i = 0; i < ARRAY_LENGTH(items); i++) {
++    metrics_store_entry_t *sentry = metrics_store_add(
++        the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
++    metrics_store_entry_add_label(
++        sentry, metrics_format_label("status", items[i].status));
++    metrics_store_entry_add_label(
++        sentry, metrics_format_label("reason", items[i].reason));
++    metrics_store_entry_update(sentry,
++                               rep_hist_get_hsdir_post(items[i].outcome));
++  }
++}
++
+ /** Reset the global store and fill it with all the metrics from base_metrics
+  * and their associated values.
+  *
+diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
+index e7b5b66..7efac01 100644
+--- a/src/feature/relay/relay_metrics.h
++++ b/src/feature/relay/relay_metrics.h
+@@ -63,6 +63,8 @@ typedef enum {
+   RELAY_METRICS_CIRC_PROTO_VIOLATION,
+   /** Number of drop cell seen. */
+   RELAY_METRICS_CIRC_DROP_CELL,
++  /** Number of onion service descriptor POST requests by outcome. */
++  RELAY_METRICS_NUM_HSDIR_POST,
+ } relay_metrics_key_t;
+ 
+ /** The metadata of a relay metric. */
+diff --git a/src/feature/stats/rephist.c b/src/feature/stats/rephist.c
+index dac83bb..0cf272d 100644
+--- a/src/feature/stats/rephist.c
++++ b/src/feature/stats/rephist.c
+@@ -1805,6 +1805,26 @@ rep_hist_get_conn_rejected(unsigned int type, int af)
+   }
+ }
+ 
++/** Counters for onion service descriptor POST outcomes on an HSDir. */
++static uint64_t hsdir_post_outcomes[HSDIR_POST_OUTCOME_MAX_];
++
++/** Note an onion service descriptor POST outcome on an HSDir. */
++void
++rep_hist_note_hsdir_post(hsdir_post_outcome_t outcome)
++{
++  tor_assert(outcome < HSDIR_POST_OUTCOME_MAX_);
++  hsdir_post_outcomes[outcome]++;
++}
++
++/** Return the count of onion service descriptor POST requests with the given
++ * outcome. */
++uint64_t
++rep_hist_get_hsdir_post(hsdir_post_outcome_t outcome)
++{
++  tor_assert(outcome < HSDIR_POST_OUTCOME_MAX_);
++  return hsdir_post_outcomes[outcome];
++}
++
+ /*** cell statistics ***/
+ 
+ /** Start of the current buffer stats interval or 0 if we're not
+diff --git a/src/feature/stats/rephist.h b/src/feature/stats/rephist.h
+index 8c7baab..8b71723 100644
+--- a/src/feature/stats/rephist.h
++++ b/src/feature/stats/rephist.h
+@@ -86,6 +86,26 @@ void rep_hist_seen_new_rp_cell(bool is_v2);
+ char *rep_hist_get_hs_v3_stats_string(void);
+ void rep_hist_hsdir_stored_maybe_new_v3_onion(const uint8_t *blinded_key);
+ 
++/** Outcomes for an onion service descriptor POST request on an HSDir. */
++typedef enum hsdir_post_outcome_t {
++  /** Stored in the HSDir cache (HTTP 200). */
++  HSDIR_POST_OK = 0,
++  /** Rejected because the cached descriptor has a >= revision counter
++   * (HTTP 400; legitimate on re-upload, duplicate service instance, or
++   * Onionbalance failover). */
++  HSDIR_POST_REJECTED_REV_COUNTER = 1,
++  /** Rejected because the POST URL, version, or command path is invalid
++   * (HTTP 400). */
++  HSDIR_POST_REJECTED_BAD_URL = 2,
++  /** Rejected because the descriptor body failed size, format, certificate,
++   * or signature validation (HTTP 400). */
++  HSDIR_POST_REJECTED_INVALID_DESC = 3,
++  HSDIR_POST_OUTCOME_MAX_ = 4,
++} hsdir_post_outcome_t;
++
++void rep_hist_note_hsdir_post(hsdir_post_outcome_t outcome);
++uint64_t rep_hist_get_hsdir_post(hsdir_post_outcome_t outcome);
++
+ void rep_hist_free_all(void);
+ 
+ void rep_hist_note_negotiated_link_proto(unsigned link_proto,
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index 100a90e..3510bbe 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -33,6 +33,7 @@
+ #include "test/hs_test_helpers.h"
+ #include "test/test_helpers.h"
+ #include "test/test.h"
++#include "feature/stats/rephist.h"
+ 
+ /* Static variable used to encoded the HSDir query. */
+ static char query_b64[256];
+@@ -279,6 +280,77 @@ test_clean_oom_as_dir(void *arg)
+   tor_free(desc2_str);
+ }
+ 
++static void
++test_hsdir_post_outcomes(void *arg)
++{
++  int ret;
++  ed25519_keypair_t signing_kp;
++  hs_descriptor_t *desc1 = NULL, *desc2 = NULL;
++  char *desc1_str = NULL, *desc2_str = NULL;
++
++  (void)arg;
++
++  init_test();
++
++  ret = ed25519_keypair_generate(&signing_kp, 0);
++  tt_int_op(ret, OP_EQ, 0);
++  desc1 = hs_helper_build_hs_desc_with_rev_counter(&signing_kp, 10);
++  tt_assert(desc1);
++  ret = hs_desc_encode_descriptor(desc1, &signing_kp, NULL, &desc1_str);
++  tt_int_op(ret, OP_EQ, 0);
++
++  desc2 = hs_helper_build_hs_desc_with_rev_counter(&signing_kp, 11);
++  tt_assert(desc2);
++  ret = hs_desc_encode_descriptor(desc2, &signing_kp, NULL, &desc2_str);
++  tt_int_op(ret, OP_EQ, 0);
++
++  /* 1. Initial valid publish -> 200 (ok). */
++  tt_int_op(handle_post_hs_descriptor("/tor/hs/3/publish", desc1_str),
++            OP_EQ, 200);
++  tt_u64_op(rep_hist_get_hsdir_post(HSDIR_POST_OK), OP_EQ, 1);
++
++  /* 2. Re-upload with equal revision counter -> 400 (rev_counter). */
++  tt_int_op(handle_post_hs_descriptor("/tor/hs/3/publish", desc1_str),
++            OP_EQ, 400);
++  tt_u64_op(rep_hist_get_hsdir_post(HSDIR_POST_REJECTED_REV_COUNTER),
++            OP_EQ, 1);
++
++  /* 3. Upload with newer revision counter -> 200 (ok). */
++  tt_int_op(handle_post_hs_descriptor("/tor/hs/3/publish", desc2_str),
++            OP_EQ, 200);
++  tt_u64_op(rep_hist_get_hsdir_post(HSDIR_POST_OK), OP_EQ, 2);
++
++  /* 4. Upload with older revision counter -> 400 (rev_counter). */
++  tt_int_op(handle_post_hs_descriptor("/tor/hs/3/publish", desc1_str),
++            OP_EQ, 400);
++  tt_u64_op(rep_hist_get_hsdir_post(HSDIR_POST_REJECTED_REV_COUNTER),
++            OP_EQ, 2);
++
++  /* 5. Bad URL version / path -> 400 (bad_url). */
++  tt_int_op(handle_post_hs_descriptor("/tor/hs/bad/publish", desc2_str),
++            OP_EQ, 400);
++  tt_int_op(handle_post_hs_descriptor("/tor/hs/3/notpublish", desc2_str),
++            OP_EQ, 400);
++  tt_int_op(handle_post_hs_descriptor("/tor/hs/2/publish", desc2_str),
++            OP_EQ, 400);
++  tt_u64_op(rep_hist_get_hsdir_post(HSDIR_POST_REJECTED_BAD_URL),
++            OP_EQ, 3);
++
++  /* 6. Unparseable descriptor body -> 400 (invalid_desc). */
++  tt_int_op(handle_post_hs_descriptor("/tor/hs/3/publish",
++                                      "hs-descriptor 3\nJUNK"),
++            OP_EQ, 400);
++  tt_u64_op(rep_hist_get_hsdir_post(HSDIR_POST_REJECTED_INVALID_DESC),
++            OP_EQ, 1);
++
++ done:
++  hs_descriptor_free(desc1);
++  hs_descriptor_free(desc2);
++  tor_free(desc1_str);
++  tor_free(desc2_str);
++  hs_free_all();
++}
++
+ /* Test helper: Fetch an HS descriptor from an HSDir (for the hidden service
+    with <b>blinded_key</b>. Return the received descriptor string. */
+ static char *
+@@ -772,6 +844,8 @@ struct testcase_t hs_cache[] = {
+     NULL, NULL },
+   { "client_cache_remove", test_client_cache_remove, TT_FORK,
+     NULL, NULL },
++  { "hsdir_post_outcomes", test_hsdir_post_outcomes, TT_FORK,
++    NULL, NULL },
+ 
+   END_OF_TESTCASES
+ };
+-- 
+2.39.5 (Apple Git-154)
+

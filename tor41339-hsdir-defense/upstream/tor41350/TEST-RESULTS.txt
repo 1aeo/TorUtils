@@ -1,0 +1,79 @@
+# Test Results for `tor41350` & `hsdir_post_metrics` Patch Series
+
+Baseline: C Tor `tor-0.4.9.14` (`8fe2745`)
+
+## Patches in `upstream/tor41350/`
+
+1. `0001-rephist-Pair-opened-connection-gauge-decrements-with.patch` (`tor#41350`)
+   - Tracks `in_rephist_opened` and the counted `(rephist_from_listener, rephist_type, rephist_socket_family)` tuple on `connection_t`.
+   - Calls `rep_hist_note_conn_closed()` in `connection_mark_for_close_internal_()` and `connection_free_minimal()` only when `in_rephist_opened` is set, using the stored tuple and clearing the bit.
+   - Adds unit test `stats/rephist_conn_opened` in `src/test/test_stats.c` covering:
+     1. Accepted `OR` and transparent `AP` connections whose `connection_init_accepted_conn()` fails before `note_connection()`;
+     2. Linked `EXIT` + `DIR` (`BEGIN_DIR`) and `AP` + `DIR` (`connection_ap_make_link()`) connection pair closes;
+     3. Extended ORPort (`CONN_TYPE_EXT_OR` -> `CONN_TYPE_OR`) retyping before close;
+     4. Normal inbound (`from_listener=1`) and outbound (`from_listener=0`) accept/connect/close round trips;
+     5. Listener connections (`listener_connection_new()`) closed normally or freed via `connection_free_minimal()` on failed `connection_add()`.
+
+2. `0002-relay_metrics-Export-HS-descriptor-POST-outcome-coun.patch`
+   - Exports `tor_relay_hsdir_post_total{status="200"|"400",reason="ok"|"rev_counter"|"bad_url"|"invalid_desc"}` on the MetricsPort.
+   - Adds unit test `hs_cache/hsdir_post_outcomes` in `src/test/test_hs_cache.c` covering all four outcome buckets.
+
+## Patch Application Verification
+
+- Clean `git am` onto stock `tor-0.4.9.14` (`8fe2745`):
+  ```
+  Applying: rephist: Pair opened-connection gauge decrements with open accounting
+  Applying: relay_metrics: Export HS descriptor POST outcome counters
+  ```
+- Clean `git am` on top of `patches/0001`–`0007` (`tor41339-hsdir-defense`):
+  ```
+  Applying: hsdir: Refuse HS dir requests whose previous hop is not a known relay
+  Applying: hsdir: Serve one onion service directory request per circuit
+  Applying: dirserv: Stop unthrottled warnings on malformed HTTP requests
+  Applying: dirserv: Don't buffer request bodies larger than an HS descriptor
+  Applying: dirserv: Discard client input received after the request
+  Applying: hs_desc: Check signature length before verifying the signing cert
+  Applying: hs_cache: Only credit HSDir downloads once the response is written out
+  Applying: rephist: Pair opened-connection gauge decrements with open accounting
+  Applying: relay_metrics: Export HS descriptor POST outcome counters
+  ```
+
+## Unit Tests, Full `make check`, and Linter Results
+
+1. **Targeted unit test suites (`./src/test/test`):**
+   ```
+   $ ./src/test/test stats/rephist_conn_opened hs_cache/hsdir_post_outcomes metrics/..
+   hs_cache/hsdir_post_outcomes: [forking] OK
+   metrics/config: [forking] OK
+   metrics/connection: [forking] OK
+   metrics/prometheus: [forking] OK
+   metrics/prometheus_histogram: [forking] OK
+   metrics/store: [forking] OK
+   stats/rephist_conn_opened: [forking] OK
+   7 tests ok.  (0 skipped)
+   ```
+
+2. **Full unit test binary (`./src/test/test`):**
+   - With `0001` applied: `1603 tests ok.  (24 skipped)` (`0` failures)
+   - With `0001` + `0002` applied: `1604 tests ok.  (24 skipped)` (`0` failures)
+
+3. **Full Automake testsuite (`make -j4 check`):**
+   ```
+   ============================================================================
+   Testsuite summary for tor 0.4.9.14
+   ============================================================================
+   # TOTAL: 34
+   # PASS:  33
+   # SKIP:  1
+   # XFAIL: 0
+   # FAIL:  0
+   # XPASS: 0
+   # ERROR: 0
+   ============================================================================
+   ```
+   *(The 1 skipped test is `src/test/fuzz_static_testcases.sh`, which requires an external `TOR_FUZZ_CORPORA` checkout.)*
+
+4. **Whitespace, style, changes file, and best-practices linters:**
+   - `make check-spaces`: `0` warnings / exit code `0`
+   - `make check-changes`: `0` warnings / exit code `0` (`python3 ./scripts/maint/lintChanges.py ./changes`)
+   - `python3 ./scripts/maint/practracker/practracker.py .`: `0` new problems / exit code `0`
