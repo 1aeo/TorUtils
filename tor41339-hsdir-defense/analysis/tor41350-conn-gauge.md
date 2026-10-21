@@ -1,384 +1,446 @@
-# `tor#41350` (`tor_relay_connections{state="opened"}` Drift) & HS Descriptor POST Outcome Accounting
+# `tor#41350` (`tor_relay_connections{state="opened"}` drift) and HS descriptor POST outcomes
 
-Baseline source: C Tor `tor-0.4.9.14` (commit `8fe2745`, tag `tor-0.4.9.14`), cross-checked against upstream `main` (`8dbbbe6`). Across all files cited below (`src/core/mainloop/connection.c`, `src/core/or/status.c`, `src/core/or/connection_or.c`, `src/core/or/connection_edge.c`, `src/core/or/circuitlist.c`, `src/core/or/relay.c`, `src/feature/stats/rephist.c`, `src/feature/ext_orport/ext_orport.c`, `src/feature/dirclient/dirclient.c`, `src/feature/dircommon/directory.c`, `src/feature/dircache/dircache.c`, `src/feature/hs/hs_cache.c`, `src/feature/hs/hs_descriptor.c`, `src/feature/dns/dns.c`, `src/feature/dns/dnsserv.c`), line numbers in `tor-0.4.9.14` and `main` (`8dbbbe6`) are identical.
+Revision 2. This replaces revision 1 of this file. An adversarial review
+(`analysis/tor41350-review.md`) re-checked every claim against the source and
+found many wrong line numbers, two falsified mechanisms, and a patch design
+that was larger than it needed to be. Both patches in `upstream/tor41350/`
+were rewritten; the errata are listed at the end of this file.
+
+**Baseline.** C Tor `tor-0.4.9.14` (`8fe2745`). All `path:line` references are
+to that tag. Upstream `main` (`8dbbbe6`) and `maint-0.4.9` (`ccd9eb8`) have
+identical code at every cited location. The only differences in the cited
+files are comment typo fixes, and the one in `hs_descriptor.c` shifts lines
+after `:1468` by −1 on `main`.
+
+**How this was checked.** Source reading on all three trees, unit tests, and
+an offline single-relay lab run in a loopback-only network namespace
+(`unshare -n`; see `upstream/tor41350/lab/`). The Chutney numbers in A.4 come
+from the earlier lab run for revision 1 and were not re-run for this revision.
 
 ---
 
-## Part A: `tor_relay_connections{state="opened"}` Gauge Drift (`tor#41350`)
+## Part A: `tor_relay_connections{state="opened"}` drift (`tor#41350`)
 
-### 1. Where the Gauge Moves
+### A.1 Where the gauge moves
 
-`fill_connections_values()` (`src/feature/relay/relay_metrics.c:411-452`) exports `tor_relay_connections{type=...,direction=...,state="opened",family=...}` by reading `rep_hist_get_conn_opened(from_listener, type, af)` (`src/feature/stats/rephist.c:1753-1771`).
+The gauge is exported by `fill_conn_gauge_values()`
+(`src/feature/relay/relay_metrics.c:815-843`), and the `state="created"`
+counter by `fill_conn_counter_values()` (`:771-811`). Both read the
+file-static arrays in `src/feature/stats/rephist.c:1685-1692`.
 
-#### Increments (`rep_hist_note_conn_opened()`, `src/feature/stats/rephist.c:1696-1715`)
+**Increments.** `rep_hist_note_conn_opened()` (`rephist.c:1696-1715`) bumps
+both `created` and `opened`. It is called from exactly three places:
 
-There are only **three** call sites in the entire codebase:
+| Site | When |
+|-|-|
+| `listener_connection_new()`, `src/core/mainloop/connection.c:654` | every listener, when created |
+| `note_connection(true, …)`, `connection.c:2111` → `src/core/or/status.c:151` | an accepted connection, only after `connection_init_accepted_conn()` (`connection.c:2105`) returned ≥ 0 |
+| `note_connection(false, …)`, `connection.c:2317` | an outbound socket, only after `connect()` returned 0 or EINPROGRESS (`connection.c:2299-2315`) |
 
-1. **Listener creation:** `listener_connection_new()` at `src/core/mainloop/connection.c:654`:
-   ```c
-   rep_hist_note_conn_opened(false, type, socket_family);
-   ```
-2. **Inbound `accept()` completion:** `connection_handle_listener_read()` at `src/core/mainloop/connection.c:2111` calls `note_connection(true, newconn)` (`src/core/or/status.c:146-162`), which calls `rep_hist_note_conn_opened(inbound, conn->type, conn->socket_family)` at `status.c:151`.
-   - This line is reached **only** after `connection_init_accepted_conn(newconn, listener->type)` (`connection.c:2105`) returns `>= 0`.
-3. **Outbound OS socket `connect()`:** `connection_connect_sockaddr()` at `src/core/mainloop/connection.c:2317` calls `note_connection(false, conn)` (`status.c:151`), which calls `rep_hist_note_conn_opened(false, conn->type, conn->socket_family)` only after `tor_connect_socket()` (`connection.c:2284`) returns a valid socket descriptor `s >= 0`.
+**Decrement.** `rep_hist_note_conn_closed()` (`rephist.c:1719-1740`) has a
+single caller, `connection_mark_for_close_internal_()`
+(`connection.c:1180-1181`). It runs for **every** connection marked for
+close, with the connection's current `(from_listener, type, socket_family)`.
+The decrement is clamped at 0 (`rephist.c:1727-1735`), so an extra decrement
+is invisible once a bucket is empty: it cancels a real connection only while
+the bucket is above 0.
 
-#### Decrement (`rep_hist_note_conn_closed()`, `src/feature/stats/rephist.c:1719-1740`)
+Both functions ignore families other than `AF_INET`/`AF_INET6`, so
+`AF_UNIX` connections are never counted or uncounted. Duplicate marks return
+before the decrement (`connection.c:1142-1148`), and no production code ever
+un-marks a connection, so a connection is uncounted at most once.
 
-There is a **single** call site, inside `connection_mark_for_close_internal_()` at `src/core/mainloop/connection.c:1180`:
-```c
-rep_hist_note_conn_closed(conn->from_listener, conn->type,
-                          conn->socket_family);
+**Semantics.** The gauge counts "counted and not yet marked", not kernel
+sockets in ESTABLISHED. Outbound connections are counted at EINPROGRESS. A
+marked connection with `hold_open_until_flushed` keeps its socket for up to
+about 15 s (`connection.c:1189-1222`). Short-lived differences against `ss`
+are therefore expected and are not drift.
+
+### A.2 Unpaired paths (stock 0.4.9.14)
+
+None of these connections is ever passed to `rep_hist_note_conn_opened()`,
+but each is marked for close, so each mark subtracts 1 from a bucket that
+holds real connections.
+
+| # | Path | Bucket pulled down | Evidence |
+|-|-|-|-|
+| 1a | Accepted OR connection whose TLS handshake fails synchronously | `OR / received` | `connection_init_accepted_conn()` starts the handshake at `connection.c:2139`. `connection_tls_start_handshake()` returns −1 (TLS error or close from `tor_tls_handshake()`, `src/core/or/connection_or.c:1739`, `:1762-1766`, `:1793-1796`; or `tor_tls_new()` failure, `:1727-1731`). The caller then runs `connection_or_close_for_error()` (`connection.c:2141`) → `connection_mark_for_close_internal()` (`connection_or.c:1687`) → decrement. `connection_handle_listener_read()` returns at `connection.c:2105-2108`, before `note_connection()` at `:2111`. There is exactly one mark and no duplicate-mark warning. |
+| 1b | Accepted TransPort connection rejected synchronously | `Socks / received` | `connection.c:2162-2167` → `connection_ap_process_transparent()` (`src/core/or/connection_edge.c:2898-2925`): original-destination lookup failure (`:2914-2918`) or any synchronous rewrite, policy or attach rejection through `:2924`. The mark is `connection_mark_unattached_ap_()` → `connection_mark_and_flush_()` (`connection_edge.c:284`). |
+| 2a | Linked EXIT + DIR pair of every incoming `BEGIN_DIR` | `Exit / initiated` (always `ipv4`) and `Directory / initiated` (previous hop's family) | `edge_connection_new(CONN_TYPE_EXIT, AF_INET)` at `connection_edge.c:4284`; `connection_exit_connect_dir()` (`:4689-4750`) creates the DIR connection at `:4701` and links it at `:4714`. Neither has a socket. Close sites: `connection_edge.c:310`, `:4745-4749`, `src/feature/dircommon/directory.c:577`, `src/core/or/circuitlist.c:2417-2418`. If the previous hop's address is unknown, the DIR connection is `AF_UNSPEC` and rephist ignores it. |
+| 2b | Linked AP + DIR pair of a tunneled directory request | `Directory / initiated`; `Socks / initiated` (always clamped at 0) | `directory_initiate_request()` creates the DIR connection at `src/feature/dirclient/dirclient.c:1327` and calls `connection_ap_make_link()` at `:1410-1415` (`connection_edge.c:3629-3690`, AP created at `:3642` with the partner's family, linked at `:3675`). Always the case on clients, bridges and onion services; on public relays only when the target has no DirPort (`src/feature/dirclient/dirclient_modes.c:30-35`). |
+| 3 | Extended ORPort connection retyped to OR | `OR / received` pulled down; `Extended OR / received` only grows | Counted as `CONN_TYPE_EXT_OR` at `connection.c:2111` (dispatch at `:4027-4028`; `connection_ext_or_start_auth()` always returns 0, `src/feature/relay/ext_orport.c:642-660`). `connection_ext_or_transition()` (`ext_orport.c:86-95`) retypes it at `:91`. It is then uncounted as `OR`. ExtOR connections that fail authentication before the transition are paired correctly. |
+| 4 | Direct DIR connection whose `connect()` fails at once | `Directory / initiated` | `dirclient.c:1364-1367`: `connection_connect()` returns −1, which happens before `note_connection()`, and the connection is marked. OR and EXIT connections in the same situation are freed without being marked, which is neutral. |
+| 5 | Exit stream marked while still resolving (`BEGIN` or `RESOLVE`) | `Exit / initiated` (always `ipv4`) | Both kinds sit on `resolving_streams` with no socket: `connection_edge.c:4284`, and the `RESOLVE` dummy at `:4401`. They are marked on circuit teardown (`circuitlist.c:2431`), on END while resolving (`src/core/or/relay.c:1429`), or on a deliver-window violation (`relay.c:1729`, `:2117`). DNS failures free the stream without marking it (`src/feature/relay/dns.c:472`, `:698`, `:1110`, `:1239`), so they do **not** drift. |
+| 6 | DNSPort requests | `Socks / initiated` (always clamped at 0, so invisible) | Socketless `entry_connection_new(CONN_TYPE_AP, AF_INET)` at `src/feature/client/dnsserv.c:148` and `:228`, marked from `connection_edge.c`, for example `:2391-2394`. |
+
+**Checked and neutral:** SocksPolicy, DirPolicy and DoS connection rejections
+(`connection.c:2021-2050`) close the socket before `connection_new()`
+(`:2052`). The OOS handler (disabled by default) only closes counted OR
+connections. `connection_or_clear_identity()` only clears a digest.
+`channel_close_for_error()` never calls back into the connection. Tor uses
+neither `SO_LINGER` nor `TCP_DEFER_ACCEPT`.
+
+**Upward drift (counted, never uncounted) is not reachable.** Revision 1
+listed three "Path 7" leaks. All of them are dead code:
+`connection_add_impl()` (`src/core/mainloop/mainloop.c:245-271`) has a single
+`return 0;`, so the `connection_add()` / `connection_add_connecting()`
+failure branches at `connection.c:1768`, `:2100` and `:2324` cannot run.
+`connection_free_()` asserts `!connection_in_array(conn)`
+(`connection.c:970`), so the `connection_edge.c:4670` case would crash rather
+than leak. The only counted-but-unmarked free is `connection_free_all()` at
+shutdown (`connection.c:5973-5974`).
+
+**Labelling quirks, not drift.** Proxied OR and DIR connections are labelled
+with the target's family, not the proxy socket's. IPv6 exit-policy and
+re-entry rejections are recorded under `ipv4` in `state="rejected"`
+(`connection_edge.c:4562`, `:4590` run before `:4609-4610`). The rejected
+counter is exported only with `direction="received"`
+(`relay_metrics.c:802-807`). None of this is in scope for the fix.
+
+### A.3 The operator observation and Path 1a
+
+`analysis/flood-cost-and-constrained-hosts.md` §1.5 reports, for one relay
+under the `tor#41339` flood: `OR in` (the opened gauge) read **598** while "a
+socket count on the ORPort at the same time showed about 2,300 direct clients
+and 2,500 relays"; it read **33** after the flood. Revision 1 misquoted this
+(it said "~4,800 relay-to-relay sockets verified via fd tables" and "0 shortly
+thereafter"). The source says neither.
+
+What the code establishes:
+
+- By elimination, on a relay **without an ExtORPort**, Path 1a is the only
+  code path in 0.4.9.14 that can push `OR/received` below the real count. Paths
+  1b, 2, 4, 5 and 6 hit other types or directions, `from_listener` is written
+  only at `connection.c:2098`, and nothing inflates `OR/received`.
+- Path 1a is triggered by a peer whose FIN, RST, or at least 5 bytes of
+  non-TLS data are already queued when Tor calls `accept()`, with or without a
+  ClientHello before them. A peer that only sent a ClientHello is counted.
+  TCP-connect probes do this at any load. Under a saturated main loop it gets
+  much more likely: Tor accepts one connection per listener read event
+  (`connection.c:1954`), so connections wait in the kernel accept queue and
+  peers give up before they are accepted.
+- The deficit `D = real − gauge` builds up from process start, not just
+  during the flood. A paired close leaves `D` unchanged. So the 598 → 33 drop
+  is consistent with flood-era clients closing normally. Revision 1 said
+  post-flood closes "subtract further", which is wrong.
+- Part of the during-flood gap is a measurement artifact: an `ss` count by
+  local ORPort also sees accept-queue sockets that Tor hasn't accepted yet
+  and marked sockets still flushing, and the gauge is split by family.
+
+**Falsified secondary mechanism.** Revision 1 blamed dual-stack
+`IPV6_V6ONLY=0` sockets for a family mismatch. Tor sets `IPV6_V6ONLY` on every
+IPv6 listener (`connection.c:1571-1584`), rejects accepted sockets whose
+family differs from the listener's (`:2002-2005`), and an accepted connection
+always inherits the listener's family (`:2052`).
+
+**Status:** Path 1a is consistent with the observation and is the only
+in-code explanation, but it is a hypothesis for that relay. Confirming it
+would need the retained Prometheus series around the flood onset (a step down
+during the stall), the relay's uptime, and a post-flood `ss` count filtered to
+`sport = :ORPort`, owned by the tor process, summed over both families, taken
+at scrape time. Once the fix lands, synchronous accept-time handshake failures
+leave no trace on the MetricsPort; counting them separately would be a
+possible follow-up.
+
+### A.4 Reproduction
+
+**Offline single relay** (`upstream/tor41350/lab/path1a_offline_repro.py`,
+re-run for this revision). The relay runs in a loopback-only network
+namespace. 7 real inbound TLS connections are opened, then the relay is
+stopped with `SIGSTOP` while 5 connections that send `GET / HTTP/1.0` and 5
+that only send FIN queue up in its accept backlog, then it is resumed with
+`SIGCONT`.
+
+| Step | 0.4.9.14 gauge | Fixed gauge | Established ORPort sockets |
+|-|-|-|-|
+| 7 real TLS connections open | 7 | 7 | 7 |
+| +10 queued while stalled, then resumed | **0** | 7 | 7 |
+| real connections closed | 0 | 0 | 0 |
+
+`created` stays at 7 in both builds: the failed connections are never counted
+as created either.
+
+**Chutney (revision 1 lab, not re-run).** A 4-node network with temporary
+instrumentation that classified every unpaired close. On the target exit and
+directory cache, 10 handshake-incomplete ORPort connections took
+`OR/received/ipv4` from 7 to 0 (7 effective and 3 clamped decrements, all
+marked at `connection_or.c:1687`). 25 `BEGIN_DIR` streams with 5 real exit
+sockets open took `Exit/initiated/ipv4` from 5 to 0 (5 effective and 20
+clamped). The revision-1 table showed 28 and 23 for these because it was
+cumulative and included 3 decrements from bootstrap. With the fix, the gauges
+matched `ss` throughout.
+
+### A.5 Fix (`upstream/tor41350/0001-conn-Only-uncount-connections-that-were-counted-as-o.patch`)
+
++23/−6 lines outside tests, in 5 files:
+
+- **`connection_st.h`.** One new bit, `unsigned int opened_in_rephist:1;`,
+  next to `from_listener`. It fits in existing bitfield padding. The file
+  comment "Connections never change their type" gets the Extended ORPort
+  exception.
+- **`status.c` / `status.h`.** `note_connection()` takes a non-const
+  connection and sets the bit next to its `rep_hist_note_conn_opened()` call.
+- **`connection.c`.** `listener_connection_new()` sets the bit.
+  `connection_mark_for_close_internal_()` calls `rep_hist_note_conn_closed()`
+  only if the bit is set, and clears it.
+- **`ext_orport.c`.** `connection_ext_or_transition()` moves a counted
+  connection from the `EXT_OR` counters to the `OR` ones before retyping it.
+
+This is the pattern `or_connection_t.tracked_for_dos_mitigation` already uses
+for the DoS concurrent-connection count (`src/core/or/dos.c:1119`, `:1136`),
+which is why the DoS count stays correct for Path 1a connections while the
+gauge doesn't.
+
+**Why one bit is enough.** Every write to `from_listener` and `socket_family`
+happens before the connection is counted:
+
+- `from_listener` is set at `connection.c:2098`.
+- `socket_family` is set in `connection_init()` (`:737`), at `:1744` (the
+  same value already passed at `:1742`), at `connection_edge.c:4609-4610`
+  (before `connect()`), and at `src/feature/hs/hs_common.c:84` (`AF_UNIX`,
+  before `connect()`, and never counted).
+
+The type changes after counting only at `ext_orport.c:91`.
+`connection_edge.c:4706` writes the same value to a socketless connection.
+So revision 1's snapshot of `(from_listener, type, socket_family)` (three
+extra fields, including an `int`) bought nothing beyond what the transition
+hunk does.
+
+**Why clearing the bit matters.** `connection_finished_flushing()` only
+checks `CONN_IS_CLOSED`, so `connection_ext_or_transition()` can run on a
+connection that has already been marked (`connection.c:4661`, `:4665-4667`).
+Clearing the bit on close makes the transition a no-op in that case.
+Without it, the transition would uncount the connection twice and leave a
+phantom `OR` count.
+
+**What changed from revision 1's patch.**
+
+- Four fields, a helper and a `BUG()` guard became one bit and two
+  conditionals. `note_connection()` has exactly two callers, each reached once
+  per connection, so the `BUG()` guard and the added `tor_assert(conn)` were
+  noise.
+- No `connection_free_minimal()` hook. Free without mark can't happen (A.2),
+  and keeping the decrement at mark time preserves its current semantics.
+  Moving it to free time instead would make the gauge follow the socket until
+  it is closed. That is offered upstream as an option.
+- ExtOR connections now move to the `OR` gauge when they become OR
+  connections, instead of staying in `Extended OR` until they close. This
+  also counts them in `OR`'s `created`, which keeps opened ≤ created in every
+  bucket. A "move only the gauge" helper would break that invariant on a
+  bridge with only PT clients. Keeping them under `Extended OR` would need a
+  second bit. This is offered upstream as a question.
+- The tests moved to where the code under test lives. The lifecycle cases
+  are in `test_connection.c` instead of `test_stats.c`, which had needed 13
+  new includes. The ExtOR case is three assertions in the existing
+  `extorport/handshake` test.
+- "Bugfix on 0.4.7.11", not "0.4.7.1-alpha". The gauge came in with
+  `5603baf257`, first released in 0.4.7.11.
+
+**Tests.** `connection/opened_counter` uses canaries so that the 0 clamp
+cannot hide stray decrements. It checks:
+
+1. A listener is counted, then uncounted when marked.
+2. An accepted OR connection whose mocked handshake fails inside
+   `connection_init_accepted_conn()` does not decrement `OR/received`.
+3. A counted connection that is marked and then freed is decremented exactly
+   once.
+4. An uncounted socketless EXIT connection does not decrement
+   `Exit/initiated`.
+5. `created` is unchanged.
+
+`extorport/handshake` checks that the counted connection moves from `EXT_OR`
+to `OR` at the transition. Both tests fail on 0.4.9.14, at the Path 1a and
+ExtOR assertions, and pass with the fix. They rely on `TT_FORK`, like the
+other connection tests, because the rephist arrays are process-static. The
+synchronous `SSL_accept()` failure itself is only exercised by the lab
+script.
+
+### A.6 Should socketless connections be counted somewhere?
+
+Not in `tor_relay_connections`. Every other series there is backed by a
+kernel socket, so mixing in linked streams would make `type="Exit"` useless
+for outbound socket pressure. A separate gauge of active server-side directory
+streams would be useful during a `BEGIN_DIR` flood, but it is a separate
+feature.
+
+---
+
+## Part B: HS descriptor POST outcomes
+
+### B.1 Outcome table (stock 0.4.9.14)
+
+These are all the outcomes of a `POST /tor/hs/3/publish` that reaches a
+directory cache over a `BEGIN_DIR` stream. A DirPort POST starts at the
+`directory_handle_command()` rows.
+
+| # | Stage | Result | `path:line` | Condition | Legitimate service? |
+|-|-|-|-|-|-|
+| 1 | `BEGIN_DIR` gate | `END` (`EXITPOLICY`, `NOTDIRECTORY`, `HIBERNATING`) or silent drop, no HTTP | `connection_edge.c:4191-4198`, `:4239-4247`, `:4317-4321`; drops in `relay.c:1670-1687`, `:2091-2101` | Not in server mode, `!directory_permits_begindir_requests()`, conflux circuit, purpose ≠ OR, or hibernating. All before the `BEGIN_DIR` stream counter (`:4697`). | A hibernating HSDir, or one that left directory mode while still listed |
+| 2 | HTTP framing | Stream closed, no response | `dircache.c:1748-1754` → `directory.c:489-492` | Headers > `MAX_HEADERS_SIZE` (50000, `or.h:122`) or body > `MAX_DIR_UL_SIZE` (16 MB − 1, `dircache.c:48`). A stream that ends before the request is complete is also closed without a response. | Only if the circuit dies mid-upload |
+| 3 | Method | Stream closed, no response | `dircache.c:1772-1777` | Neither `GET` nor `POST` | No |
+| 4 | Public relay check | `503 Not acting as a public relay` | `dircache.c:1591-1597` | `!public_server_mode()`, checked before the URL is parsed | Briefly, after a relay leaves public mode |
+| 5 | URL | `400 Bad request` | `dircache.c:1599-1602` | `parse_http_command()` fails (`directory.c:304-351`): a missing token, or a version that isn't `HTTP/1.<n>\r`. A URL without the `/tor/` prefix is rewritten (`dircache.c:76-84`), not rejected. | No |
+| 6 | Anonymity | `503 Rejecting single hop HS descriptor post` | `dircache.c:1609-1612`; `connection_dir_is_anonymous()` at `directory.c:201-265` | Not linked (DirPort), linked edge closed, origin or closing circuit, no `p_chan`, or the previous hop is a client (`channel_is_client()`) | No |
+| 7 | HS URL | `400 Invalid HS descriptor. Rejected.` | `dircache.c:1543-1552`, `:1562-1564` | Version doesn't parse, command doesn't start with `/publish` (`strcmpstart()`, so `/publishX` passes), or version ≠ 3 | Only obsolete v2 software |
+| 8 | Decode | `400 Invalid HS descriptor. Rejected.` | `hs_cache.c:390-393` → `cache_dir_desc_new()` (`:110-135`) → `hs_desc_decode_plaintext()` (`hs_descriptor.c:2666`) | Plaintext layer only: size (≥ `HSV3MaxDescriptorSize`, a consensus parameter defaulting to `HS_DESC_MAX_LEN` = 50000), tokens and version, lifetime (maximum 12 h, no minimum), signing-key certificate (type, signing key, signature and expiry), revision counter field, superencrypted object type and minimum length, signature. The HSDir never decrypts the superencrypted layer; it can't, because it doesn't have the subcredential. | Only if the HSDir's clock is ≥ ~54 h ahead: services mint a fresh `HS_DESC_CERT_LIFETIME` (54 h) certificate per upload (`hs_service.c:1793-1796`) |
+| 9 | Revision counter | `400 Invalid HS descriptor. Rejected.` | `hs_cache.c:182-193` (`cache_store_v3_as_dir()`), after the OOM prune at `:158-177` | Valid descriptor, cached one has a revision counter ≥ this one. Logged at info level only, with the counters cast to `int`. | **Yes**, for several instances publishing for the same address, or after a clock step back. A single C Tor instance always uploads increasing counters: they are an order-preserving encryption, under a fixed key, of the seconds since the start of the time period, recomputed before each upload (`hs_service.c:3248-3274`, `:3550`). Onionbalance and Arti were not checked. |
+| 10 | Stored | `200 HS descriptor stored successfully.` | `dircache.c:1614-1621`, `hs_cache.c:210-221` | New key, or a strictly higher revision counter | Yes |
+
+Rows 7-9 send the same status and phrase. The service logs any 400 as
+"Malformed hidden service descriptor?" (`dirclient.c:2809-2817`), and C Tor
+doesn't retry that HSDir until its next upload, 60-120 min later
+(`hs_service.h:34-36`). `hs_cache_store_as_dir()` returns 0
+on success and −1 for **both** rows 8 and 9 (`hs_cache.c:378-411`), and its
+only non-test caller checks `< 0` (`dircache.c:1556`). Revision 1 claimed it
+already returned a tri-state 1/0/−1; that is false. So the split cannot be
+done in `dircache.c` alone without changing that return value.
+
+**With `patches/0001`-`0007`.** `connection_dir_allow_hs_request()`
+(`directory.c:293-337` in that tree) runs right after row 6. It **counts**
+every HS request in `tor_relay_dos_total{type="hsdir_request_total"}`,
+repeats in `type="hsdir_req_reused"` (and circuits in
+`type="hsdir_circ_reused"`), and unknown previous hops in
+`type="hsdir_unknown_prev_hop"`, whether or not enforcement is on. When
+enforcing, which is off by default, it closes a reused circuit
+(`END_CIRC_REASON_RESOURCELIMIT`, checked first) or answers `503 Rejecting HS
+request: previous hop is not a known relay`. Refused requests never reach rows
+7-10; with enforcement off, they are counted there as usual. Note for the
+series (not for these patches): patch 0003 only throttles HTTP-framing
+warnings. Row 8 still logs one unthrottled `log_warn` per junk descriptor
+(for example "Service descriptor is not parseable", stock
+`hs_descriptor.c:2682`, `:2692`, `:2703`, `:2708`), so a POST flood of junk
+descriptors can still flood the log. Patch 0004 lowers the row 2
+body limit for non-authorities to the HS descriptor maximum. Patch 0006 moves
+the signature-length check ahead of the certificate check in row 8. Patches
+0003, 0005 and 0007 don't change POST outcomes.
+
+`dos_note_refuse_single_hop_client()` is only called from
+`src/feature/rend/rendmid.c:53` (legacy introduction), so
+`tor_relay_dos_total{type="single_hop_refused"}` never counts row 6 (nor the
+GET-side check at `dircache.c:1364`).
+
+### B.2 Metric (`upstream/tor41350/0002-metrics-Count-onion-service-descriptor-uploads-by-ou.patch`)
+
 ```
-This runs unconditionally for **every** `connection_t` marked for close, using whatever `(conn->from_listener, conn->type, conn->socket_family)` values the struct holds at close time. In `rephist.c:1727-1734`, the `uint64_t` counter is clamped at `0` (`if (*val > 0) (*val)--`), preventing unsigned underflow but masking extra decrements once a bucket hits `0`.
-
-> **Pre-`connection_new()` rejections do not touch the gauge:** In `connection_handle_listener_read()`, `SocksPolicy` (`connection.c:2022-2031`), `DirPolicy` (`connection.c:2033-2042`), and `dos_conn_addr_get_defense_type()` (`connection.c:2043-2049`, which increments `tor_relay_connections{state="rejected"}` via `rep_hist_note_conn_rejected()` at `:2046`) all close `newsock` before `connection_new(new_type, socket_family)` is called at `connection.c:2059`. No `connection_t` exists, so `connection_mark_for_close_internal_()` never runs.
-
----
-
-### 2. Complete Table of Unpaired Lifecycle Paths
-
-| Path | Conn type (`type` label) | Direction (`from_listener` -> `direction` label) | Family (`socket_family` -> `family` label) | Rough frequency | Drift direction | Evidence (`tor-0.4.9.14` `8fe2745` & `main` `8dbbbe6`) |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Path 1a:** Accepted `OR` conn fails `connection_init_accepted_conn()` (synchronous `SSL_accept()` error/EOF on `accept()`) | `CONN_TYPE_OR` (`"OR"`) | `from_listener=1` (`"received"`) | `AF_INET` (`"ipv4"`) or `AF_INET6` (`"ipv6"`) | **High** during port scans, client connection churn, or listen-backlog timeouts when main loop is busy | **Down** toward `0` (missing increment, unpaired decrement) | `connection.c:2079` sets `newconn->from_listener = 1`; `:2099` adds conn; `:2105` calls `connection_init_accepted_conn()` (`:2126-2185`), which at `:2139` calls `connection_tls_start_handshake(TO_OR_CONN(conn), 1)` (`connection_or.c:1706-1743`) -> `connection_tls_continue_handshake()` (`:1739`) -> `tor_tls_handshake()` (`:1758`). If client `FIN`/`RST` or non-TLS bytes are already buffered at `accept()` time, `tor_tls_handshake()` fails synchronously (`:1761`) and calls `connection_or_close_for_error()` -> `connection_mark_for_close()` (`connection_or.c:1687`) -> `connection.c:1180` decrement. `connection_init_accepted_conn()` returns `-1` (`connection.c:2106-2108`), returning before `note_connection()` at `connection.c:2111`. |
-| **Path 1b:** Accepted transparent `AP` conn fails `connection_init_accepted_conn()` (`pf` / `netfilter` / `ipfw` destination lookup fails) | `CONN_TYPE_AP` (`"Socks"`) | `from_listener=1` (`"received"`) | `AF_INET` (`"ipv4"`) or `AF_INET6` (`"ipv6"`) | **Low–moderate** on relays/clients with `TransPort` when `ioctl`/`getsockopt` original-dst lookup fails | **Down** toward `0` (missing increment, unpaired decrement) | `connection.c:2105, 2166-2167` calls `connection_ap_process_transparent()` (`connection_edge.c:2899-2919`). When `connection_ap_get_original_destination()` fails (`:2914`), `:2916` calls `connection_mark_unattached_ap()` -> `connection_mark_for_close()` (`connection_edge.c:760`) -> `connection.c:1180` decrement, returning `-1` before `note_connection()` at `connection.c:2111`. *(Note: `connection_ext_or_start_auth()` at `ext_orport.c:643-660` unconditionally returns `0`—its cookie check is later in `handle_client_auth_nonce()` at `ext_orport.c:356` after `note_connection()`—and `CONN_TYPE_AP_NATD_LISTENER` at `connection.c:2168-2170` only sets state and returns `0`.)* |
-| **Path 2a:** Server-side linked `EXIT` + `DIR` pair created for every incoming `BEGIN_DIR` cell | `CONN_TYPE_EXIT` (`"Exit"`) and `CONN_TYPE_DIR` (`"Directory"`) | `from_listener=0` (`"initiated"`) on both | `EXIT`: always `AF_INET` (`"ipv4"`); `DIR`: previous hop's family (`"ipv4"` or `"ipv6"`) | **Very high** on DirCaches/HSDirs (1 pair per `BEGIN_DIR`; thousands/sec during `tor#41339` floods, tens/min normal) | **Down** toward `0` on `Exit/initiated/ipv4` and `Directory/initiated/ipv4,ipv6` (missing increment on both halves, unpaired decrement on both) | `connection_exit_begin_conn()` creates `edge_connection_new(CONN_TYPE_EXIT, AF_INET)` (`connection_edge.c:4284`, hardcoded `AF_INET`, `from_listener=0`) and for `RELAY_COMMAND_BEGIN_DIR` calls `connection_exit_connect_dir()` (`connection_edge.c:4326-4333, 4689-4750`), which creates `dir_connection_new(tor_addr_family(&exitconn->base_.addr))` (`:4706`, `from_listener=0`) and links them via `connection_link_connections()` (`:4718`). Neither half has a socket (`s = TOR_INVALID_SOCKET`) or calls `note_connection()`. Closing the stream (`connection_edge.c:310, 1246`, `directory.c:577`) marks both for close (`connection.c:1180`), decrementing `(Exit, initiated, ipv4)` and `(Directory, initiated, ipv4/ipv6)`. |
-| **Path 2b:** Client-side / relay self-fetch linked `AP` + `DIR` pair (`connection_ap_make_link()`) | `CONN_TYPE_AP` (`"Socks"`) and `CONN_TYPE_DIR` (`"Directory"`) | `from_listener=0` (`"initiated"`) on both | `AP`: `AF_INET` (`"ipv4"`); `DIR`: `AF_INET` (`"ipv4"`) or `AF_INET6` (`"ipv6"`) | **Moderate** on all relays and bridges (every consensus, microdescriptor, or authority cert self-fetch via `directory_initiate_request()`) | **Down** toward `0` on `Directory/initiated` and `Socks/initiated/ipv4` (missing increment on both halves, unpaired decrement on both) | `directory_send_command()` (`dirclient.c:1327, 1380-1435`) creates `dir_connection_new(socket_family)` and for tunneled requests calls `connection_ap_make_link()` (`connection_edge.c:3642-3701`), which allocates `entry_connection_new(CONN_TYPE_AP, AF_INET)` (`:3651`, `from_listener=0`) and links them (`:3666`). Neither calls `note_connection()`. Both call `connection_mark_for_close()` on completion (`connection.c:1180`). Because `Socks/initiated` is never incremented, it stays clamped at `0`; `Directory/initiated` pulls any real outbound DirPort socket gauge down. |
-| **Path 3:** Extended ORPort `EXT_OR` -> `OR` connection retyping after `USERADDR`/`TRANSPORT`/`DONE` | Opened as `CONN_TYPE_EXT_OR` (`"Extended OR"`); closed as `CONN_TYPE_OR` (`"OR"`) | `from_listener=1` (`"received"`) | `AF_INET` (`"ipv4"`) or `AF_INET6` (`"ipv6"`) | **High on PT bridges** (every obfs4/conjure/snowflake client connection accepted on `ExtORPort`) | `Extended OR/received` drifts **up** without bound; `OR/received` drifts **down** toward `0` (type mutation between open and close) | Accepted on `CONN_TYPE_EXT_OR_LISTENER` (`connection.c:1994-1996`), so `note_connection(true, newconn)` (`connection.c:2111`) increments `(Extended OR, received, af)`. After ExtOR authentication and `DONE`, `connection_ext_or_transition()` (`ext_orport.c:83-102`) executes `conn->base_.type = CONN_TYPE_OR;` at `ext_orport.c:91` without updating rephist. When the connection later closes, `connection.c:1180` decrements `(OR, received, af)`. |
-| **Path 4:** Outbound direct `DIR` connection fails `connection_connect()` | `CONN_TYPE_DIR` (`"Directory"`) | `from_listener=0` (`"initiated"`) | `AF_INET` (`"ipv4"`) or `AF_INET6` (`"ipv6"`) | **Low** (only when a direct non-tunneled `DirPort` connect fails immediately in `tor_connect_socket()`, e.g. `EADDRNOTAVAIL`/`ENETUNREACH`) | **Down** toward `0` (missing increment, unpaired decrement) | `directory_send_command()` (`dirclient.c:1327, 1353-1368`) allocates `dir_connection_new(socket_family)` and calls `connection_connect()` (`:1353`). If `connection_connect_sockaddr()` fails before `note_connection(false, conn)` (`connection.c:2317`), `dirclient.c:1367` calls `connection_mark_for_close(TO_CONN(conn))`, decrementing `(Directory, initiated, af)`. *(Contrast with `connection_or_connect()` at `connection_or.c:1375`, which correctly calls `connection_free_minimal()` instead of `connection_mark_for_close()`.)* |
-| **Path 5:** Unconnected `EXIT` stream in `resolving_streams` (or failed DNS) closed before `connection_exit_connect()` | `CONN_TYPE_EXIT` (`"Exit"`) | `from_listener=0` (`"initiated"`) | Always `AF_INET` (`"ipv4"`), even for IPv6 targets | **Moderate–high** on Exit relays (every stream that fails DNS resolution, receives `RELAY_COMMAND_END` while resolving, or is on a circuit torn down during DNS resolution) | **Down** toward `0` on `Exit/initiated/ipv4` (missing increment, unpaired decrement) | `connection_exit_begin_conn()` (`connection_edge.c:4284`) allocates `edge_connection_new(CONN_TYPE_EXIT, AF_INET)` (`from_listener=0`, `socket_family=AF_INET`) and places it on `on_circuit->resolving_streams` via `dns_resolve()` (`connection_edge.c:4401`). No OS socket is opened (`note_connection()` only runs inside `connection_exit_connect()` -> `connection_connect()` at `connection_edge.c:4611`). If DNS fails (`dns.c:673-678`), the circuit closes (`circuit_about_to_free()` at `circuitlist.c:2431`), the client sends `END` (`relay.c:1429`), or a deliver-window violation occurs (`relay.c:1729, 2117`), `connection_mark_for_close()` decrements `(Exit, initiated, ipv4)`. *(Note: `n_stream->socket_family` is only updated to `AF_INET6` inside `connection_exit_connect()` at `connection_edge.c:4610`, so even IPv6 streams decrement `ipv4` here; similarly, exit-policy rejections at `connection_edge.c:4562, 4590` run before `:4610` and record IPv6 exit policy rejections under `ipv4`.)* |
-| **Path 6:** `DNSPort` requests and controller `RESOLVE` commands (`dnsserv.c`) | `CONN_TYPE_AP` (`"Socks"`) | `from_listener=0` (`"initiated"`) | `AF_INET` (`"ipv4"`) | **Moderate** on instances running `DNSPort` or controller `RESOLVE` | **Down** toward `0` on `Socks/initiated/ipv4` (clamped at `0` in practice because `Socks/initiated` is never incremented) | `evdns_server_callback()` (`dnsserv.c:148`) and `dnsserv_launch_request()` (`dnsserv.c:228`) create a dummy socketless `entry_connection_new(CONN_TYPE_AP, AF_INET)` (`from_listener=0`) without calling `note_connection()`, and close it with `connection_mark_for_close()` (`dnsserv.c:167, 250, 294`). |
-| **Path 7:** Counted connection freed directly via `connection_free_minimal()` without `connection_mark_for_close()` on error paths | ` Listener`, `OR`, `Exit`, `Directory` | `from_listener=0` (`"initiated"`) | `AF_INET`, `AF_INET6`, `AF_UNIX` | **Rare** (requires `connection_add()` failure at fd cap or `connected_cell_format_payload()` failure) | **Up** (incremented, missing decrement) | Three error branches call `rep_hist_note_conn_opened()` and then free the connection without `connection_mark_for_close()`: (7a) `connection_listener_new()` (`connection.c:654`, then `connection_add()` fails at `:1742, 1768, 1799` -> `connection_free_minimal()`); (7b) `connection_connect_sockaddr()` (`note_connection()` at `connection.c:2317`, then `connection_add_connecting()` fails at `:2324-2328` -> `goto err` -> `tor_close_socket()`); (7c) `connection_exit_connect()` (`connection_connect()` counts at `connection_edge.c:4611`, then `connected_cell_format_payload()` fails at `:4628, 4666-4670` -> `connection_free()`). |
-
----
-
-### 3. Resolving the Open Question: Why Operators Saw `OR/received` Far Below Real OR Sockets
-
-In `analysis/flood-cost-and-constrained-hosts.md:108-110`, a relay under the `tor#41339` `BEGIN_DIR` flood reported:
-- `tor_relay_connections{type="OR",direction="received",state="opened"} = 598` during the flood, and **`33` after the flood**;
-- while the relay actually held **~4,800 open OR TCP sockets** (verified via `ss` and host fd tables).
-
-Paths 2 and 3 do not explain this on a standard relay (`Path 2` hits `Exit/initiated` and `Directory/initiated`, and `Path 3` only occurs when `ExtORPort` is configured). **Path 1a (`connection_init_accepted_conn()` failing synchronous `SSL_accept()` at `accept()` time) directly explains the `OR/received` collapse**, reinforced by one secondary family-accounting detail:
-
-1. **Primary mechanism (Path 1a under main-loop stall or scanner/client churn):**
-   - When `connection_handle_listener_read()` accepts a socket on `ORPort` (`CONN_TYPE_OR_LISTENER`), it sets `newconn->from_listener = 1` (`connection.c:2079`), registers the socket in the mainloop (`connection_add()`, `:2099`), and calls `connection_init_accepted_conn(newconn, listener->type)` (`connection.c:2105`).
-   - For `CONN_TYPE_OR`, `connection_init_accepted_conn()` (`connection.c:2139`) immediately invokes `connection_tls_start_handshake(TO_OR_CONN(conn), 1)` (`connection_or.c:1706-1743`), which calls `connection_tls_continue_handshake(conn)` (`connection_or.c:1739`) -> `tor_tls_handshake(conn->tls)` (`connection_or.c:1758`).
-   - On a fresh connection where the client has not yet delivered packets, `SSL_accept()` returns `SSL_ERROR_WANT_READ` (`TOR_TLS_WANTREAD`), so `connection_tls_continue_handshake()` returns `0`, `connection_init_accepted_conn()` returns `0`, and `note_connection(true, newconn)` at `connection.c:2111` increments `OR/received`.
-   - **However**, when the relay's main thread is busy processing a flood (or when TCP port scanners / impatient clients connect and disconnect quickly), the kernel completes the TCP 3-way handshake in the listen backlog and buffers either the client's `FIN`/`RST` or non-TLS bytes *before* Tor calls `accept()`.
-   - When `accept()` finally runs and `connection_tls_start_handshake()` calls `tor_tls_handshake()`, `SSL_accept()` immediately reads those buffered bytes/EOF and returns `TOR_TLS_CLOSE` or `TOR_TLS_ERROR_*` **synchronously inside `connection_init_accepted_conn()`**.
-   - `connection_tls_continue_handshake()` (`connection_or.c:1761-1765`) immediately calls `connection_or_close_for_error(conn, 0)` -> `connection_mark_for_close(TO_CONN(conn))` (`connection_or.c:1687`) -> `connection_mark_for_close_internal_()` (`connection.c:1180`), which **decrements `OR/received`** (`from_listener=1, type=CONN_TYPE_OR`).
-   - `connection_init_accepted_conn()` then returns `-1` to `connection_handle_listener_read()` (`connection.c:2105-2108`), which returns early **without calling `note_connection(true, newconn)` at `connection.c:2111`**.
-   - Every such aborted inbound connection subtracts `1` from the `OR/received` gauge while the ~4,800 established relay-to-relay OR sockets remain open. Then, when the flood ends and several hundred idle OR connections close normally, their legitimate decrements subtract further from the already-understated gauge, leaving it at `33` (and `0` shortly thereafter) while thousands of OR sockets remain `ESTAB`.
-
-2. **Secondary comparison pitfall (`direction` and `family` labels vs. `ss`):**
-   - `tor_relay_connections` splits connections across four time series per type: `direction="received"|"initiated"` × `family="ipv4"|"ipv6"`, whereas `ss -s` or an unfiltered `ss -tnp` counts all OR sockets together (`received + initiated`, `ipv4 + ipv6`).
-   - On dual-stack Linux hosts where `ORPort` uses a dual-stack socket (`IPV6_V6ONLY=0`), `ss` displays IPv4-mapped peers (`::ffff:a.b.c.d`) under the `tcp6` (`AF_INET6`) listener, whereas `tor_accept_socket_nonblocking()` inspects the peer address and `connection_handle_listener_read()` sets `socket_family = tor_addr_family(&addr)` (`connection.c:2058`), recording IPv4 peers under `family="ipv4"`. Even summing all four `{type="OR", direction=*, family=*}` series on the affected relay, however, could not recover the ~4,800 sockets once Path 1a drained `OR/received/ipv4` to `33`.
-
----
-
-### 4. Private Loopback Lab Reproduction & Transcript Summary
-
-#### Lab Environment
-- **Isolation:** `docker run --rm --network none` (loopback `127.0.0.1` only; no external interfaces or routes).
-- **Topology:** 4-node Chutney network (`3` private DirAuths/relays `test000a`–`test002a` + `1` target Exit/HSDir relay `test003r` with `ORPort 127.0.0.1:9003`, `DirPort 127.0.0.1:9033`, `ControlPort 127.0.0.1:8003`, `MetricsPort 127.0.0.1:9103`, `ExitRelay 1`, `ExitPolicy accept 127.0.0.1:*`).
-- **Per-path temporary instrumentation:** In the stock binary, `rep_hist_note_conn_opened()` and `rep_hist_note_conn_closed()` were instrumented to track `in_rephist_opened` as a shadow check only (preserving stock `tor-0.4.9.14` gauge behavior) and classify every unpaired close into `path1a_or_accept_init_fail`, `path1b_ap_trans_accept_init_fail`, `path2a_begindir_linked_exit`, `path2a_begindir_linked_dir`, `path2b_client_linked_ap_or_dir`, `path3_ext_or_retyped_close`, `path4_unconnected_dir_close`, `path5_unconnected_exit_close`, and `path6_unconnected_ap_close`, recording both `(effective)` decrements (`gauge > 0`) and `(clamped)` decrements (`gauge == 0`).
-
-#### Summary of Lab Results (`Stock 0.4.9.14` vs. `Patched 0.4.9.14`)
-
-| Condition | Metric / Ground Truth | Stock `0.4.9.14` (Instrumented) | Patched `0.4.9.14` (`0001` Applied) |
-| :--- | :--- | :--- | :--- |
-| **Condition 1: Idle** (after bootstrap) | `OR/received/ipv4` gauge | `7` | `8` |
-| | `OR/initiated/ipv4` gauge | `4` | `3` |
-| | `GETINFO orconn-status` | `11` CONNECTED (`7` inbound, `4` outbound) | `11` CONNECTED (`8` inbound, `3` outbound) |
-| | `ss -tnp` (`OR_inbound` / `OR_outbound`) | `7` / `4` | `8` / `3` |
-| | Unpaired decrements so far | `path2a_begindir_linked_dir=3`, `path2a_begindir_linked_exit=3`, `path2b_client_linked_dir=2`, `path2b_client_linked_ap=2` (all clamped at `0`) | `0` |
-| **Condition 2A: 4 normal OR TLS handshakes + close** | `OR/received/ipv4` gauge after close | `7` (`== ss -tnp`) | `8` (`== ss -tnp`) |
-| | `path1a_or_accept_init_fail` | `0` | `0` |
-| **Condition 2B: 10 handshake-incomplete connections** (5 non-TLS + 5 immediate EOF buffered at `accept()`) | `OR/received/ipv4` gauge | **`0` (drifted from `7` -> `0`)** | **`8` (unchanged, `== ss -tnp`)** |
-| | `GETINFO orconn-status` | `11` CONNECTED (`7` inbound, `4` outbound) | `11` CONNECTED (`8` inbound, `3` outbound) |
-| | `ss -tnp` (`OR_inbound_ESTAB`) | **`7`** (7 real sockets missing from gauge) | **`8`** (exact match) |
-| | `path1a_or_accept_init_fail` | **`10`** (`7` effective + `3` clamped) | `0` |
-| **Condition 3A: Open 5 real outbound Exit streams** | `Exit/initiated/ipv4` gauge | `5` | `5` |
-| | `ss -tnp` (`Exit_outbound_ESTAB`) | `5` | `5` |
-| **Condition 3B: Send 25 `BEGIN_DIR` streams** over an OR circuit | `Exit/initiated/ipv4` gauge | **`0` (drifted from `5` -> `0`)** | **`5` (unchanged, `== ss -tnp`)** |
-| | `ss -tnp` (`Exit_outbound_ESTAB`) | **`5`** (5 real Exit sockets missing from gauge) | **`5`** (exact match) |
-| | `path2a_begindir_linked_exit` (cumulative) | **`28`** (`5` effective + `23` clamped) | `0` |
-| | `path2a_begindir_linked_dir` (cumulative) | **`28`** (`0` effective + `28` clamped) | `0` |
-| **Condition 3C: Close the 5 real outbound Exit streams** | `Exit/initiated/ipv4` gauge | `0` (`5` legitimate closes hit the `0` clamp!) | `0` (`5` legitimate closes decrement `5 -> 0`) |
-| | `ss -tnp` (`Exit_outbound_ESTAB`) | `0` | `0` |
-
-#### Verbatim Excerpts from the Lab Transcript
-
-Stock `tor-0.4.9.14` (`Condition 2B`, `Condition 3B`, and `Condition 3C`):
-```text
-======================================================================
-SNAPSHOT: CONDITION 2B — AFTER 10 HANDSHAKE-INCOMPLETE CONNECTIONS (Path 1a -> OR/received drifts to 0!)
-======================================================================
-[2] Kernel sockets via `ss -tnp` for relay 003r:
-  Summary: OR_inbound_ESTAB=7, OR_outbound_ESTAB=4 (total OR ESTAB=11), Exit_outbound_ESTAB=0, Dir_inbound=0, Dir_outbound=0
-
-[3] MetricsPort `tor_relay_connections` (AF_INET) vs Ground Truth:
-  Type             Direction   created  opened(gauge)  ground_truth  paired_close(eff/clamp)
-  OR listener      initiated         1              1             1                      0/0
-  OR               received         14              0             7                      7/0
-  OR               initiated         4              4             4                      0/0
-  Directory        initiated        43              0             0                     43/0
-  Exit             initiated         0              0             0                      0/0
-
-[4] Per-path Unpaired Decrement Attribution (from instrumentation):
-  path=path2a_begindir_linked_dir     type=Directory  direction=initiated  family=ipv4     total=   3 (effective_drift=  0, clamped_at_0=   3)
-  path=path2b_client_linked_dir       type=Directory  direction=initiated  family=ipv4     total=   2 (effective_drift=  0, clamped_at_0=   2)
-  path=path2a_begindir_linked_exit    type=Exit       direction=initiated  family=ipv4     total=   3 (effective_drift=  0, clamped_at_0=   3)
-  path=path1a_or_accept_init_fail     type=OR         direction=received   family=ipv4     total=  10 (effective_drift=  7, clamped_at_0=   3)
-  path=path2b_client_linked_ap        type=Socks      direction=initiated  family=ipv4     total=   2 (effective_drift=  0, clamped_at_0=   2)
-
-[6] `CONN_AUDIT` notice.log entries (total logged=20, showing last 6):
-  CONN_AUDIT unpaired_decrement path=path1a_or_accept_init_fail type=OR direction=received family=AF_INET linked=0 purpose=0 gauge_before=3 gauge_after=2 mark_site=src/core/or/connection_or.c:1687
-  CONN_AUDIT unpaired_decrement path=path1a_or_accept_init_fail type=OR direction=received family=AF_INET linked=0 purpose=0 gauge_before=2 gauge_after=1 mark_site=src/core/or/connection_or.c:1687
-  CONN_AUDIT unpaired_decrement path=path1a_or_accept_init_fail type=OR direction=received family=AF_INET linked=0 purpose=0 gauge_before=1 gauge_after=0 mark_site=src/core/or/connection_or.c:1687
-  CONN_AUDIT unpaired_decrement path=path1a_or_accept_init_fail type=OR direction=received family=AF_INET linked=0 purpose=0 gauge_before=0 gauge_after=0 mark_site=src/core/or/connection_or.c:1687
-
-======================================================================
-SNAPSHOT: CONDITION 3B — AFTER 25 BEGIN_DIR STREAMS (Path 2a -> Exit/initiated drifts from 5 to 0 while 5 Exit sockets remain ESTAB!)
-======================================================================
-[2] Kernel sockets via `ss -tnp` for relay 003r:
-  Summary: OR_inbound_ESTAB=7, OR_outbound_ESTAB=4 (total OR ESTAB=11), Exit_outbound_ESTAB=5, Dir_inbound=0, Dir_outbound=0
-
-[3] MetricsPort `tor_relay_connections` (AF_INET) vs Ground Truth:
-  Type             Direction   created  opened(gauge)  ground_truth  paired_close(eff/clamp)
-  OR               received         14              0             7                      7/0
-  OR               initiated         4              4             4                      0/0
-  Directory        initiated        47              0             0                     47/0
-  Exit             initiated         5              0             5                      0/0
-
-[4] Per-path Unpaired Decrement Attribution (from instrumentation):
-  path=path2a_begindir_linked_dir     type=Directory  direction=initiated  family=ipv4     total=  28 (effective_drift=  0, clamped_at_0=  28)
-  path=path2b_client_linked_dir       type=Directory  direction=initiated  family=ipv4     total=   2 (effective_drift=  0, clamped_at_0=   2)
-  path=path2a_begindir_linked_exit    type=Exit       direction=initiated  family=ipv4     total=  28 (effective_drift=  5, clamped_at_0=  23)
-  path=path1a_or_accept_init_fail     type=OR         direction=received   family=ipv4     total=  10 (effective_drift=  7, clamped_at_0=   3)
-  path=path2b_client_linked_ap        type=Socks      direction=initiated  family=ipv4     total=   2 (effective_drift=  0, clamped_at_0=   2)
-
-======================================================================
-SNAPSHOT: CONDITION 3C — AFTER CLOSING THE 5 REAL EXIT SOCKETS (paired closes hit the 0 clamp!)
-======================================================================
-  Type             Direction   created  opened(gauge)  ground_truth  paired_close(eff/clamp)
-  Exit             initiated         5              0             0                      0/5
-```
-
-Patched `tor-0.4.9.14` (`0001` applied, `Condition 2B`, `Condition 3B`, and `Condition 3C`):
-```text
-======================================================================
-SNAPSHOT: CONDITION 2B — AFTER 10 HANDSHAKE-INCOMPLETE CONNECTIONS
-======================================================================
-[2] Kernel sockets via `ss -tnp` for relay 003r:
-  Summary: OR_inbound_ESTAB=8, OR_outbound_ESTAB=3 (total OR ESTAB=11), Exit_outbound_ESTAB=0, Dir_inbound=0, Dir_outbound=0
-
-[3] MetricsPort `tor_relay_connections` (AF_INET):
-  Type             Direction   created  opened(gauge)
-  OR listener      initiated         1              1
-  OR               received         15              8
-  OR               initiated         3              3
-[4] Per-path Unpaired Decrement Attribution:
-  (none)
-
-======================================================================
-SNAPSHOT: CONDITION 3B — AFTER 25 BEGIN_DIR STREAMS
-======================================================================
-[2] Kernel sockets via `ss -tnp` for relay 003r:
-  Summary: OR_inbound_ESTAB=8, OR_outbound_ESTAB=3 (total OR ESTAB=11), Exit_outbound_ESTAB=5, Dir_inbound=0, Dir_outbound=0
-
-[3] MetricsPort `tor_relay_connections` (AF_INET):
-  Type             Direction   created  opened(gauge)
-  OR               received         15              8
-  OR               initiated         3              3
-  Exit             initiated         5              5
-[4] Per-path Unpaired Decrement Attribution:
-  (none)
-
-======================================================================
-SNAPSHOT: CONDITION 3C — AFTER CLOSING THE 5 REAL EXIT SOCKETS
-======================================================================
-[2] Kernel sockets via `ss -tnp` for relay 003r:
-  Summary: OR_inbound_ESTAB=8, OR_outbound_ESTAB=3 (total OR ESTAB=11), Exit_outbound_ESTAB=0, Dir_inbound=0, Dir_outbound=0
-
-[3] MetricsPort `tor_relay_connections` (AF_INET):
-  Type             Direction   created  opened(gauge)
-  Exit             initiated         5              0
-```
-
----
-
-### 5. Fix Rationale & Comparison Against Alternatives
-
-#### Implemented Fix (`0001-rephist-Pair-opened-connection-gauge-decrements-with.patch`)
-
-We add four fields to `struct connection_t` (`src/core/mainloop/connection_st.h`):
-- `unsigned int in_rephist_opened:1;`
-- `unsigned int rephist_from_listener:1;`
-- `unsigned int rephist_type:5;`
-- `int rephist_socket_family;`
-
-And two helper functions in `src/core/mainloop/connection.c`:
-1. `connection_note_opened_in_rephist(connection_t *conn, bool from_listener)`:
-   - Called at the three open-accounting sites (`listener_connection_new()` at `connection.c:654`, `connection_handle_listener_read()` at `connection.c:2111` via `note_connection()`, and `connection_connect_sockaddr()` at `connection.c:2317` via `note_connection()`).
-   - Guards against double-counting (`if (BUG(conn->in_rephist_opened)) return;`), snapshots `(from_listener, conn->type, conn->socket_family)` on `conn`, sets `conn->in_rephist_opened = 1`, and calls `rep_hist_note_conn_opened()`.
-2. `connection_note_closed_in_rephist(connection_t *conn)`:
-   - Called from `connection_mark_for_close_internal_()` (`connection.c:1203`) **and** as a safety net from `connection_free_minimal()` (`connection.c:723`).
-   - Does nothing unless `conn->in_rephist_opened` is set; when set, clears `conn->in_rephist_opened = 0` and calls `rep_hist_note_conn_closed(conn->rephist_from_listener, conn->rephist_type, conn->rephist_socket_family)`.
-
-This single invariant guarantees a strict 1-to-1 bijection between increments and decrements across **all** paths (Paths 1a, 1b, 2a, 2b, 3, 4, 5, 6, and 7).
-
-#### Comparison Against Alternatives
-
-| Approach | Path 1a/1b (init fail at accept) | Path 2a/2b (linked conns) | Path 3 (`EXT_OR` -> `OR` retype) | Path 4/5/6 (unconnected `DIR`/`EXIT`/`AP`) | Path 7 (counted conn freed without mark) | Assessment |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1. `in_rephist_opened` bit + stored `(from_listener, type, family)` (Selected)** | **Fixed** | **Fixed** | **Fixed** | **Fixed** | **Fixed** (via `connection_free_minimal()` safety net) | Enforces the exact accounting invariant at the data-structure level; immune to future connection types or retyping. |
-| **2. Skip `if (!conn->linked)` in `connection_mark_for_close_internal_()`** | Broken | Fixed | Broken | Broken (`resolving_streams` `EXIT` conns, failed direct `DIR` connects, and `dnsserv` `AP` conns have `linked == 0`) | Broken | Fixes only `BEGIN_DIR` / tunneled dir pairs; leaves `OR/received` drift (Path 1a) and unconnected `EXIT` DNS failures (Path 5) completely unfixed. |
-| **3. Count in `connection_add()` instead of `note_connection()`** | Partially broken (`connection_add_nonlinked()` at `connection.c:2099` runs *before* `connection_init_accepted_conn()`, which works for open/close pairing, **but** counts rejected/failed TLS handshakes in `total` created connections `status.c:150` or splits `opened` from `created`) | Requires `if (SOCKET_OK(conn->s))` guard (`connection_add_linked()` also goes through `connection_add_impl()`) | Still broken unless original `type` is stored on `conn` | Fixed if guarded by `SOCKET_OK(conn->s)` | Still broken if `connection_add()` itself fails after `listener_connection_new()` | Couples rephist socket metrics to mainloop event registration rather than `note_connection()`, and still requires per-connection state to handle `EXT_OR` -> `OR` retyping. |
-
-*(Optional follow-up on Path 3: storing `rephist_type` ensures an `ExtORPort` connection increments and decrements `Extended OR/received`. If operators instead want a connection to move from the `Extended OR` gauge to the `OR` gauge at the moment `connection_ext_or_transition()` retypes it at `ext_orport.c:91`, a 4-line helper can decrement `Extended OR`, update `conn->rephist_type = CONN_TYPE_OR`, and increment `OR`.)*
-
-#### Should Linked Connections Get Their Own Series?
-
-- **`tor_relay_connections` should remain strictly OS-socket-backed.** Every other label in `tor_relay_connections` (`Listener`, `OR`, `Control`, `Metrics`, etc.) represents a kernel socket consuming an fd. Mixing socketless in-process `linked` streams into `tor_relay_connections` would conflate TCP sockets with circuit-level streams and make `type="Exit",direction="initiated"` unusable for monitoring outbound socket pressure on relays that are both Exit and HSDir/DirCache.
-- **A separate gauge for server-side linked directory streams is well-motivated.** As proposed in our HSDir defense metrics draft, exporting a dedicated gauge for active server-side directory streams (or splitting by `DIR_CONN_STATE_SERVER_COMMAND_WAIT` vs. `DIR_CONN_STATE_SERVER_WRITING`) gives operators direct visibility into queued in-memory directory streams during a `BEGIN_DIR` flood without polluting socket gauges.
-
----
-
-## Part B: HS Descriptor POST Outcomes (`tor_relay_hsdir_post_total`)
-
-### 1. Complete Outcome Table (Stock `0.4.9.14` and With `patches/0001`–`0007` Applied)
-
-All paths below trace an incoming stream or connection targeting an HSDir upload (`POST /tor/hs/3/publish`) from `BEGIN_DIR` arrival (`connection_exit_begin_conn()`, `connection_edge.c:4326`) through `connection_dir_process_inbuf()` (`directory.c:2243`), `directory_handle_command()` (`directory.c:2168`), `directory_handle_command_post()` (`dircache.c:1586-1635`), `handle_post_hs_descriptor()` (`dircache.c:1545-1579`), `hs_cache_store_as_dir()` (`hs_cache.c:295-336`), `hs_desc_decode_descriptor()` (`hs_descriptor.c:2678-2726`), and `cache_store_v3_as_dir()` (`hs_cache.c:192-265`).
-
-| Stage / Patch | HTTP Status | Reason Phrase | `function:line` (`tor-0.4.9.14` & `main`) | Condition | Can a Legitimate Service Hit This? (Stock C Tor / Arti / Onionbalance) |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Pre-HTTP / Stream (`Stock`)** | None (stream closed before HTTP parse) | — | `connection_dir_process_inbuf()` (`directory.c:2261-2269`) -> `fetch_from_buf_http()` (`proto_http.c:142-254`) | Client closes stream (`END` / circuit tear-down) before sending `\r\n\r\n` or full `Content-Length`, headers exceed `MAX_HEADERS_SIZE` (`24576`), body exceeds `MAX_DIR_UL_SIZE` (`20971520` in stock), or `Content-Length` is unparseable (`proto_http.c:196-226`). | **Rarely (network transient only):** Only if an upload circuit dies mid-stream before the HTTP request finishes arriving. |
-| **Pre-HTTP / Stream (`Patch 0004`)** | None (stream closed in `proto_http.c`) | — | `connection_dir_process_inbuf()` (`directory.c:2264`) + `fetch_from_buf_http()` (`proto_http.c:218`) + `dir_max_upload_body_size()` (`directory.c:2227`) | `Content-Length` or buffered body exceeds `MIN(HSV3MaxDescriptorSize, 16 MB)` (default `50 KB`). | **No** (unless an operator configures a non-standard `HSV3MaxDescriptorSize` above the HSDir's limit). |
-| **Pre-HTTP / Stream (`Patch 0003`)** | None (stream closed) | — | `fetch_from_buf_http()` (`proto_http.c:199, 211, 224`) | Same as stock malformed HTTP, with `LOG_WARN` rate-limited / downgraded so floods cannot spam logs. | **No.** |
-| **Pre-HTTP / Stream (`Patch 0005`)** | Status already queued (`200`/`400`/`503`) | — | `connection_dir_process_inbuf()` (`directory.c:2257-2260`) | Trailing bytes sent after `DIR_CONN_STATE_SERVER_COMMAND_WAIT` exited are drained via `buf_clear(conn->base_.inbuf)`. | **No.** |
-| **Command Dispatch (`Stock`)** | `503` | `"Directory unavailable"` | `directory_handle_command_post()` (`dircache.c:1591-1594`) | `!public_server_mode(get_options())` (checked *before* `parse_http_url()`). | **Yes (transient consensus race):** If a relay was recently listed in a consensus and subsequently toggled `BridgeRelay` / non-public mode before its descriptor aged out. |
-| **Command Dispatch (`Stock`)** | `400` | `"Bad request"` | `directory_handle_command_post()` (`dircache.c:1599-1603`) -> `parse_http_url()` (`directory.c:1804-1845`) | First line does not match `HTTP/1.x`, URL is missing or doesn't start with `/`, or exceeds `MAX_DIR_URL_LEN`. | **No.** |
-| **Command Dispatch (`Stock`)** | `503` | `"Service unavailable"` | `directory_handle_command_post()` (`dircache.c:1609-1613`) -> `connection_dir_is_anonymous()` (`directory.c:235-265`) | URL starts with `/tor/hs/` on a non-`linked` connection (direct `DirPort`), or circuit has `on_circuit->purpose != CIRCUIT_PURPOSE_OR` (i.e. single-hop `CIRCUIT_PURPOSE_C_GENERAL` or missing `p_chan`). | **No** for standard services. *(Only a deliberate `HiddenServiceSingleHopMode 1` + `HiddenServiceNonAnonymousMode 1` test instance would send single-hop.)* |
-| **Command Dispatch (`Patch 0001`)** | `503` | `"Service unavailable"` | `directory_handle_command_post()` (`dircache.c:1614` w/ `0001`) -> `hsdir_reject_if_unknown_prev_hop()` (`dircache.c:1244-1269`) | When `DoSHSDirRefuseUnknownPrevHop 1` (or `auto` with consensus param `1`): previous hop `p_chan->identity_digest` is not in the live consensus routerlist (`nodelist_Get_node_by_id() == NULL`). | **Yes (transient consensus skew):** A legitimate service whose middle relay just dropped out of the latest consensus (or joined a newer consensus the HSDir hasn't fetched yet) can hit this on a single circuit and will retry over a new circuit. |
-| **Command Dispatch (`Patch 0002`)** | None (circuit closed with `END_CIRC_REASON_TORPROTOCOL`) | — | `directory_handle_command_post()` (`dircache.c:1618` w/ `0002`) -> `hsdir_reject_if_circ_already_used()` (`dircache.c:1273-1305`) | `or_circ->hsdir_req_seen` is already `1` and `DoSHSDirOneReqPerCircuit` is enforcing. | **No:** Stock C Tor, Arti (`tor-hsservice`), and Onionbalance always build a fresh 4-hop `HS_SERVICE_HSDIR` circuit per descriptor upload/fetch and never reuse a single HSDir circuit for two `/tor/hs/` requests. |
-| **Command Dispatch (`Stock`)** | `400` | `"Invalid/unrecognizedalv post request"` (`"Invalid/unrecognized post request"` at `dircache.c:1632`) | `directory_handle_command_post()` (`dircache.c:1625-1632`) | URL does not start with `/tor/hs/` and is not `/tor/post/vote` or `/tor/post/consensus-signature` on an authority. | **No.** |
-| **HS POST URL (`Stock`)** | `400` | `"Invalid hs descriptor"` | `handle_post_hs_descriptor()` (`dircache.c:1556-1565`) -> `parse_hs_version_from_post()` (`dircache.c:1519-1540`) | URL after `/tor/hs/` does not parse as integer version `3` (`HS_VERSION_THREE`) with exact subpath `"/publish"` (e.g., `/tor/hs/2/publish`, `/tor/hs/bad/publish`, `/tor/hs/3/other`). | **No** for v3 services (only obsolete v2 clients/services attempting `/tor/hs/2/publish`). |
-| **HS Cache Decode (`Stock`)** | `400` | `"Invalid hs descriptor"` | `handle_post_hs_descriptor()` (`dircache.c:1570-1575`) -> `hs_cache_store_as_dir()` (`hs_cache.c:302-312`) -> `hs_desc_decode_descriptor()` (`hs_descriptor.c:2678-2726`) -> `hs_desc_decode_plaintext()` (`hs_descriptor.c:2249-2437`) | Fails any plaintext validation check:<br>1. `strlen(encoded) >= hs_cache_get_max_descriptor_size()` (`HSV3MaxDescriptorSize`, default `51200`, `hs_descriptor.c:2261-2271`);<br>2. Tokenization or `"hs-descriptor 3"` header fails (`:2279-2315`);<br>3. `descriptor-lifetime` missing, `< 30` min, or `> 720` min (`:2318-2342`);<br>4. `descriptor-signing-key-cert` missing, unparseable, wrong `cert_type` (`!= ED25519_V_SIGNING`), wrong `key_type`, **expired or not-yet-valid** vs. `approx_time()`, or bad cert signature (`cert_parse_and_validate()`, `hs_descriptor.c:2079-2142`, `:2345-2356`);<br>5. `revision-counter` missing or non-integer (`:2359-2369`);<br>6. `superencrypted` blob missing or fails base64 / length (`:2371-2399`);<br>7. `signature` token missing, wrong length (`Patch 0006` checks `strlen(sig_b64) != ED25519_SIG_BASE64_LEN` *before* `cert_parse_and_validate()` at `hs_descriptor.c:2345`), or `ed25519_checksig_prefixed()` fails (`:2402-2429`). | **Yes (clock skew only):** If a legitimate service host (C Tor, Arti, or Onionbalance) or the HSDir itself has significant clock skew (`cert->exp_field * 3600 < approx_time()` in `tor_cert_checksig()`), step 4 rejects the signing cert (`HS_DESC_DECODE_PLAINTEXT_ERROR`). Otherwise **No**. |
-| **HS Cache Decode (`Stock`)** | `400` | `"Invalid hs descriptor"` | `hs_cache_store_as_dir()` (`hs_cache.c:305`) -> `hs_desc_decode_descriptor()` (`hs_descriptor.c:2704`) -> `hs_desc_decode_superencrypted()` (`hs_descriptor.c:2182-2236`) | Superencrypted layer fails message header, MAC, or length check (`HS_DESC_DECODE_SUPERENC_ERROR`). | **No.** |
-| **HS Cache Revision Check (`Stock`)** | `400` | `"Invalid hs descriptor"` | `handle_post_hs_descriptor()` (`dircache.c:1570-1575`) -> `hs_cache_store_as_dir()` (`hs_cache.c:320`) -> `cache_store_v3_as_dir()` (`hs_cache.c:222-233`) | Descriptor is **cryptographically valid**, but an entry for the same `blinded_pubkey` already exists in `hs_cache_v3_dir` with `cache_entry->desc->plaintext_data.revision_counter >= desc->plaintext_data.revision_counter`. Logs `LOG_INFO`: `"Descriptor revision counter in our cache is %llu. Which is >= to the one we just received (%llu). Rejecting!"` and returns `0` (`handle_post_hs_descriptor` returns `200` only if `hs_cache_store_as_dir(body) > 0` at `dircache.c:1570`). | **YES — Frequently hit by legitimate services:**<br>• **Onionbalance:** Multiple Onionbalance frontend instances (or a frontend retrying/reloading state whose OPE/timestamp-derived revision counter matches or trails another frontend's recent upload) routinely publish descriptors with `revision_counter <= cached` to overlapping HSDirs.<br>• **Active-active / failover C Tor or Arti instances:** Two instances sharing an identity key without shared state (or after a VM snapshot/container restart with a slightly older clock/OPE counter) produce `revision_counter <= cached`.<br>• **Stock C Tor / Arti:** Within a single uninterrupted process, C Tor enforces `service->state.obfuscated_last_revision_counter + 1` (`hs_service.c:1726`) and Arti enforces monotonic revision counters, so a single instance normally increments on rebuild; however, process restarts within the same OPE cipher step or duplicate instances hit `<=`. |
-| **HS Cache Store (`Stock`)** | `200` | `"Service descriptor (v3) stored"` | `handle_post_hs_descriptor()` (`dircache.c:1570-1571`) -> `directory_handle_command_post()` (`dircache.c:1620-1622`) | `hs_cache_store_as_dir(body) > 0` (new `blinded_pubkey` or strictly higher `revision_counter`). | **Yes** (normal descriptor publish). |
-
----
-
-### 2. Metric Proposal, Hook Points, and Reconciliation Identity Check
-
-#### Why `400` Must Be Split by Reason
-
-In stock `0.4.9.14`, `handle_post_hs_descriptor()` (`src/feature/dircache/dircache.c:1570`) treats both `hs_cache_store_as_dir(body) < 0` (corrupt/forged descriptor) and `hs_cache_store_as_dir(body) == 0` (cryptographically valid descriptor whose `revision_counter` is `<=` the cached one) identically, returning `400 "Invalid hs descriptor"`.
-However, `hs_cache_store_as_dir()` (`src/feature/hs/hs_cache.c:295-336`) **already returns a tri-state `int`**:
-- `1`: stored (`200 OK`);
-- `0`: valid descriptor rejected solely by the `revision_counter <= cached` check in `cache_store_v3_as_dir()` (`hs_cache.c:222-233`);
-- `-1`: failed decoding, size, cert, or signature validation (`hs_cache.c:305`).
-
-#### Proposed Metric & Labels (`0002-relay_metrics-Export-HS-descriptor-POST-outcome-coun.patch`)
-
-We add `tor_relay_hsdir_post_total` (`RELAY_METRICS_NUM_HSDIR_POST`) to `src/feature/relay/relay_metrics.c`:
-```prometheus
-# HELP tor_relay_hsdir_post_total Total number of HS descriptor POST requests by HTTP status and reason
-# TYPE tor_relay_hsdir_post_total counter
-tor_relay_hsdir_post_total{status="200",reason="ok"} ...
-tor_relay_hsdir_post_total{status="400",reason="rev_counter"} ...
-tor_relay_hsdir_post_total{status="400",reason="bad_url"} ...
-tor_relay_hsdir_post_total{status="400",reason="invalid_desc"} ...
-```
-
-Exact hook points:
-1. `handle_post_hs_descriptor()` (`src/feature/dircache/dircache.c:1556-1565`): when `parse_hs_version_from_post()` fails or `version != HS_VERSION_THREE`, call `rep_hist_note_hsdir_post(HSDIR_POST_REJECTED_BAD_URL)`.
-2. `hs_cache_store_as_dir()` (`src/feature/hs/hs_cache.c:305-333`):
-   - `hs_desc_decode_descriptor() < 0` (`hs_cache.c:305`): call `rep_hist_note_hsdir_post(HSDIR_POST_REJECTED_INVALID_DESC)`.
-   - `cache_store_v3_as_dir() == 0` (`hs_cache.c:320`): call `rep_hist_note_hsdir_post(HSDIR_POST_REJECTED_REV_COUNTER)`.
-   - Stored (`hs_cache.c:331`): call `rep_hist_note_hsdir_post(HSDIR_POST_OK)`.
-
-#### Verification Against the Reconciliation Identity
-
-Our metrics draft proposes the reconciliation identity:
-$$\text{BEGIN\_DIR streams} \approx \text{unparsed} + \text{non\_hs} + \text{hs} + \text{single\_hop\_rejected} + \text{command\_wait}$$
-
-Auditing `tor-0.4.9.14` (and `patches/0001`–`0007`) against every path a `BEGIN_DIR` stream can take reveals **four exact boundary details** that must be accounted for so the identity closes without a gap:
-
-1. **`single_hop_rejected` is NOT counted by `tor_relay_dos_total{type="single_hop_refused"}` in stock `0.4.9.14`:**
-   - `dos_note_refuse_single_hop_client()` (`src/core/or/dos.c:273`) is called **only** in `rend_mid_establish_intro_legacy()` at `src/feature/rend/rendmid.c:53`.
-   - It is **never** called in `connection_dir_is_anonymous()` (`src/feature/dircommon/directory.c:235-265`) or in `dircache.c:1319-1323` (`GET /tor/hs/`) or `dircache.c:1609-1613` (`POST /tor/hs/`).
-   - Therefore, for `/tor/hs/` requests rejected by `!connection_dir_is_anonymous(conn)` (`503 "Service unavailable"` at `dircache.c:1319, 1609`), either `dircache.c:1319, 1609` must explicitly increment `single_hop_rejected`, or those `503` responses will be missing from the right-hand side.
-2. **Pre-URL `503` (`!public_server_mode`) and `400` (`parse_http_url() < 0`) in `directory_handle_command_get()` / `directory_handle_command_post()`:**
-   - At `dircache.c:1591-1603` (and `dircache.c:1278-1282` for `GET`), `!public_server_mode()` (`503`) and `parse_http_url() < 0` (`400`) return **before** the URL prefix `/tor/hs/` is inspected.
-   - To keep the identity exact, `parse_http_url() < 0` (`dircache.c:1278, 1599`) should be counted in `unparsed` (alongside streams closed in `DIR_CONN_STATE_SERVER_COMMAND_WAIT` before a full HTTP request is parsed, including `Patch 0004` oversized body rejections), and `!public_server_mode` (`dircache.c:1591`) in `non_hs` (or `unparsed`).
-3. **With `patches/0001` and `0002` applied:**
-   - `Patch 0001` (`hsdir_reject_if_unknown_prev_hop()` at `dircache.c:1324, 1614`) increments `tor_relay_dos_total{type="hsdir_unknown_prev_hop"}` (`dos_note_hsdir_unknown_prev_hop()`).
-   - `Patch 0002` (`hsdir_reject_if_circ_already_used()` at `dircache.c:1328, 1618`) increments `tor_relay_dos_total{type="hsdir_circ_reuse"}` (`dos_note_hsdir_circ_reuse()`). Note that in `0002`, the first request on the circuit already transitioned its `dir_connection_t` out of `COMMAND_WAIT`, and the second request arrives on a **second** `BEGIN_DIR` stream on the same circuit, which is closed before `handle_get_hs_descriptor_v3()` or `handle_post_hs_descriptor()` runs.
-   - Thus with `0001`–`0007` applied, the exact partition of `BEGIN_DIR` streams is:
-     $$\text{BEGIN\_DIR streams} = \underbrace{\text{command\_wait}}_{\text{active in-flight}} + \underbrace{\text{unparsed}}_{\text{EOF/oversize/bad HTTP line}} + \underbrace{\text{non\_hs}}_{\text{non-/tor/hs/ GET+POST}} + \underbrace{\text{single\_hop\_rejected}}_{\text{dircache.c:1319,1609}} + \underbrace{\text{hsdir\_unknown\_prev\_hop}}_{\text{Patch 0001}} + \underbrace{\text{hsdir\_circ\_reuse}}_{\text{Patch 0002}} + \underbrace{\text{hs\_get} + \text{hs\_post}}_{\text{200 + 400 + 404}}$$
-     where $\text{hs\_post} = \sum \text{tor\_relay\_hsdir\_post\_total}\{\text{status},\text{reason}\}$.
-
----
-
-## Draft GitLab Comment for `tor#41350`
-
-```markdown
-Hi! We audited the `rep_hist_note_conn_opened()` / `rep_hist_note_conn_closed()` call sites in `tor-0.4.9.14` (`8fe2745`, unchanged on `main` `8dbbbe6`) and reproduced the drift in a private Chutney network.
-
-### Root Cause: Unpaired Closes and Type Mutation
-
-`connection_mark_for_close_internal_()` (`src/core/mainloop/connection.c:1180`) unconditionally calls:
-```c
-rep_hist_note_conn_closed(conn->from_listener, conn->type, conn->socket_family);
-```
-for every `connection_t`, whereas `rep_hist_note_conn_opened()` is only called in three places:
-1. `listener_connection_new()` (`connection.c:654`);
-2. `connection_handle_listener_read()` -> `note_connection(true, newconn)` (`connection.c:2111`), which only runs after `connection_init_accepted_conn()` (`:2105`) succeeds;
-3. `connection_connect_sockaddr()` -> `note_connection(false, conn)` (`connection.c:2317`), when an outbound OS socket connects.
-
-Because `rep_hist_note_conn_closed()` clamps each bucket at `0` (`src/feature/stats/rephist.c:1727-1734`), any lifecycle path that closes without calling `note_connection()`—or changes `conn->type` between open and close—drains the gauge toward `0`:
-
-1. **Accepted `OR` / transparent `AP` connections that fail `connection_init_accepted_conn()` (`connection.c:2105-2108`) -> pulls `OR/received` and `Socks/received` down:**
-   - For `CONN_TYPE_OR`, `connection_init_accepted_conn()` (`connection.c:2139`) calls `connection_tls_start_handshake()` -> `connection_tls_continue_handshake()` -> `tor_tls_handshake()` (`src/core/or/connection_or.c:1739, 1758`), which performs an immediate `SSL_accept()`.
-   - When a peer's `FIN`/`RST` or non-TLS bytes are already in the kernel socket buffer at `accept()` time (common during scanner traffic or when clients time out in the listen backlog while the main loop is busy), `tor_tls_handshake()` fails synchronously (`connection_or.c:1761`) and calls `connection_or_close_for_error()` -> `connection_mark_for_close()`. `connection_init_accepted_conn()` returns `-1` before `note_connection()` (`connection.c:2111`), decrementing `(OR, received, ipv4/ipv6)` without a matching increment.
-   - Similarly, `connection_ap_process_transparent()` (`connection.c:2167`, `src/core/or/connection_edge.c:2914-2916`) marks the connection for close if original-destination lookup fails before `note_connection()`.
-   - *(Note: `SocksPolicy`, `DirPolicy`, and `dos_conn_addr_get_defense_type()` rejections at `connection.c:2022-2049` close `newsock` before `connection_new()` at `:2059`, so they do not decrement the gauge.)*
-2. **In-process `linked` connection pairs (no OS socket, never call `note_connection()`) -> pulls `Exit/initiated` and `Directory/initiated` down:**
-   - Every incoming `BEGIN_DIR` cell creates an `EXIT` connection (`edge_connection_new(CONN_TYPE_EXIT, AF_INET)` at `connection_edge.c:4284`, `from_listener=0`) linked to a `DIR` connection (`connection_exit_connect_dir()` at `connection_edge.c:4706`, `from_listener=0`). Neither calls `note_connection()`, but closing them decrements `(Exit, initiated, ipv4)` and `(Directory, initiated, ipv4/ipv6)`. On relays that are both Exit and DirCache/HSDir, `BEGIN_DIR` traffic rapidly pulls `Exit/initiated/ipv4` to `0`.
-   - Client/relay self-fetches via `connection_ap_make_link()` (`connection_edge.c:3651`, `src/feature/dirclient/dirclient.c:1388`) similarly create and close socketless `AP` + `DIR` pairs with `from_listener=0`.
-3. **Unconnected `EXIT`, `DIR`, and `AP` connections marked for close before `connection_connect()`:**
-   - `EXIT` streams in `resolving_streams` that fail DNS (`src/feature/dns/dns.c:678`), receive `END` (`src/core/or/relay.c:1429`), or belong to a circuit closed during DNS resolution (`src/core/or/circuitlist.c:2431`) call `connection_mark_for_close()` without ever calling `connection_exit_connect()`, pulling `(Exit, initiated, ipv4)` down.
-   - Direct outbound `DIR` connections whose `connection_connect()` fails (`dirclient.c:1367`) and socketless `DNSPort` / controller `RESOLVE` `AP` connections (`src/feature/dns/dnsserv.c:148, 228`) also call `connection_mark_for_close()` without `note_connection()`.
-4. **`EXT_OR` -> `OR` retyping on bridges (`src/feature/ext_orport/ext_orport.c:91`):**
-   - `ExtORPort` connections are counted at `accept()` as `(Extended OR, received, af)`, then retyped via `conn->base_.type = CONN_TYPE_OR` in `connection_ext_or_transition()`. Closing them decrements `(OR, received, af)`, so `Extended OR/received` drifts up without bound while `OR/received` drifts down toward `0`.
-5. **Rare leak paths (counted open, freed via `connection_free_minimal()` without `connection_mark_for_close()`):**
-   - `connection_listener_new()` (`connection.c:1742, 1768, 1799`), `connection_connect_sockaddr()` (`connection.c:2324-2328`), and `connection_exit_connect()` (`connection_edge.c:4666-4670`) if adding/formatting fails after `rep_hist_note_conn_opened()`.
-
-### Lab Reproduction
-
-In a 4-node Chutney network (`test003r` with `7` inbound OR connections and `5` active outbound Exit connections):
-- Sending 10 handshake-incomplete connections to `ORPort` (non-TLS bytes or immediate EOF buffered at `accept()`) triggered 10 `connection_init_accepted_conn()` failures (`7` effective decrements + `3` clamped), pulling `tor_relay_connections{type="OR",direction="received",state="opened",family="ipv4"}` from `7` to `0` while `GETINFO orconn-status` and `ss -tnp` still showed `7` established inbound OR sockets.
-- Sending 25 `BEGIN_DIR` streams over an established circuit triggered 25 unpaired `Exit/initiated` decrements (`5` effective + `20` clamped), pulling `tor_relay_connections{type="Exit",direction="initiated",state="opened",family="ipv4"}` from `5` to `0` while all `5` outbound Exit TCP sockets remained `ESTAB`.
-
-### Proposed Fix
-
-Record on `connection_t` whether `rep_hist_note_conn_opened()` counted the connection (`in_rephist_opened`) along with the counted `(rephist_from_listener, rephist_type, rephist_socket_family)` tuple, and call `rep_hist_note_conn_closed()` in `connection_mark_for_close_internal_()` (and `connection_free_minimal()` as a safety net) only when `in_rephist_opened` is set, using the stored tuple and clearing the bit.
-
-We have a patch with unit tests (`stats/rephist_conn_opened`) covering failed `connection_init_accepted_conn()`, linked `EXIT`+`DIR` closes, `EXT_OR`->`OR` retyping, normal accept/close, and listener close/free. Happy to open an MR if this approach looks good!
+tor_relay_hsdir_post_total{action="success"}     row 10 (200)
+tor_relay_hsdir_post_total{action="bad_url"}     row 7  (400)
+tor_relay_hsdir_post_total{action="invalid"}     row 8  (400)
+tor_relay_hsdir_post_total{action="not_newer"}   row 9  (400)
+tor_relay_hsdir_post_total{action="single_hop"}  row 6  (503)
 ```
 
+Design choices and why:
+
+- **Modelled on `tor_relay_intro1_total` / `tor_relay_est_rend_total`.** An
+  enum and `relay_increment_hsdir_post_action()` in `relay_metrics.h`, a
+  `static uint64_t hsdir_post_actions[]` and an `action` label in
+  `relay_metrics.c`. Upstream moved exactly these counters out of `rephist.c`
+  into `relay_metrics.c` during review (`1899b6230d`, "Removed getter
+  abstraction and moved from rephist to relay_metrics"), so revision 1's
+  `rephist.c` counters and getters went against that review.
+- **One `action` label, not `status` + `reason`.** Each action maps to one
+  HTTP status, so a `status` label would be redundant, and the precedent uses
+  `action`. This is asked upstream.
+- **All counting in `dircache.c`.** Revision 1 put three of its four hooks in
+  `hs_cache.c`. `hs_cache.c` is always compiled, but `relay_metrics.c` is
+  only compiled with the relay module (`src/feature/relay/include.am:44-47`),
+  and upstream CI has a `debian-disable-relay` job. Calling relay metrics from
+  `hs_cache.c` would have needed a `relay_stub.c` stub. `dircache.c` is
+  compiled only with the relay module (`configure.ac:394-400`). The price is
+  that `hs_cache_store_as_dir()` returns −2 for row 9. Its only caller checks
+  `< 0`, and two existing assertions (`test_hs_cache.c:83`,
+  `test_stats.c:576`) change from −1 to −2.
+- **`single_hop` included.** It is one line, in the same function, and it is
+  the only way to see row 6. `INTRO1_SINGLE_HOP` and `EST_REND_SINGLE_HOP`
+  are the naming precedent. It also counts DirPort uploads, which aren't
+  tunneled.
+- **Rows 1-5 not counted.** Rows 1-3 happen before the request is known to be
+  an HS upload, and rows 4-5 before the URL is parsed.
+
+**Test.** `hs_cache/hsdir_post_metrics` drives every action through
+`handle_post_hs_descriptor()` and `directory_handle_command_post()`, and reads
+the values from the real store (`relay_metrics_get_stores()`), so it also
+checks the exported name and label.
+
+### B.3 How this fits with `BEGIN_DIR`
+
+`tor_relay_streams_total{type="BEGIN_DIR"}` is incremented in
+`connection_exit_connect_dir()` (`connection_edge.c:4697`), after the row 1
+gate. A directory server answers one request per stream and then closes it,
+so:
+
+```
+BEGIN_DIR streams = streams still waiting for their request   (COMMAND_WAIT)
+                  + closed before a full request              (rows 2-3)
+                  + answered GET (HS descriptor and other)
+                  + answered POST: rows 4-5, non-HS POSTs,
+                                   series refusals (with 0001/0002),
+                                   and Σ tor_relay_hsdir_post_total minus DirPort single_hop
+```
+
+Revision 1's identity (`unparsed + non_hs + hs + single_hop_rejected +
+command_wait`) used terms that no metric exports. With `0002`, the HS POST
+term becomes observable. The GET side, which is where the `tor#41339` flood
+was, still needs a counterpart (asked in the new issue).
+
 ---
 
-## Review Summary: Verification Status & Open Questions
+## Part C: commit structure and upstream plan
 
-All code references and line numbers above were verified directly against `tor-0.4.9.14` (`8fe2745`) and `main` (`8dbbbe6`), and all Part A and Part B patches were built and tested (`make check`, `make check-spaces`, `make check-changes`, `practracker`). Only the following points involve design choices or external assumptions:
+1. **`0001` is a standalone bugfix MR for `tor#41350`** against `maint-0.4.9`
+   (milestone `0.4.9.x-post-stable`). It applies with `git am` to
+   `maint-0.4.9`, `main` and `tor-0.4.9.14`, and does not depend on `0002` or
+   on the HSDir series. Post the comment in
+   `upstream/tor41350/gitlab-41350-comment.md` first.
+2. **`0002` is a separate feature MR against `main`.** File the issue in
+   `upstream/tor41350/gitlab-new-issue-hsdir-post-metrics.md` first, wait for
+   naming feedback, then rename `changes/hsdir_post_metrics` to
+   `changes/ticketNNNNN` with "Closes ticket NNNNN." (it says "Part of ticket
+   41339" for now). It does not depend on `0001`.
+3. **Stacking on the HSDir series.** `0002` comes after `patches/0007`, which
+   adds the same test includes. `upstream/tor41350/hsdir-series/` has the
+   variant with those includes deduplicated, tested on
+   `tor-0.4.9.14 + patches/0001-0007 + 0001`. `single_hop` requests never
+   reach the series' guard, and requests the guard refuses never get an
+   `action`. With enforcement off (the default), the guard only counts and
+   the request still gets its `action`, so the two metrics answer different
+   questions and don't need to add up.
 
-1. **Behavior of `EXT_OR` -> `OR` retyping (`ext_orport.c:91`):**
-   - With `0001-rephist-Pair-opened-connection-gauge-decrements-with.patch`, an `ExtORPort` connection is opened as `Extended OR` and decremented from `Extended OR` when it closes, eliminating drift in both `Extended OR` and `OR`.
-   - *Design choice for upstream review:* If maintainers prefer post-handshake `ExtORPort` connections to be reflected in the `OR` gauge while open, `connection_ext_or_transition()` (`ext_orport.c:91`) can call a helper that decrements `Extended OR`, updates `conn->rephist_type = CONN_TYPE_OR`, and increments `OR`.
-2. **Pre-existing family mismatch on IPv6 Exit policy rejections (`connection_edge.c:4562, 4590` vs. `:4610`):**
-   - While auditing `connection_exit_connect()` (`src/core/or/connection_edge.c:4552-4615`), we verified that `conn->socket_family = tor_addr_family(&conn->base_.addr)` is assigned at line `4610`, **after** the two exit-policy rejection checks at lines `4562` and `4590` call `rep_hist_note_conn_rejected(conn->type, conn->socket_family)`. Because `edge_connection_new(CONN_TYPE_EXIT, AF_INET)` (`connection_edge.c:4284`) initializes `socket_family = AF_INET`, IPv6 exit-policy rejections are currently counted under `family="ipv4"` in `tor_relay_connections{state="rejected"}`. We left `state="rejected"` untouched in `0001` to keep the `tor#41350` patch minimal, but noted it here in case a separate one-line move of `conn->socket_family = tor_addr_family(&conn->base_.addr)` to the top of `connection_exit_connect()` is desired.
-3. **Arti and Onionbalance `revision_counter` behavior:**
-   - Verified from C Tor's `hs_service.c:1673-1735` and the Tor specification (`rend-spec-v3.txt` §2.2.1.1 / Onionbalance v3 design) that multiple active frontends or restarted instances without shared state produce overlapping OPE-derived revision counters. We did not run live Onionbalance or Arti binaries in the lab, as `hs_cache/hsdir_post_outcomes` tests the HSDir cache directly with constructed v3 descriptors.
+See `upstream/tor41350/TEST-RESULTS.txt` for build and test results.
+
+---
+
+## Errata for revision 1 (summary)
+
+- **Wrong paths.** `src/feature/ext_orport/` is `src/feature/relay/`,
+  `src/feature/dns/` is `src/feature/relay/` (`dns.c`) and
+  `src/feature/client/` (`dnsserv.c`), and `src/core/mainloop/connection_st.h`
+  is `src/core/or/`. `fill_connections_values()` does not exist (the
+  functions are `fill_conn_gauge_values()` and `fill_conn_counter_values()`),
+  and neither does `connection_add_nonlinked()`.
+- **Wrong line numbers**, including `connection.c:2079` / `:2099` / `:2059` /
+  `:2058` / `:2284`, `connection_or.c:1761` as the closer,
+  `connection_edge.c:3651` / `:3666` / `:4706` / `:4718` / `:760`,
+  `dircache.c:1319` / `:1545-1579`, `hs_cache.c:295-336`,
+  `hs_descriptor.c:2249-2437`, `relay_metrics.c:411-452`,
+  `rephist.c:1753-1771`, `status.c:146-162`, and
+  `directory.c:2168` / `:2243`.
+- **Falsified mechanisms.**
+  - The `IPV6_V6ONLY=0` family mismatch doesn't exist.
+  - DNS failures don't drift.
+  - "Path 7" leaks are unreachable.
+  - `hs_cache_store_as_dir()` is not tri-state.
+  - The HSDir doesn't decode the superencrypted layer.
+  - The Part B reason phrases were not the strings Tor sends.
+  - `MAX_HEADERS_SIZE` is 50000, not 24576, and `MAX_DIR_UL_SIZE` is 16 MB −
+    1, not 20 MB.
+  - Post-flood paired closes don't "subtract further".
+- **The field observation was misquoted** (A.3).
+- **The patch descriptions didn't match the patches.** The analysis named
+  helpers that didn't exist and fields called `rephist_*`, while the patch
+  used `opened_*`. `TEST-RESULTS.txt` claimed transparent-AP, AP+DIR and
+  outbound-close coverage that the test didn't have, and practracker
+  "exit 0", which stock 0.4.9.14 itself doesn't achieve here.
+- **Wrong "bugfix on" version** (0.4.7.11).
+
+The full list with evidence is in `analysis/tor41350-review.md`.

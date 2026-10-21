@@ -172,6 +172,8 @@ analysis/      claim ledger, 0002 FP measurement, live-capture interpretation,
 data/          de-identified live-relay flood capture (JSON)
 engineering/   amd64 build-check, CI matrix, seccomp audit, .deb build + install
 packages/      the built .debs for Ubuntu 24.04 and 26.04 (+ geoipdb), SHA256SUMS, buildinfo/changes
+upstream/      tor#41350 opened-connection gauge fix + HS descriptor POST metric (patches,
+               test results, offline lab, ready-to-paste GitLab texts)
 ```
 
 ## Scope

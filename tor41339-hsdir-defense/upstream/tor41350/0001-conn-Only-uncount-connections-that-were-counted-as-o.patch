@@ -1,0 +1,348 @@
+From ee1bfe1ba9c39d0b16dcbf1996f0f6e83796557a Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Wed, 21 Oct 2026 06:59:42 +0000
+Subject: [PATCH 1/2] conn: Only uncount connections that were counted as
+ opened
+
+rep_hist_note_conn_opened() is called from listener_connection_new(),
+and through note_connection() once an accepted connection has passed
+connection_init_accepted_conn() or an outbound connect() has started.
+But connection_mark_for_close_internal_() called
+rep_hist_note_conn_closed() for every connection, and that counter is
+clamped at 0, so every connection closed without having been counted
+pulled tor_relay_connections{state="opened"} down towards 0:
+
+  - Accepted OR connections whose TLS handshake fails right away in
+    connection_init_accepted_conn(), because the peer had already sent
+    non-TLS bytes or closed before we called accept(). This happens a
+    lot when the main loop is too busy to accept quickly.
+  - Transparent proxy connections rejected in
+    connection_init_accepted_conn().
+  - Connections without a socket that never go through connect(): the
+    linked exit and directory connections of every BEGIN_DIR stream,
+    the linked AP and directory connections of tunneled directory
+    requests, exit streams closed while resolving, and DNSPort requests.
+  - Outbound directory connections whose connect() fails right away.
+
+Also, Extended ORPort connections are counted as such when accepted but
+become OR connections in connection_ext_or_transition(), and were then
+uncounted as OR connections.
+
+Flag a connection when it is counted, and only uncount flagged
+connections, as or_connection_t's tracked_for_dos_mitigation already
+does for the DoS subsystem. Move a counted Extended ORPort connection to
+the OR counters when it becomes an OR connection.
+
+Fixes #41350
+---
+ changes/bug41350               |   9 +++
+ src/core/mainloop/connection.c |  10 +++-
+ src/core/or/connection_st.h    |   6 +-
+ src/core/or/status.c           |   3 +-
+ src/core/or/status.h           |   2 +-
+ src/feature/relay/ext_orport.c |   8 +++
+ src/test/test_connection.c     | 103 +++++++++++++++++++++++++++++++++
+ src/test/test_extorport.c      |  11 ++++
+ 8 files changed, 146 insertions(+), 6 deletions(-)
+ create mode 100644 changes/bug41350
+
+diff --git a/changes/bug41350 b/changes/bug41350
+new file mode 100644
+index 0000000000..3a29ca2ce5
+--- /dev/null
++++ b/changes/bug41350
+@@ -0,0 +1,9 @@
++  o Minor bugfixes (relay, metrics):
++    - Only decrement the MetricsPort tor_relay_connections{state="opened"}
++      gauge for connections that were counted as opened. Previously, every
++      connection closed without having been counted, such as an accepted
++      OR connection whose TLS handshake failed right away or the linked
++      connections of a BEGIN_DIR stream, pulled the gauge down towards 0.
++      Extended ORPort connections now move from the "Extended OR" to the
++      "OR" gauge, and are counted as created OR connections, when they
++      become OR connections. Fixes bug 41350; bugfix on 0.4.7.11.
+diff --git a/src/core/mainloop/connection.c b/src/core/mainloop/connection.c
+index cd71bb8c3a..547220b269 100644
+--- a/src/core/mainloop/connection.c
++++ b/src/core/mainloop/connection.c
+@@ -651,6 +651,7 @@ listener_connection_new(int type, int socket_family)
+   connection_init(time(NULL), TO_CONN(listener_conn), type, socket_family);
+   /* Listener connections aren't accounted for with note_connection() so do
+    * this explicitly so to count them. */
++  TO_CONN(listener_conn)->opened_in_rephist = 1;
+   rep_hist_note_conn_opened(false, type, socket_family);
+   return listener_conn;
+ }
+@@ -1176,9 +1177,12 @@ connection_mark_for_close_internal_, (connection_t *conn,
+    * we get our whole 15 seconds */
+   conn->timestamp_last_write_allowed = time(NULL);
+ 
+-  /* Note the connection close. */
+-  rep_hist_note_conn_closed(conn->from_listener, conn->type,
+-                            conn->socket_family);
++  /* Note the connection close, if it was counted as opened. */
++  if (conn->opened_in_rephist) {
++    conn->opened_in_rephist = 0;
++    rep_hist_note_conn_closed(conn->from_listener, conn->type,
++                              conn->socket_family);
++  }
+ }
+ 
+ /** Find each connection that has hold_open_until_flushed set to
+diff --git a/src/core/or/connection_st.h b/src/core/or/connection_st.h
+index 87ab6af8d9..8603c219fb 100644
+--- a/src/core/or/connection_st.h
++++ b/src/core/or/connection_st.h
+@@ -34,7 +34,8 @@ struct buf_t;
+  * other end.
+  *
+  * Every connection has a type and a state.  Connections never change
+- * their type, but can go through many state changes in their lifetime.
++ * their type (except Extended ORPort connections, which become OR
++ * connections), but can go through many state changes in their lifetime.
+  *
+  * Every connection has two associated input and output buffers.
+  * Listeners don't use them.  For non-listener connections, incoming
+@@ -91,6 +92,9 @@ struct connection_t {
+    * received this connection. Else, it means we've initiated an outbound
+    * connection. */
+   unsigned int from_listener:1;
++  /** True iff this connection has been counted by rep_hist_note_conn_opened()
++   * and not yet by rep_hist_note_conn_closed(). */
++  unsigned int opened_in_rephist:1;
+ 
+   /** CONNECT/SOCKS proxy client handshake state (for outgoing connections). */
+   unsigned int proxy_state:4;
+diff --git a/src/core/or/status.c b/src/core/or/status.c
+index d44942e278..b724bdaab0 100644
+--- a/src/core/or/status.c
++++ b/src/core/or/status.c
+@@ -132,7 +132,7 @@ static unsigned n_outgoing_ipv6;
+  * heartbeat message.
+  **/
+ void
+-note_connection(bool inbound, const connection_t *conn)
++note_connection(bool inbound, connection_t *conn)
+ {
+   if (conn->socket_family == AF_INET) {
+     if (inbound) {
+@@ -148,6 +148,7 @@ note_connection(bool inbound, const connection_t *conn)
+     }
+   }
+ 
++  conn->opened_in_rephist = 1;
+   rep_hist_note_conn_opened(inbound, conn->type, conn->socket_family);
+ }
+ 
+diff --git a/src/core/or/status.h b/src/core/or/status.h
+index 55492d24da..9784f264b3 100644
+--- a/src/core/or/status.h
++++ b/src/core/or/status.h
+@@ -11,7 +11,7 @@
+ 
+ #include "lib/testsupport/testsupport.h"
+ 
+-void note_connection(bool inbound, const connection_t *conn);
++void note_connection(bool inbound, connection_t *conn);
+ void note_circ_closed_for_unrecognized_cells(time_t n_seconds,
+                                              uint32_t n_cells);
+ 
+diff --git a/src/feature/relay/ext_orport.c b/src/feature/relay/ext_orport.c
+index 76cd9bdea6..bbdac476f5 100644
+--- a/src/feature/relay/ext_orport.c
++++ b/src/feature/relay/ext_orport.c
+@@ -27,6 +27,7 @@
+ #include "feature/relay/ext_orport.h"
+ #include "core/mainloop/mainloop.h"
+ #include "core/proto/proto_ext_or.h"
++#include "feature/stats/rephist.h"
+ 
+ #include "core/or/or_connection_st.h"
+ 
+@@ -88,6 +89,13 @@ connection_ext_or_transition(or_connection_t *conn)
+ {
+   tor_assert(conn->base_.type == CONN_TYPE_EXT_OR);
+ 
++  /* This is now an OR connection: move it to the OR connection stats. */
++  if (conn->base_.opened_in_rephist) {
++    rep_hist_note_conn_closed(conn->base_.from_listener, CONN_TYPE_EXT_OR,
++                              conn->base_.socket_family);
++    rep_hist_note_conn_opened(conn->base_.from_listener, CONN_TYPE_OR,
++                              conn->base_.socket_family);
++  }
+   conn->base_.type = CONN_TYPE_OR;
+   TO_CONN(conn)->state = 0; // set the state to a neutral value
+   connection_or_event_status(conn, OR_CONN_EVENT_NEW, 0);
+diff --git a/src/test/test_connection.c b/src/test/test_connection.c
+index ed94fe8aaa..fae19de7a5 100644
+--- a/src/test/test_connection.c
++++ b/src/test/test_connection.c
+@@ -21,6 +21,8 @@
+ #include "feature/nodelist/networkstatus.h"
+ #include "feature/dircommon/directory.h"
+ #include "core/or/connection_or.h"
++#include "core/or/status.h"
++#include "feature/stats/rephist.h"
+ #include "lib/net/resolve.h"
+ #include "lib/evloop/compat_libevent.h"
+ 
+@@ -29,6 +31,7 @@
+ 
+ #include "feature/dircommon/dir_connection_st.h"
+ #include "core/or/entry_connection_st.h"
++#include "core/or/listener_connection_st.h"
+ #include "feature/nodelist/node_st.h"
+ #include "core/or/or_connection_st.h"
+ #include "feature/nodelist/routerinfo_st.h"
+@@ -976,6 +979,104 @@ test_conn_describe(void *arg)
+   connection_free_minimal(conn);
+ }
+ 
++static void
++mock_connection_start_reading(connection_t *conn)
++{
++  (void) conn;
++}
++
++static int
++mock_connection_tls_start_handshake_fail(or_connection_t *conn, int receiving)
++{
++  (void) receiving;
++  /* A state for which assert_connection_ok() doesn't require a TLS object. */
++  TO_CONN(conn)->state = OR_CONN_STATE_CONNECTING;
++  return -1;
++}
++
++/** Make sure that the opened connections counted in rephist are only
++ * decremented, once, for connections that were counted as opened. */
++static void
++test_conn_opened_counter(void *arg)
++{
++  listener_connection_t *listener = NULL;
++  connection_t *or_conn = NULL, *closed_or_conn = NULL, *failed_or_conn = NULL;
++  connection_t *exit_conn = NULL, *uncounted_exit_conn = NULL;
++  (void) arg;
++
++  MOCK(connection_start_reading, mock_connection_start_reading);
++  MOCK(connection_tls_start_handshake,
++       mock_connection_tls_start_handshake_fail);
++  tor_init_connection_lists();
++
++  listener = listener_connection_new(CONN_TYPE_OR_LISTENER, AF_INET);
++  TO_CONN(listener)->state = LISTENER_STATE_READY;
++  tt_u64_op(rep_hist_get_conn_opened(false, CONN_TYPE_OR_LISTENER, AF_INET),
++            OP_EQ, 1);
++
++  /* Two accepted OR connections, counted by note_connection(). */
++  or_conn = connection_new(CONN_TYPE_OR, AF_INET);
++  or_conn->from_listener = 1;
++  note_connection(true, or_conn);
++  closed_or_conn = connection_new(CONN_TYPE_OR, AF_INET);
++  closed_or_conn->from_listener = 1;
++  closed_or_conn->state = OR_CONN_STATE_CONNECTING;
++  closed_or_conn->address = tor_strdup("127.0.0.1");
++  note_connection(true, closed_or_conn);
++  tt_u64_op(rep_hist_get_conn_opened(true, CONN_TYPE_OR, AF_INET), OP_EQ, 2);
++
++  /* An accepted OR connection whose TLS handshake fails right away is closed
++   * before note_connection(): it must not decrement the counter. */
++  failed_or_conn = connection_new(CONN_TYPE_OR, AF_INET);
++  failed_or_conn->from_listener = 1;
++  failed_or_conn->address = tor_strdup("127.0.0.1");
++  tt_int_op(connection_init_accepted_conn(failed_or_conn, listener),
++            OP_LT, 0);
++  tt_assert(failed_or_conn->marked_for_close);
++  tt_u64_op(rep_hist_get_conn_opened(true, CONN_TYPE_OR, AF_INET), OP_EQ, 2);
++
++  /* A counted connection is decremented once when marked for close, not
++   * again when freed. */
++  connection_mark_for_close_internal(closed_or_conn);
++  tt_u64_op(rep_hist_get_conn_opened(true, CONN_TYPE_OR, AF_INET), OP_EQ, 1);
++  connection_free_minimal(closed_or_conn);
++  closed_or_conn = NULL;
++  tt_u64_op(rep_hist_get_conn_opened(true, CONN_TYPE_OR, AF_INET), OP_EQ, 1);
++
++  /* An outbound exit connection, counted when connecting... */
++  exit_conn = connection_new(CONN_TYPE_EXIT, AF_INET);
++  exit_conn->state = EXIT_CONN_STATE_CONNECTING;
++  exit_conn->purpose = EXIT_PURPOSE_CONNECT;
++  note_connection(false, exit_conn);
++  /* ...and one without a socket, like the one of a BEGIN_DIR stream or one
++   * that is still resolving, which is never counted: closing it is a no-op.
++   */
++  uncounted_exit_conn = connection_new(CONN_TYPE_EXIT, AF_INET);
++  uncounted_exit_conn->state = EXIT_CONN_STATE_OPEN;
++  uncounted_exit_conn->purpose = EXIT_PURPOSE_CONNECT;
++  connection_mark_for_close(uncounted_exit_conn);
++  tt_u64_op(rep_hist_get_conn_opened(false, CONN_TYPE_EXIT, AF_INET),
++            OP_EQ, 1);
++
++  connection_mark_for_close(TO_CONN(listener));
++  tt_u64_op(rep_hist_get_conn_opened(false, CONN_TYPE_OR_LISTENER, AF_INET),
++            OP_EQ, 0);
++
++  /* The created counters are untouched. */
++  tt_u64_op(rep_hist_get_conn_created(true, CONN_TYPE_OR, AF_INET), OP_EQ, 2);
++
++ done:
++  UNMOCK(connection_start_reading);
++  UNMOCK(connection_tls_start_handshake);
++  if (listener)
++    connection_free_minimal(TO_CONN(listener));
++  connection_free_minimal(or_conn);
++  connection_free_minimal(closed_or_conn);
++  connection_free_minimal(failed_or_conn);
++  connection_free_minimal(exit_conn);
++  connection_free_minimal(uncounted_exit_conn);
++}
++
+ #ifndef COCCI
+ #define CONNECTION_TESTCASE(name, fork, setup)                           \
+   { #name, test_conn_##name, fork, &setup, NULL }
+@@ -1010,5 +1111,7 @@ struct testcase_t connection_tests[] = {
+   //CONNECTION_TESTCASE(func_suffix, TT_FORK, setup_func_pair),
+   { "failed_orconn_tracker", test_failed_orconn_tracker, TT_FORK, NULL, NULL },
+   { "describe", test_conn_describe, TT_FORK, NULL, NULL },
++  { "opened_counter", test_conn_opened_counter, TT_FORK,
++    &helper_pubsub_setup, NULL },
+   END_OF_TESTCASES
+ };
+diff --git a/src/test/test_extorport.c b/src/test/test_extorport.c
+index 559ecd6397..7cabe80a36 100644
+--- a/src/test/test_extorport.c
++++ b/src/test/test_extorport.c
+@@ -13,6 +13,8 @@
+ #include "lib/crypt_ops/crypto_rand.h"
+ #include "feature/relay/ext_orport.h"
+ #include "core/mainloop/mainloop.h"
++#include "core/or/status.h"
++#include "feature/stats/rephist.h"
+ 
+ #include "core/or/or_connection_st.h"
+ 
+@@ -442,6 +444,10 @@ test_ext_or_handshake(void *arg)
+ 
+   /* Okay, this time let's succeed. */
+   conn = or_connection_new(CONN_TYPE_EXT_OR, AF_INET);
++  TO_CONN(conn)->from_listener = 1;
++  note_connection(true, TO_CONN(conn));
++  tt_u64_op(rep_hist_get_conn_opened(true, CONN_TYPE_EXT_OR, AF_INET),
++            OP_EQ, 1);
+   do_ext_or_handshake(conn);
+ 
+   /* Now let's run through some messages. */
+@@ -473,6 +479,11 @@ test_ext_or_handshake(void *arg)
+   tt_int_op(handshake_start_called,OP_EQ,1);
+   tt_int_op(TO_CONN(conn)->type, OP_EQ, CONN_TYPE_OR);
+   tt_int_op(TO_CONN(conn)->state, OP_EQ, 0);
++  /* It is now counted as an OR connection, not an Extended OR one. */
++  tt_u64_op(rep_hist_get_conn_opened(true, CONN_TYPE_EXT_OR, AF_INET),
++            OP_EQ, 0);
++  tt_u64_op(rep_hist_get_conn_opened(true, CONN_TYPE_OR, AF_INET),
++            OP_EQ, 1);
+   connection_free_(TO_CONN(conn));
+   conn = NULL;
+ 
+-- 
+2.43.0
+
