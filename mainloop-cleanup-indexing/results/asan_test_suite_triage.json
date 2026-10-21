@@ -1,0 +1,150 @@
+{
+  "metadata": {
+    "source_log": "/Users/joey/tor/1aeo/private/tor-mainloop-stall-fix-20261018/build-asan/test-suite.log",
+    "filtered_log": "/Users/joey/tor/1aeo/private/tor-mainloop-stall-fix-20261018/asan-ubsan-test.log",
+    "container_image": "tor41350-build:2404",
+    "base_version": "tor-0.4.9.14 (commit 8fe2745)",
+    "compiler_flags": "-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined",
+    "runtime_env": "ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1",
+    "total_automake_jobs": 34,
+    "passed_jobs": 25,
+    "skipped_jobs": 1,
+    "failed_jobs": 8
+  },
+  "documentation_discrepancy_audit": {
+    "finding": "CANDIDATE/findings.md and CANDIDATE/invariant-and-assertion-review.md state that asan-ubsan-test.log is a 'Full make check log under ASan/UBSan', whereas asan-ubsan-test.log actually ran only 6 targeted test suites (217 tests, 1 skipped, 0 failed). Conversely, CANDIDATE/build-asan/test-suite.log contains the actual full Automake test-suite run (34 jobs: 25 PASS, 1 SKIP, 8 FAIL). Additionally, CANDIDATE/findings.md and invariant-and-assertion-review.md reference helper names connection_remove_from_active_linked_list() and connection_remove_from_closeable_list() that do not exist in 0001-mainloop-index-cleanup-scans.patch (which implements the logic directly inside connection_stop_reading_from_linked_conn() and close_closeable_connections()).",
+    "verdict": "None of the 8 failing Automake jobs in build-asan/test-suite.log are caused by 0001-mainloop-index-cleanup-scans.patch; all 8 reproduce identically on unpatched stock tor-0.4.9.14 under the same container and UBSan/ASan flags."
+  },
+  "failed_jobs_triage": [
+    {
+      "job": "src/test/test-slow",
+      "category": "upstream_ubsan_and_container_privilege",
+      "reproduces_on_stock_baseline": true,
+      "root_causes": [
+        {
+          "test": "ptr_slow/voidstar_int_mix",
+          "location": "src/test/test_ptr_slow.c:52",
+          "error": "runtime error: left shift of 1073741824 by 1 places cannot be represented in type 'int'",
+          "explanation": "Upstream test shifts signed 32-bit int 1<<30 left by 1 into the sign bit, triggering UBSan signed-shift overflow."
+        },
+        {
+          "test": "process_slow/callbacks, process_slow/Terminate",
+          "location": "src/test/test_process_slow.c:240,318",
+          "error": "LeakSanitizer ptrace operation not permitted in container / kill() EACCES",
+          "explanation": "Subprocess tests fail in unprivileged container when LSan attempts ptrace attach or kill() receives EACCES."
+        }
+      ]
+    },
+    {
+      "job": "src/test/test-memwipe",
+      "category": "expected_sanitizer_incompatibility",
+      "reproduces_on_stock_baseline": true,
+      "root_causes": [
+        {
+          "test": "test-memwipe",
+          "location": "src/test/test-memwipe.c:88 (vmemeq)",
+          "error": "AddressSanitizer: heap-use-after-free on address ... at pc 0x... in vmemeq",
+          "explanation": "Upstream Makefile explicitly notes '# memwipe tests require memory violations' because test-memwipe intentionally reads freed heap buffers to verify that tor_memwipe/free wiped sensitive bytes."
+        }
+      ]
+    },
+    {
+      "job": "src/test/unittest_part1.sh",
+      "category": "upstream_ubsan_null_pointer",
+      "reproduces_on_stock_baseline": true,
+      "root_causes": [
+        {
+          "test": "circuitpadding/circuitpadding_ozz (4 tests)",
+          "location": "src/core/or/relay_msg.c:119",
+          "error": "runtime error: null pointer passed as argument 2, which is declared to never be null",
+          "explanation": "memcpy(dest, NULL, 0) called when copying a 0-length relay msg body; glibc/clang nonnull attribute triggers UBSan under halt_on_error=1."
+        },
+        {
+          "test": "circuitstats/hoplen .. circuitstats/pareto_timeout (11 tests)",
+          "location": "src/test/test_circuitstats.c:127,232,337,390,468",
+          "error": "runtime error: member access within null pointer of type 'struct circuit_t'",
+          "explanation": "TO_CIRCUIT(NULL) evaluates &((or_circuit_t *)NULL)->base_ before passing NULL to mock/helper functions, triggering UBSan member access on NULL."
+        }
+      ]
+    },
+    {
+      "job": "src/test/unittest_part2.sh",
+      "category": "upstream_ubsan_null_pointer",
+      "reproduces_on_stock_baseline": true,
+      "root_causes": [
+        {
+          "test": "circuitstats/timeout_general .. circuitstats/guard_Wait (6 tests)",
+          "location": "src/test/test_circuitstats.c:559,645,747,826,955",
+          "error": "runtime error: member access within null pointer of type 'struct circuit_t'",
+          "explanation": "Same TO_CIRCUIT(NULL) UBSan error in test_circuitstats.c."
+        }
+      ]
+    },
+    {
+      "job": "src/test/unittest_part6.sh",
+      "category": "upstream_ubsan_null_pointer",
+      "reproduces_on_stock_baseline": true,
+      "root_causes": [
+        {
+          "test": "onion-handshake/ntor-v3/handshake_negtotiation",
+          "location": "src/core/or/circuitbuild.c:2826",
+          "error": "runtime error: null pointer passed as argument 1, which is declared to never be null",
+          "explanation": "qsort(NULL, 0, sizeof(uint16_t), ...) called on an empty protocol version array; glibc nonnull attribute triggers UBSan under halt_on_error=1."
+        }
+      ]
+    },
+    {
+      "job": "src/test/test_bt.sh",
+      "category": "container_environment",
+      "reproduces_on_stock_baseline": true,
+      "root_causes": [
+        {
+          "test": "src/test/test_bt.sh",
+          "location": "src/test/bt_test.py",
+          "error": "LeakSanitizer failed under ptrace in container (or python symlink missing)",
+          "explanation": "Subprocess crash-backtrace test fails under LSan ptrace restriction inside container."
+        }
+      ]
+    },
+    {
+      "job": "src/test/test_rebind.sh",
+      "category": "container_environment",
+      "reproduces_on_stock_baseline": true,
+      "root_causes": [
+        {
+          "test": "src/test/test_rebind.sh",
+          "location": "src/test/test_rebind.py:102",
+          "error": "PermissionError: [Errno 13] Permission denied on tor_process.terminate() after printing OK",
+          "explanation": "All functional rebind checks print OK, then Python subprocess.Popen.terminate() gets EACCES in the container security context."
+        }
+      ]
+    },
+    {
+      "job": "src/test/test_include.sh",
+      "category": "container_environment",
+      "reproduces_on_stock_baseline": true,
+      "root_causes": [
+        {
+          "test": "src/test/test_include.sh",
+          "location": "src/test/test_include.py:194",
+          "error": "PermissionError: [Errno 13] Permission denied on tor_process.terminate() after printing OK",
+          "explanation": "All functional %include checks print OK, then Python subprocess.Popen.terminate() gets EACCES in the container security context."
+        }
+      ]
+    }
+  ],
+  "latent_test_suite_index_hazards_fixed_in_enhanced_patch": [
+    {
+      "file": "src/test/test_conflux_pool.c",
+      "lines": [1790, 1818],
+      "issue": "launch_new_set() and test_conflux_switch() called smartlist_add(get_connection_array(), TO_CONN(conn)) directly on a connection_t allocated via tor_malloc_zero (conn_array_index == 0 instead of -1) without setting conn_array_index = smartlist_len - 1. Under O(1) connection_in_array(), only index 0 matched by coincidence while subsequent insertions had conn_array_index == 0 pointing to element 0.",
+      "fix": "Set conn->base_.conn_array_index = smartlist_len(get_connection_array()) before smartlist_add(get_connection_array(), TO_CONN(conn))."
+    },
+    {
+      "file": "src/test/test_hs_client.c",
+      "lines": [525, 561, 563, 754],
+      "issue": "test_e2e_rend_circuit_setup() and test_Describe_auth_prepend() called smartlist_add(get_connection_array(), ...) directly on connections created with connection_new()/dir_connection_new() (conn_array_index == -1) and then called connection_free() in done: cleanup without removing them from get_connection_array(). Under baseline smartlist_contains(connection_array, conn), calling connection_free() while still in connection_array would fail if not cleared; under O(1) connection_in_array(), conn_array_index == -1 bypassed the assertion in connection_free_().",
+      "fix": "Maintain conn_array_index on insertion in test_hs_client.c and clear get_connection_array() before freeing test connections."
+    }
+  ]
+}

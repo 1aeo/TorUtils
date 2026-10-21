@@ -1,0 +1,1115 @@
+From ec5f688a3c87dbaff99ee633be11a7a6485a5420 Mon Sep 17 00:00:00 2001
+From: joey <joey@Mac-Studio.local>
+Date: Wed, 21 Oct 2026 00:57:41 -0700
+Subject: [PATCH] relay_metrics: add mainloop cleanup, tick stall, and
+ BEGIN_DIR metrics
+
+Add nine fixed-cardinality Prometheus metrics on MetricsPort to observe
+mainloop connection-list occupancies, cleanup pass work/duration,
+event-loop tick stalls, and server-side BEGIN_DIR request classes, HTTP
+statuses, stream lifecycle phases, circuit reuse, and application bytes:
+
+- tor_relay_mainloop_connection_list_size{list}
+- tor_relay_mainloop_connection_list_ops_total{list,op}
+- tor_relay_mainloop_close_pass_total{field}
+- tor_relay_mainloop_ticks_total{threshold}
+- tor_relay_mainloop_tick_max_duration_usec
+- tor_relay_dir_streams_total{phase}
+- tor_relay_dir_streams_active{state}
+- tor_relay_dir_http_requests_total{class,status}
+- tor_relay_dir_bytes_total{class,dir}
+---
+ src/core/mainloop/connection.c            |   5 +-
+ src/core/mainloop/mainloop.c              |  56 +++-
+ src/core/mainloop/mainloop.h              |  18 ++
+ src/core/or/connection_edge.c             |   6 +
+ src/core/or/or_circuit_st.h               |   3 +
+ src/feature/dircache/dircache.c           |  49 ++-
+ src/feature/dircommon/dir_connection_st.h |   7 +
+ src/feature/dircommon/directory.c         |  29 ++
+ src/feature/relay/relay_metrics.c         | 356 ++++++++++++++++++++++
+ src/feature/relay/relay_metrics.h         |  53 ++++
+ src/test/test_mainloop.c                  | 146 +++++++++
+ 11 files changed, 713 insertions(+), 15 deletions(-)
+
+diff --git a/src/core/mainloop/connection.c b/src/core/mainloop/connection.c
+index 82490f7..85c65e7 100644
+--- a/src/core/mainloop/connection.c
++++ b/src/core/mainloop/connection.c
+@@ -105,6 +105,7 @@
+ #include "feature/nodelist/routerlist.h"
+ #include "feature/relay/dns.h"
+ #include "feature/relay/ext_orport.h"
++#include "feature/relay/relay_metrics.h"
+ #include "feature/relay/routermode.h"
+ #include "feature/rend/rendcommon.h"
+ #include "feature/stats/connstats.h"
+@@ -3659,8 +3660,10 @@ record_num_bytes_transferred_impl(connection_t *conn,
+   if (conn->type == CONN_TYPE_DIR && conn->purpose == DIR_PURPOSE_SERVER) {
+     if (num_read > 0)
+       bwhist_note_dir_bytes_read(num_read, now);
+-    if (num_written > 0)
++    if (num_written > 0) {
+       bwhist_note_dir_bytes_written(num_written, now);
++      relay_metrics_note_dir_bytes(TO_DIR_CONN(conn), true, num_written);
++    }
+   }
+ 
+   /* Linked connections and internal IPs aren't counted for statistics or
+diff --git a/src/core/mainloop/mainloop.c b/src/core/mainloop/mainloop.c
+index 0e68fd7..ff226d8 100644
+--- a/src/core/mainloop/mainloop.c
++++ b/src/core/mainloop/mainloop.c
+@@ -88,6 +88,7 @@
+ #include "feature/nodelist/nodelist.h"
+ #include "feature/nodelist/routerlist.h"
+ #include "feature/relay/dns.h"
++#include "feature/relay/relay_metrics.h"
+ #include "feature/relay/routerkeys.h"
+ #include "feature/relay/routermode.h"
+ #include "feature/relay/selftest.h"
+@@ -107,6 +108,7 @@
+ 
+ #include "core/or/cell_st.h"
+ #include "core/or/entry_connection_st.h"
++#include "feature/dircommon/dir_connection_st.h"
+ #include "feature/nodelist/networkstatus_st.h"
+ #include "core/or/or_connection_st.h"
+ #include "app/config/or_state_st.h"
+@@ -149,6 +151,8 @@ static uint64_t stats_n_main_loop_successes = 0;
+ static uint64_t stats_n_main_loop_errors = 0;
+ /** How many times have we returned from the main loop with no events. */
+ static uint64_t stats_n_main_loop_idle = 0;
++/** Mainloop connection-list, cleanup, and tick duration metrics. */
++static mainloop_metrics_t mainloop_metrics;
+ 
+ /** How often will we honor SIGNEWNYM requests? */
+ #define MAX_SIGNEWNYM_RATE 10
+@@ -433,6 +437,7 @@ add_connection_to_closeable_list(connection_t *conn)
+   tor_assert(conn->marked_for_close);
+   assert_connection_ok(conn, time(NULL));
+   CONN_IDX_LIST_ADD(closeable_connection_lst, conn, closeable_conn_idx);
++  ++mainloop_metrics.closeable_added;
+   mainloop_schedule_postloop_cleanup();
+ }
+ 
+@@ -559,6 +564,21 @@ reset_main_loop_counters(void)
+   stats_n_main_loop_successes = 0;
+   stats_n_main_loop_errors = 0;
+   stats_n_main_loop_idle = 0;
++  memset(&mainloop_metrics, 0, sizeof(mainloop_metrics));
++}
++
++/** Update current connection list lengths and return mainloop metrics. */
++const mainloop_metrics_t *
++mainloop_get_metrics(void)
++{
++  mainloop_metrics.conn_array_len =
++    connection_array ? smartlist_len(connection_array) : 0;
++  mainloop_metrics.closeable_len =
++    closeable_connection_lst ? smartlist_len(closeable_connection_lst) : 0;
++  mainloop_metrics.active_linked_len =
++    active_linked_connection_lst ?
++      smartlist_len(active_linked_connection_lst) : 0;
++  return &mainloop_metrics;
+ }
+ 
+ /** Increment the main loop success counter. */
+@@ -875,6 +895,7 @@ connection_start_reading_from_linked_conn(connection_t *conn)
+     conn->active_on_link = 1;
+     CONN_IDX_LIST_ADD(active_linked_connection_lst, conn,
+                       active_linked_conn_idx);
++    ++mainloop_metrics.active_linked_added;
+     mainloop_event_activate(schedule_active_linked_connections_event);
+   }
+ }
+@@ -900,16 +921,27 @@ STATIC void
+ close_closeable_connections(void)
+ {
+   int i;
++  uint64_t t_start = monotime_coarse_absolute_usec();
++  ++mainloop_metrics.close_pass_runs;
+   for (i = 0; i < smartlist_len(closeable_connection_lst); ) {
+     connection_t *conn = smartlist_get(closeable_connection_lst, i);
+     tor_assert(conn->closeable_conn_idx == i);
++    ++mainloop_metrics.close_pass_visited;
+     if (!connection_in_array(conn)) {
+       connection_unlink(conn); /* blow it away right now */
++      ++mainloop_metrics.close_pass_closed;
+     } else {
+-      if (!conn_close_if_marked(conn->conn_array_index))
++      if (!conn_close_if_marked(conn->conn_array_index)) {
++        ++mainloop_metrics.close_pass_deferred;
+         ++i;
++      } else {
++        ++mainloop_metrics.close_pass_closed;
++      }
+     }
+   }
++  uint64_t t_end = monotime_coarse_absolute_usec();
++  if (t_end > t_start)
++    mainloop_metrics.close_pass_duration_usec += (t_end - t_start);
+ }
+ 
+ /** Count moribund connections for the OOS handler */
+@@ -1071,6 +1103,15 @@ conn_close_if_marked(int i)
+     } else {
+       retval = buf_flush_to_socket(conn->outbuf, conn->s, sz);
+     }
++    if (retval > 0 && conn->type == CONN_TYPE_DIR &&
++        conn->purpose == DIR_PURPOSE_SERVER) {
++      dir_connection_t *dir_conn = TO_DIR_CONN(conn);
++      relay_metrics_note_dir_bytes(dir_conn, true, (size_t)retval);
++      if (!connection_wants_to_flush(conn) && !dir_conn->spool) {
++        relay_metrics_note_dir_stream_phase(
++            dir_conn, DIR_STREAM_PHASE_COMPLETED, 0);
++      }
++    }
+     if (retval >= 0 && /* Technically, we could survive things like
+                           TLS_WANT_WRITE here. But don't bother for now. */
+         conn->hold_open_until_flushed && connection_wants_to_flush(conn)) {
+@@ -2533,8 +2574,21 @@ run_main_loop_once(void)
+    * an event, or the second ends, or until we have some active linked
+    * connections to trigger events for.  Libevent will wait till one
+    * of these happens, then run all the appropriate callbacks. */
++  uint64_t tick_start_usec = monotime_coarse_absolute_usec();
+   loop_result = tor_libevent_run_event_loop(tor_libevent_get_base(),
+                                             called_loop_once);
++  uint64_t tick_end_usec = monotime_coarse_absolute_usec();
++  if (tick_end_usec > tick_start_usec) {
++    uint64_t tick_usec = tick_end_usec - tick_start_usec;
++    if (tick_usec > mainloop_metrics.tick_max_duration_usec)
++      mainloop_metrics.tick_max_duration_usec = tick_usec;
++    if (tick_usec >= 10000)
++      ++mainloop_metrics.tick_over_10ms;
++    if (tick_usec >= 100000)
++      ++mainloop_metrics.tick_over_100ms;
++    if (tick_usec >= 1000000)
++      ++mainloop_metrics.tick_over_1000ms;
++  }
+ 
+   if (mainloop_must_free_memory) {
+     /* Note that calling event_base_loopbreak() can set the return value
+diff --git a/src/core/mainloop/mainloop.h b/src/core/mainloop/mainloop.h
+index 84a8232..675368c 100644
+--- a/src/core/mainloop/mainloop.h
++++ b/src/core/mainloop/mainloop.h
+@@ -80,6 +80,24 @@ uint64_t get_main_loop_success_count(void);
+ uint64_t get_main_loop_error_count(void);
+ uint64_t get_main_loop_idle_count(void);
+ 
++typedef struct mainloop_metrics_t {
++  int conn_array_len;
++  int closeable_len;
++  int active_linked_len;
++  uint64_t closeable_added;
++  uint64_t active_linked_added;
++  uint64_t close_pass_runs;
++  uint64_t close_pass_visited;
++  uint64_t close_pass_closed;
++  uint64_t close_pass_deferred;
++  uint64_t close_pass_duration_usec;
++  uint64_t tick_over_10ms;
++  uint64_t tick_over_100ms;
++  uint64_t tick_over_1000ms;
++  uint64_t tick_max_duration_usec;
++} mainloop_metrics_t;
++const mainloop_metrics_t *mainloop_get_metrics(void);
++
+ void periodic_events_on_new_options(const or_options_t *options);
+ 
+ void do_signewnym(time_t);
+diff --git a/src/core/or/connection_edge.c b/src/core/or/connection_edge.c
+index 53f7c6b..808f4a8 100644
+--- a/src/core/or/connection_edge.c
++++ b/src/core/or/connection_edge.c
+@@ -98,6 +98,7 @@
+ #include "feature/nodelist/routerlist.h"
+ #include "feature/nodelist/routerset.h"
+ #include "feature/relay/dns.h"
++#include "feature/relay/relay_metrics.h"
+ #include "feature/relay/router.h"
+ #include "feature/relay/routermode.h"
+ #include "feature/rend/rendcommon.h"
+@@ -4739,6 +4740,11 @@ connection_exit_connect_dir(edge_connection_t *exitconn)
+     return 0;
+   }
+ 
++  if (circ->begindir_stream_count < UINT16_MAX)
++    ++circ->begindir_stream_count;
++  relay_metrics_note_dir_stream_phase(dirconn, DIR_STREAM_PHASE_OPENED,
++                                      circ->begindir_stream_count);
++
+   connection_start_reading(TO_CONN(dirconn));
+   connection_start_reading(TO_CONN(exitconn));
+ 
+diff --git a/src/core/or/or_circuit_st.h b/src/core/or/or_circuit_st.h
+index 3a91612..454aa8d 100644
+--- a/src/core/or/or_circuit_st.h
++++ b/src/core/or/or_circuit_st.h
+@@ -120,6 +120,9 @@ struct or_circuit_t {
+   /** Format to use when exchanging relay cells with the client
+    * who built this circuit. */
+   relay_cell_fmt_t relay_cell_format;
++
++  /** Saturating count of RELAY_BEGIN_DIR streams opened on this circuit. */
++  uint16_t begindir_stream_count;
+ };
+ 
+ #endif /* !defined(OR_CIRCUIT_ST_H) */
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index ea8c695..a2d76fe 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -31,6 +31,7 @@
+ #include "feature/nodelist/networkstatus.h"
+ #include "feature/nodelist/routerlist.h"
+ #include "feature/relay/relay_config.h"
++#include "feature/relay/relay_metrics.h"
+ #include "feature/relay/routermode.h"
+ #include "feature/stats/geoip_stats.h"
+ #include "feature/stats/rephist.h"
+@@ -112,6 +113,7 @@ write_short_http_response(dir_connection_t *conn, int status,
+                status, reason_phrase, datestring?datestring:"");
+ 
+   log_debug(LD_DIRSERV,"Wrote status 'HTTP/1.0 %d %s'", status, reason_phrase);
++  relay_metrics_note_dir_http_request(conn, status);
+   connection_buf_add(buf, strlen(buf), TO_CONN(conn));
+ 
+   tor_free(datestring);
+@@ -171,6 +173,7 @@ write_http_response_header_impl(dir_connection_t *conn, ssize_t length,
+   }
+   buf_add_string(buf, "\r\n");
+ 
++  relay_metrics_note_dir_http_request(conn, 200);
+   connection_buf_add_buf(TO_CONN(conn), buf);
+   buf_free(buf);
+ }
+@@ -343,6 +346,7 @@ typedef struct url_table_ent_t {
+   const char *string;
+   int is_prefix;
+   int (*handler)(dir_connection_t *conn, const get_handler_args_t *args);
++  dir_req_class_t req_class;
+ } url_table_ent_t;
+ 
+ static int handle_get_frontpage(dir_connection_t *conn,
+@@ -366,19 +370,24 @@ static int handle_get_next_bandwidth(dir_connection_t *conn,
+ 
+ /** Table for handling GET requests. */
+ static const url_table_ent_t url_table[] = {
+-  { "/tor/", 0, handle_get_frontpage },
+-  { "/tor/status-vote/current/consensus", 1, handle_get_current_consensus },
+-  { "/tor/status-vote/current/", 1, handle_get_status_vote },
+-  { "/tor/status-vote/next/bandwidth", 0, handle_get_next_bandwidth },
+-  { "/tor/status-vote/next/", 1, handle_get_status_vote },
+-  { "/tor/micro/d/", 1, handle_get_microdesc },
+-  { "/tor/server/", 1, handle_get_descriptor },
+-  { "/tor/extra/", 1, handle_get_descriptor },
+-  { "/tor/keys/", 1, handle_get_keys },
+-  { "/tor/hs/3/", 1, handle_get_hs_descriptor_v3 },
+-  { "/tor/robots.txt", 0, handle_get_robots },
+-  { "/tor/networkstatus-bridges", 0, handle_get_networkstatus_bridges },
+-  { NULL, 0, NULL },
++  { "/tor/", 0, handle_get_frontpage, DIR_REQ_CLASS_OTHER_VALID },
++  { "/tor/status-vote/current/consensus", 1, handle_get_current_consensus,
++    DIR_REQ_CLASS_CONSENSUS },
++  { "/tor/status-vote/current/", 1, handle_get_status_vote,
++    DIR_REQ_CLASS_OTHER_VALID },
++  { "/tor/status-vote/next/bandwidth", 0, handle_get_next_bandwidth,
++    DIR_REQ_CLASS_OTHER_VALID },
++  { "/tor/status-vote/next/", 1, handle_get_status_vote,
++    DIR_REQ_CLASS_OTHER_VALID },
++  { "/tor/micro/d/", 1, handle_get_microdesc, DIR_REQ_CLASS_MICRODESC },
++  { "/tor/server/", 1, handle_get_descriptor, DIR_REQ_CLASS_SERVER_DESC },
++  { "/tor/extra/", 1, handle_get_descriptor, DIR_REQ_CLASS_EXTRA_INFO },
++  { "/tor/keys/", 1, handle_get_keys, DIR_REQ_CLASS_AUTHORITY_CERTS },
++  { "/tor/hs/3/", 1, handle_get_hs_descriptor_v3, DIR_REQ_CLASS_HS_V3_FETCH },
++  { "/tor/robots.txt", 0, handle_get_robots, DIR_REQ_CLASS_OTHER_VALID },
++  { "/tor/networkstatus-bridges", 0, handle_get_networkstatus_bridges,
++    DIR_REQ_CLASS_OTHER_VALID },
++  { NULL, 0, NULL, DIR_REQ_CLASS_UNCLASSIFIED },
+ };
+ 
+ /** Helper function: called when a dirserver gets a complete HTTP GET
+@@ -405,6 +414,7 @@ directory_handle_command_get,(dir_connection_t *conn, const char *headers,
+   conn->base_.state = DIR_CONN_STATE_SERVER_WRITING;
+ 
+   if (parse_http_url(headers, &url) < 0) {
++    conn->dir_req_class = DIR_REQ_CLASS_INVALID;
+     write_short_http_response(conn, 400, "Bad request");
+     return 0;
+   }
+@@ -461,12 +471,14 @@ directory_handle_command_get,(dir_connection_t *conn, const char *headers,
+       match = !strcmp(url, url_table[i].string);
+     }
+     if (match) {
++      conn->dir_req_class = url_table[i].req_class;
+       result = url_table[i].handler(conn, &args);
+       goto done;
+     }
+   }
+ 
+   /* we didn't recognize the url */
++  conn->dir_req_class = DIR_REQ_CLASS_INVALID;
+   write_short_http_response(conn, 404, "Not found");
+   result = 0;
+ 
+@@ -1589,6 +1601,7 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+   log_debug(LD_DIRSERV,"Received POST command.");
+ 
+   conn->base_.state = DIR_CONN_STATE_SERVER_WRITING;
++  conn->dir_req_class = DIR_REQ_CLASS_OTHER_VALID;
+ 
+   if (!public_server_mode(options)) {
+     log_info(LD_DIR, "Rejected dir post request from %s "
+@@ -1599,9 +1612,15 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+   }
+ 
+   if (parse_http_url(headers, &url) < 0) {
++    conn->dir_req_class = DIR_REQ_CLASS_INVALID;
+     write_short_http_response(conn, 400, "Bad request");
+     return 0;
+   }
++  conn->dir_req_class = !strcmpstart(url, "/tor/hs/") ?
++    DIR_REQ_CLASS_HS_V3_PUBLISH :
++    (!strcmp(url, "/tor/") || !strcmp(url, "/tor/post/vote") ||
++     !strcmp(url, "/tor/post/consensus-signature")) ?
++      DIR_REQ_CLASS_OTHER_VALID : DIR_REQ_CLASS_INVALID;
+   log_debug(LD_DIRSERV,"rewritten url as '%s'.", escaped(url));
+ 
+   /* Handle HS descriptor publish request. We force an anonymous connection
+@@ -1779,12 +1798,16 @@ directory_handle_command(dir_connection_t *conn)
+   else if (!strncasecmp(headers,"POST",4))
+     r = directory_handle_command_post(conn, headers, body, body_len);
+   else {
++    conn->dir_req_class = DIR_REQ_CLASS_INVALID;
+     log_fn(LOG_PROTOCOL_WARN, LD_PROTOCOL,
+            "Got headers %s with unknown command. Closing.",
+            escaped(headers));
+     r = -1;
+   }
+ 
++  relay_metrics_note_dir_bytes(conn, false, strlen(headers) + body_len);
++  if (r < 0)
++    relay_metrics_note_dir_http_request(conn, 0);
+   tor_free(headers); tor_free(body);
+   return r;
+ }
+diff --git a/src/feature/dircommon/dir_connection_st.h b/src/feature/dircommon/dir_connection_st.h
+index b774d32..0389c20 100644
+--- a/src/feature/dircommon/dir_connection_st.h
++++ b/src/feature/dircommon/dir_connection_st.h
+@@ -65,6 +65,13 @@ struct dir_connection_t {
+    * geoip until we've served the final bytes. */
+   bool should_count_geoip_when_finished;
+ 
++  /** Request class (dir_req_class_t) for server-side directory metrics. */
++  uint8_t dir_req_class;
++  /** Lifecycle phase (dir_stream_phase_t) for server-side BEGIN_DIR stream. */
++  uint8_t dir_stream_phase;
++  /** 1 if HTTP response status has been recorded for this connection. */
++  unsigned int dir_status_recorded:1;
++
+ #ifdef MEASUREMENTS_21206
+   /** Number of RELAY_DATA cells received. */
+   uint32_t data_cells_received;
+diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
+index 1266cbc..29c2681 100644
+--- a/src/feature/dircommon/directory.c
++++ b/src/feature/dircommon/directory.c
+@@ -16,6 +16,7 @@
+ #include "feature/dircache/dirserv.h"
+ #include "feature/dirclient/dirclient.h"
+ #include "feature/dircommon/directory.h"
++#include "feature/relay/relay_metrics.h"
+ #include "feature/dircommon/fp_pair.h"
+ #include "feature/hs/hs_cache.h"
+ #include "feature/stats/geoip_stats.h"
+@@ -607,6 +608,30 @@ connection_dir_about_to_close(dir_connection_t *dir_conn)
+ {
+   connection_t *conn = TO_CONN(dir_conn);
+ 
++  if (conn->purpose == DIR_PURPOSE_SERVER) {
++    if (conn->inbuf && buf_datalen(conn->inbuf) > 0) {
++      relay_metrics_note_dir_bytes(dir_conn, false, buf_datalen(conn->inbuf));
++    }
++    if (!dir_conn->dir_status_recorded &&
++        (dir_conn->dir_req_class != DIR_REQ_CLASS_UNCLASSIFIED ||
++         (conn->inbuf && buf_datalen(conn->inbuf) > 0 &&
++          !conn->inbuf_reached_eof && !conn->linked_conn_is_closed))) {
++      relay_metrics_note_dir_http_request(dir_conn, 0);
++    }
++    if (dir_conn->dir_stream_phase == DIR_STREAM_PHASE_WRITING) {
++      relay_metrics_note_dir_stream_phase(
++          dir_conn, DIR_STREAM_PHASE_ABORTED_WRITING, 0);
++    } else if (dir_conn->dir_stream_phase == DIR_STREAM_PHASE_OPENED) {
++      relay_metrics_note_dir_stream_phase(
++          dir_conn,
++          (dir_conn->dir_req_class != DIR_REQ_CLASS_UNCLASSIFIED ||
++           (conn->inbuf && buf_datalen(conn->inbuf) > 0)) ?
++            DIR_STREAM_PHASE_ABORTED_MID_HTTP :
++            DIR_STREAM_PHASE_ABORTED_PRE_HTTP,
++          0);
++    }
++  }
++
+   if (conn->state < DIR_CONN_STATE_CLIENT_FINISHED) {
+     /* It's a directory connection and connecting or fetching
+      * failed: forget about this router, and maybe try again. */
+@@ -646,6 +671,10 @@ connection_dir_finished_flushing(dir_connection_t *conn)
+       conn->base_.state = DIR_CONN_STATE_CLIENT_READING;
+       return 0;
+     case DIR_CONN_STATE_SERVER_WRITING:
++      if (!conn->spool) {
++        relay_metrics_note_dir_stream_phase(
++            conn, DIR_STREAM_PHASE_COMPLETED, 0);
++      }
+       if (conn->spool) {
+         log_warn(LD_BUG, "Emptied a dirserv buffer, but it's still spooling!");
+         connection_mark_for_close(TO_CONN(conn));
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index 11f402d..fc7d4a5 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -29,6 +29,8 @@
+ #include "lib/math/fp.h"
+ #include "lib/metrics/metrics_store.h"
+ 
++#include "feature/dircommon/dir_connection_st.h"
++#include "feature/dircommon/directory.h"
+ #include "feature/hs/hs_dos.h"
+ #include "feature/nodelist/nodelist.h"
+ #include "feature/nodelist/node_st.h"
+@@ -67,6 +69,15 @@ static void fill_est_intro_cells(void);
+ static void fill_est_rend_cells(void);
+ static void fill_intro1_cells(void);
+ static void fill_rend1_cells(void);
++static void fill_mainloop_conn_lists(void);
++static void fill_mainloop_conn_list_ops(void);
++static void fill_mainloop_close_pass(void);
++static void fill_mainloop_ticks(void);
++static void fill_mainloop_tick_max_duration(void);
++static void fill_dir_streams(void);
++static void fill_dir_streams_active(void);
++static void fill_dir_http_requests(void);
++static void fill_dir_bytes(void);
+ 
+ /** The base metrics that is a static array of metrics added to the metrics
+  * store.
+@@ -242,6 +253,71 @@ static const relay_metrics_entry_t base_metrics[] =
+     .help = "Total number of DROP cell we received",
+     .fill_fn = fill_relay_drop_cell,
+   },
++  {
++    .key = RELAY_METRICS_MAINLOOP_CONN_LISTS,
++    .type = METRICS_TYPE_GAUGE,
++    .name = METRICS_NAME(relay_mainloop_connection_list_size),
++    .help = "Current number of connections in mainloop lists",
++    .fill_fn = fill_mainloop_conn_lists,
++  },
++  {
++    .key = RELAY_METRICS_MAINLOOP_CONN_LIST_OPS,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_mainloop_connection_list_ops_total),
++    .help = "Total number of connection list additions in mainloop",
++    .fill_fn = fill_mainloop_conn_list_ops,
++  },
++  {
++    .key = RELAY_METRICS_MAINLOOP_CLOSE_PASS,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_mainloop_close_pass_total),
++    .help = "Cumulative close_closeable_connections() pass counters",
++    .fill_fn = fill_mainloop_close_pass,
++  },
++  {
++    .key = RELAY_METRICS_MAINLOOP_TICKS,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_mainloop_ticks_total),
++    .help = "Total number of event loop ticks exceeding duration thresholds",
++    .fill_fn = fill_mainloop_ticks,
++  },
++  {
++    .key = RELAY_METRICS_MAINLOOP_TICK_MAX_DURATION,
++    .type = METRICS_TYPE_GAUGE,
++    .name = METRICS_NAME(relay_mainloop_tick_max_duration_usec),
++    .help = "High-water-mark duration of a single event loop tick in usec",
++    .fill_fn = fill_mainloop_tick_max_duration,
++  },
++  {
++    .key = RELAY_METRICS_DIR_STREAMS,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_dir_streams_total),
++    .help = "Total number of server-side BEGIN_DIR stream lifecycle events",
++    .fill_fn = fill_dir_streams,
++  },
++  {
++    .key = RELAY_METRICS_DIR_STREAMS_ACTIVE,
++    .type = METRICS_TYPE_GAUGE,
++    .name = METRICS_NAME(relay_dir_streams_active),
++    .help = "Current number of active server-side BEGIN_DIR streams",
++    .fill_fn = fill_dir_streams_active,
++  },
++  {
++    .key = RELAY_METRICS_DIR_HTTP_REQUESTS,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_dir_http_requests_total),
++    .help = "Total number of server-side directory HTTP requests by class "
++            "and status",
++    .fill_fn = fill_dir_http_requests,
++  },
++  {
++    .key = RELAY_METRICS_DIR_BYTES,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_dir_bytes_total),
++    .help = "Total server-side directory application bytes by class and "
++            "direction",
++    .fill_fn = fill_dir_bytes,
++  },
+ };
+ static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
+ 
+@@ -1238,6 +1314,285 @@ fill_relay_circ_proto_violation(void)
+   metrics_store_entry_update(sentry, circ_n_proto_violation);
+ }
+ 
++static void
++add_labeled_metric(relay_metrics_key_t key,
++                   const char *k1, const char *v1,
++                   const char *k2, const char *v2,
++                   int64_t value)
++{
++  const relay_metrics_entry_t *rentry = &base_metrics[key];
++  metrics_store_entry_t *sentry =
++    metrics_store_add(the_store, rentry->type, rentry->name,
++                      rentry->help, 0, NULL);
++  if (k1 && v1)
++    metrics_store_entry_add_label(sentry, metrics_format_label(k1, v1));
++  if (k2 && v2)
++    metrics_store_entry_add_label(sentry, metrics_format_label(k2, v2));
++  metrics_store_entry_update(sentry, value);
++}
++
++static void
++fill_mainloop_conn_lists(void)
++{
++  const mainloop_metrics_t *m = mainloop_get_metrics();
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_CONN_LISTS,
++                     "list", "connection_array", NULL, NULL,
++                     m->conn_array_len);
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_CONN_LISTS,
++                     "list", "closeable", NULL, NULL,
++                     m->closeable_len);
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_CONN_LISTS,
++                     "list", "active_linked", NULL, NULL,
++                     m->active_linked_len);
++}
++
++static void
++fill_mainloop_conn_list_ops(void)
++{
++  const mainloop_metrics_t *m = mainloop_get_metrics();
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_CONN_LIST_OPS,
++                     "list", "closeable", "op", "add",
++                     (int64_t)m->closeable_added);
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_CONN_LIST_OPS,
++                     "list", "active_linked", "op", "add",
++                     (int64_t)m->active_linked_added);
++}
++
++static void
++fill_mainloop_close_pass(void)
++{
++  const mainloop_metrics_t *m = mainloop_get_metrics();
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_CLOSE_PASS,
++                     "field", "runs", NULL, NULL,
++                     (int64_t)m->close_pass_runs);
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_CLOSE_PASS,
++                     "field", "visited", NULL, NULL,
++                     (int64_t)m->close_pass_visited);
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_CLOSE_PASS,
++                     "field", "closed", NULL, NULL,
++                     (int64_t)m->close_pass_closed);
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_CLOSE_PASS,
++                     "field", "deferred", NULL, NULL,
++                     (int64_t)m->close_pass_deferred);
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_CLOSE_PASS,
++                     "field", "duration_usec", NULL, NULL,
++                     (int64_t)m->close_pass_duration_usec);
++}
++
++static void
++fill_mainloop_ticks(void)
++{
++  const mainloop_metrics_t *m = mainloop_get_metrics();
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_TICKS,
++                     "threshold", "over_10ms", NULL, NULL,
++                     (int64_t)m->tick_over_10ms);
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_TICKS,
++                     "threshold", "over_100ms", NULL, NULL,
++                     (int64_t)m->tick_over_100ms);
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_TICKS,
++                     "threshold", "over_1000ms", NULL, NULL,
++                     (int64_t)m->tick_over_1000ms);
++}
++
++static void
++fill_mainloop_tick_max_duration(void)
++{
++  const mainloop_metrics_t *m = mainloop_get_metrics();
++  add_labeled_metric(RELAY_METRICS_MAINLOOP_TICK_MAX_DURATION,
++                     NULL, NULL, NULL, NULL,
++                     (int64_t)m->tick_max_duration_usec);
++}
++
++typedef enum {
++  DIR_HTTP_STATUS_200 = 0,
++  DIR_HTTP_STATUS_304,
++  DIR_HTTP_STATUS_400,
++  DIR_HTTP_STATUS_404,
++  DIR_HTTP_STATUS_503,
++  DIR_HTTP_STATUS_OTHER,
++  DIR_HTTP_STATUS_REJECTED_EARLY,
++  DIR_HTTP_STATUS_COUNT
++} dir_http_status_idx_t;
++
++static struct {
++  uint64_t streams_total[DIR_STREAM_PHASE_COUNT];
++  uint64_t streams_reused_circuit_total;
++  int64_t active_opened_wait;
++  int64_t active_writing;
++  uint64_t http_requests_total[DIR_REQ_CLASS_COUNT][DIR_HTTP_STATUS_COUNT];
++  uint64_t bytes_total[DIR_REQ_CLASS_COUNT][2];
++} dir_metrics;
++
++static const char *const dir_req_class_names[DIR_REQ_CLASS_COUNT] = {
++  [DIR_REQ_CLASS_UNCLASSIFIED] = "unclassified",
++  [DIR_REQ_CLASS_CONSENSUS] = "consensus",
++  [DIR_REQ_CLASS_MICRODESC] = "microdesc",
++  [DIR_REQ_CLASS_SERVER_DESC] = "server_desc",
++  [DIR_REQ_CLASS_EXTRA_INFO] = "extra_info",
++  [DIR_REQ_CLASS_AUTHORITY_CERTS] = "authority_certs",
++  [DIR_REQ_CLASS_HS_V3_FETCH] = "hs_v3_fetch",
++  [DIR_REQ_CLASS_HS_V3_PUBLISH] = "hs_v3_publish",
++  [DIR_REQ_CLASS_OTHER_VALID] = "other_valid",
++  [DIR_REQ_CLASS_INVALID] = "invalid",
++};
++
++static const char *const dir_http_status_names[DIR_HTTP_STATUS_COUNT] = {
++  [DIR_HTTP_STATUS_200] = "200",
++  [DIR_HTTP_STATUS_304] = "304",
++  [DIR_HTTP_STATUS_400] = "400",
++  [DIR_HTTP_STATUS_404] = "404",
++  [DIR_HTTP_STATUS_503] = "503",
++  [DIR_HTTP_STATUS_OTHER] = "other",
++  [DIR_HTTP_STATUS_REJECTED_EARLY] = "rejected_early",
++};
++
++static const char *const dir_stream_phase_names[] = {
++  "opened",
++  "writing",
++  "completed",
++  "aborted_pre_http",
++  "aborted_mid_http",
++  "aborted_writing",
++};
++
++void
++relay_metrics_note_dir_stream_phase(dir_connection_t *dir_conn,
++                                    dir_stream_phase_t phase,
++                                    uint16_t circ_begindir_index)
++{
++  if (!dir_conn || TO_CONN(dir_conn)->purpose != DIR_PURPOSE_SERVER)
++    return;
++
++  dir_stream_phase_t prev = dir_conn->dir_stream_phase;
++  if (phase == DIR_STREAM_PHASE_OPENED) {
++    if (prev != DIR_STREAM_PHASE_NONE)
++      return;
++    ++dir_metrics.active_opened_wait;
++    if (circ_begindir_index >= 2)
++      ++dir_metrics.streams_reused_circuit_total;
++  } else if (prev == DIR_STREAM_PHASE_OPENED &&
++             (phase == DIR_STREAM_PHASE_WRITING ||
++              phase == DIR_STREAM_PHASE_ABORTED_PRE_HTTP ||
++              phase == DIR_STREAM_PHASE_ABORTED_MID_HTTP)) {
++    if (dir_metrics.active_opened_wait > 0)
++      --dir_metrics.active_opened_wait;
++    if (phase == DIR_STREAM_PHASE_WRITING)
++      ++dir_metrics.active_writing;
++  } else if (prev == DIR_STREAM_PHASE_WRITING &&
++             (phase == DIR_STREAM_PHASE_COMPLETED ||
++              phase == DIR_STREAM_PHASE_ABORTED_WRITING)) {
++    if (dir_metrics.active_writing > 0)
++      --dir_metrics.active_writing;
++  } else {
++    return;
++  }
++
++  dir_conn->dir_stream_phase = (uint8_t)phase;
++  ++dir_metrics.streams_total[phase];
++}
++
++void
++relay_metrics_note_dir_http_request(dir_connection_t *dir_conn,
++                                    int status_code)
++{
++  if (!dir_conn || dir_conn->dir_status_recorded)
++    return;
++  uint8_t purpose = TO_CONN(dir_conn)->purpose;
++  if (purpose != 0 && purpose != DIR_PURPOSE_SERVER)
++    return;
++
++  dir_conn->dir_status_recorded = 1;
++  uint8_t cls = dir_conn->dir_req_class;
++  if (cls >= DIR_REQ_CLASS_COUNT)
++    cls = DIR_REQ_CLASS_UNCLASSIFIED;
++
++  dir_http_status_idx_t sidx;
++  switch (status_code) {
++    case 0:   sidx = DIR_HTTP_STATUS_REJECTED_EARLY; break;
++    case 200: sidx = DIR_HTTP_STATUS_200; break;
++    case 304: sidx = DIR_HTTP_STATUS_304; break;
++    case 400: sidx = DIR_HTTP_STATUS_400; break;
++    case 404: sidx = DIR_HTTP_STATUS_404; break;
++    case 503: sidx = DIR_HTTP_STATUS_503; break;
++    default:  sidx = DIR_HTTP_STATUS_OTHER; break;
++  }
++  ++dir_metrics.http_requests_total[cls][sidx];
++
++  if (status_code > 0 &&
++      dir_conn->dir_stream_phase == DIR_STREAM_PHASE_OPENED) {
++    relay_metrics_note_dir_stream_phase(dir_conn, DIR_STREAM_PHASE_WRITING, 0);
++  }
++}
++
++void
++relay_metrics_note_dir_bytes(dir_connection_t *dir_conn,
++                             bool is_written, size_t num_bytes)
++{
++  if (!dir_conn || num_bytes == 0)
++    return;
++  uint8_t purpose = TO_CONN(dir_conn)->purpose;
++  if (purpose != 0 && purpose != DIR_PURPOSE_SERVER)
++    return;
++
++  uint8_t cls = dir_conn->dir_req_class;
++  if (cls >= DIR_REQ_CLASS_COUNT)
++    cls = DIR_REQ_CLASS_UNCLASSIFIED;
++
++  dir_metrics.bytes_total[cls][is_written ? 1 : 0] += num_bytes;
++}
++
++static void
++fill_dir_streams(void)
++{
++  for (size_t i = 0; i < ARRAY_LENGTH(dir_stream_phase_names); ++i) {
++    add_labeled_metric(RELAY_METRICS_DIR_STREAMS,
++                       "phase", dir_stream_phase_names[i], NULL, NULL,
++                       (int64_t)dir_metrics.streams_total[i + 1]);
++  }
++  add_labeled_metric(RELAY_METRICS_DIR_STREAMS,
++                     "phase", "reused_circuit", NULL, NULL,
++                     (int64_t)dir_metrics.streams_reused_circuit_total);
++}
++
++static void
++fill_dir_streams_active(void)
++{
++  add_labeled_metric(RELAY_METRICS_DIR_STREAMS_ACTIVE,
++                     "state", "opened_wait", NULL, NULL,
++                     dir_metrics.active_opened_wait);
++  add_labeled_metric(RELAY_METRICS_DIR_STREAMS_ACTIVE,
++                     "state", "writing", NULL, NULL,
++                     dir_metrics.active_writing);
++}
++
++static void
++fill_dir_http_requests(void)
++{
++  for (size_t c = 0; c < DIR_REQ_CLASS_COUNT; ++c) {
++    for (size_t s = 0; s < DIR_HTTP_STATUS_COUNT; ++s) {
++      add_labeled_metric(RELAY_METRICS_DIR_HTTP_REQUESTS,
++                         "class", dir_req_class_names[c],
++                         "status", dir_http_status_names[s],
++                         (int64_t)dir_metrics.http_requests_total[c][s]);
++    }
++  }
++}
++
++static void
++fill_dir_bytes(void)
++{
++  for (size_t c = 0; c < DIR_REQ_CLASS_COUNT; ++c) {
++    add_labeled_metric(RELAY_METRICS_DIR_BYTES,
++                       "class", dir_req_class_names[c],
++                       "dir", "read",
++                       (int64_t)dir_metrics.bytes_total[c][0]);
++    add_labeled_metric(RELAY_METRICS_DIR_BYTES,
++                       "class", dir_req_class_names[c],
++                       "dir", "written",
++                       (int64_t)dir_metrics.bytes_total[c][1]);
++  }
++}
++
+ /** Reset the global store and fill it with all the metrics from base_metrics
+  * and their associated values.
+  *
+@@ -1297,6 +1652,7 @@ relay_metrics_init(void)
+ void
+ relay_metrics_free(void)
+ {
++  memset(&dir_metrics, 0, sizeof(dir_metrics));
+   if (!the_store) {
+     return;
+   }
+diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
+index e7b5b66..0690e82 100644
+--- a/src/feature/relay/relay_metrics.h
++++ b/src/feature/relay/relay_metrics.h
+@@ -63,6 +63,24 @@ typedef enum {
+   RELAY_METRICS_CIRC_PROTO_VIOLATION,
+   /** Number of drop cell seen. */
+   RELAY_METRICS_CIRC_DROP_CELL,
++  /** Mainloop connection list gauges. */
++  RELAY_METRICS_MAINLOOP_CONN_LISTS,
++  /** Mainloop connection list addition counters. */
++  RELAY_METRICS_MAINLOOP_CONN_LIST_OPS,
++  /** Mainloop close_closeable_connections() pass counters. */
++  RELAY_METRICS_MAINLOOP_CLOSE_PASS,
++  /** Mainloop event loop tick duration threshold counters. */
++  RELAY_METRICS_MAINLOOP_TICKS,
++  /** Mainloop high-water-mark event loop tick duration gauge. */
++  RELAY_METRICS_MAINLOOP_TICK_MAX_DURATION,
++  /** Server-side BEGIN_DIR stream lifecycle counters. */
++  RELAY_METRICS_DIR_STREAMS,
++  /** Server-side active BEGIN_DIR stream gauges. */
++  RELAY_METRICS_DIR_STREAMS_ACTIVE,
++  /** Server-side directory HTTP request counters by class and status. */
++  RELAY_METRICS_DIR_HTTP_REQUESTS,
++  /** Server-side directory application bytes by class and direction. */
++  RELAY_METRICS_DIR_BYTES,
+ } relay_metrics_key_t;
+ 
+ /** The metadata of a relay metric. */
+@@ -136,4 +154,39 @@ typedef enum {
+ 
+ void relay_increment_rend1_action(rend1_action_t);
+ 
++struct dir_connection_t;
++
++typedef enum {
++  DIR_REQ_CLASS_UNCLASSIFIED = 0,
++  DIR_REQ_CLASS_CONSENSUS,
++  DIR_REQ_CLASS_MICRODESC,
++  DIR_REQ_CLASS_SERVER_DESC,
++  DIR_REQ_CLASS_EXTRA_INFO,
++  DIR_REQ_CLASS_AUTHORITY_CERTS,
++  DIR_REQ_CLASS_HS_V3_FETCH,
++  DIR_REQ_CLASS_HS_V3_PUBLISH,
++  DIR_REQ_CLASS_OTHER_VALID,
++  DIR_REQ_CLASS_INVALID,
++  DIR_REQ_CLASS_COUNT
++} dir_req_class_t;
++
++typedef enum {
++  DIR_STREAM_PHASE_NONE = 0,
++  DIR_STREAM_PHASE_OPENED,
++  DIR_STREAM_PHASE_WRITING,
++  DIR_STREAM_PHASE_COMPLETED,
++  DIR_STREAM_PHASE_ABORTED_PRE_HTTP,
++  DIR_STREAM_PHASE_ABORTED_MID_HTTP,
++  DIR_STREAM_PHASE_ABORTED_WRITING,
++  DIR_STREAM_PHASE_COUNT
++} dir_stream_phase_t;
++
++void relay_metrics_note_dir_stream_phase(struct dir_connection_t *dir_conn,
++                                         dir_stream_phase_t phase,
++                                         uint16_t circ_begindir_Index);
++void relay_metrics_note_dir_http_request(struct dir_connection_t *dir_conn,
++                                         int status_code);
++void relay_metrics_note_dir_bytes(struct dir_connection_t *dir_conn,
++                                  bool is_written, size_t num_bytes);
++
+ #endif /* !defined(TOR_FEATURE_RELAY_RELAY_METRICS_H) */
+diff --git a/src/test/test_mainloop.c b/src/test/test_mainloop.c
+index 15796be..1c8bfcf 100644
+--- a/src/test/test_mainloop.c
++++ b/src/test/test_mainloop.c
+@@ -7,6 +7,7 @@
+  */
+ 
+ #define CONFIG_PRIVATE
++#define DIRCACHE_PRIVATE
+ #define MAINLOOP_PRIVATE
+ #define STATEFILE_PRIVATE
+ 
+@@ -25,8 +26,12 @@
+ #include "core/mainloop/mainloop_sys.h"
+ #include "core/mainloop/netstatus.h"
+ 
++#include "feature/dircache/dircache.h"
++#include "feature/dircommon/dir_connection_st.h"
+ #include "feature/dircommon/directory.h"
+ #include "feature/hs/hs_service.h"
++#include "feature/relay/relay_metrics.h"
++#include "lib/metrics/metrics_store.h"
+ 
+ #include "app/config/config.h"
+ #include "app/config/statefile.h"
+@@ -758,6 +763,146 @@ test_mainloop_randomized_cleanup_lifecycle(void *arg)
+   smartlist_free(live);
+ }
+ 
++static dir_connection_t *
++new_test_server_dir_pair(connection_t **edge_out, uint16_t stream_idx,
++                         smartlist_t *live)
++{
++  connection_t *edge_c = NULL, *dir_c = NULL;
++  new_test_linked_pair(&edge_c, &dir_c, live);
++  tor_addr_from_ipv4h(&edge_c->addr, 0x7f000001);
++  tor_addr_from_ipv4h(&dir_c->addr, 0x7f000001);
++  dir_c->state = DIR_CONN_STATE_SERVER_COMMAND_WAIT;
++  dir_connection_t *d = TO_DIR_CONN(dir_c);
++  relay_metrics_note_dir_stream_phase(d, DIR_STREAM_PHASE_OPENED, stream_idx);
++  if (edge_out)
++    *edge_out = edge_c;
++  return d;
++}
++
++static void
++test_mainloop_normal_directory_and_metrics(void *arg)
++{
++  (void)arg;
++  smartlist_t *live = smartlist_new();
++  buf_t *prom_buf = buf_new();
++  char *prom_str = NULL;
++
++  tor_init_connection_lists();
++  initialize_mainloop_events();
++  reset_main_loop_counters();
++  relay_metrics_free();
++  relay_metrics_init();
++
++  /* 1. Multi-stream circuit reuse: consensus, microdesc, server_desc,
++   * extra_info, authority_certs, and hs_v3_fetch on the same circuit. */
++  static const char *const reqs[] = {
++    "GET /tor/status-vote/current/consensus HTTP/1.0\r\n\r\n",
++    "GET /tor/micro/d/abcd HTTP/1.0\r\n\r\n",
++    "GET /tor/server/fp/abcd HTTP/1.0\r\n\r\n",
++    "GET /tor/extra/fp/abcd HTTP/1.0\r\n\r\n",
++    "GET /tor/keys/all HTTP/1.0\r\n\r\n",
++    "GET /tor/hs/3/z32blindedkey HTTP/1.0\r\n\r\n",
++  };
++  for (size_t i = 0; i < ARRAY_LENGTH(reqs); ++i) {
++    connection_t *edge_c = NULL;
++    dir_connection_t *d =
++      new_test_server_dir_pair(&edge_c, (uint16_t)(i + 1), live);
++    buf_add_string(TO_CONN(d)->inbuf, reqs[i]);
++    tt_int_op(directory_handle_command(d), OP_EQ, 0);
++    tt_int_op(d->dir_stream_phase, OP_EQ, DIR_STREAM_PHASE_WRITING);
++    size_t moved = buf_move_all(edge_c->inbuf, TO_CONN(d)->outbuf);
++    relay_metrics_note_dir_bytes(d, true, moved);
++    tt_int_op(connection_dir_finished_flushing(d), OP_EQ, 0);
++    tt_int_op(d->dir_stream_phase, OP_EQ, DIR_STREAM_PHASE_COMPLETED);
++    connection_mark_for_close(edge_c);
++  }
++  assert_cleanup_containers_coherent(live);
++  smartlist_clear(live);
++  close_closeable_connections();
++
++  /* 2. Pre-HTTP abort, mid-HTTP client abort, mid-response write abort,
++   * and server early rejection (unknown verb). */
++  connection_t *e_pre = NULL, *e_mid = NULL, *e_wr = NULL, *e_rej = NULL;
++  (void)new_test_server_dir_pair(&e_pre, 1, live);
++  dir_connection_t *d_mid = new_test_server_dir_pair(&e_mid, 1, live);
++  dir_connection_t *d_wr = new_test_server_dir_pair(&e_wr, 1, live);
++  dir_connection_t *d_rej = new_test_server_dir_pair(&e_rej, 1, live);
++
++  TO_CONN(d_mid)->inbuf_reached_eof = 1;
++  buf_add_string(TO_CONN(d_mid)->inbuf, "GET /tor/partial");
++
++  buf_add_string(TO_CONN(d_wr)->inbuf, "GET /tor/robots.txt HTTP/1.0\r\n\r\n");
++  tt_int_op(directory_handle_command(d_wr), OP_EQ, 0);
++  TO_CONN(d_wr)->linked_conn_is_closed = 1;
++  buf_clear(TO_CONN(d_wr)->outbuf);
++
++  buf_add_string(TO_CONN(d_rej)->inbuf, "PUT /tor/ HTTP/1.0\r\n\r\n");
++  tt_int_op(directory_handle_command(d_rej), OP_EQ, -1);
++
++  SMARTLIST_FOREACH(live, connection_t *, c, connection_mark_for_close(c));
++  smartlist_clear(live);
++  close_closeable_connections();
++
++  /* 3. Slow client holding response open across a close pass before flushing. */
++  connection_t *e_slow = NULL;
++  dir_connection_t *d_slow = new_test_server_dir_pair(&e_slow, 1, live);
++  buf_add_string(TO_CONN(d_slow)->inbuf, "GET /tor/ HTTP/1.0\r\n\r\n");
++  tt_int_op(directory_handle_command(d_slow), OP_EQ, 0);
++  connection_mark_for_close(TO_CONN(d_slow));
++  TO_CONN(d_slow)->hold_open_until_flushed = 1;
++  /* First pass: linked flush moves outbuf to e_slow and completes d_slow. */
++  smartlist_remove(live, TO_CONN(d_slow));
++  close_closeable_connections();
++  connection_mark_for_close(e_slow);
++  smartlist_clear(live);
++  close_closeable_connections();
++
++  const mainloop_metrics_t *m = mainloop_get_metrics();
++  tt_int_op(m->conn_array_len, OP_EQ, 0);
++  tt_int_op(m->closeable_len, OP_EQ, 0);
++  tt_int_op(m->active_linked_len, OP_EQ, 0);
++  tt_u64_op(m->closeable_added, OP_EQ, 22);
++  tt_u64_op(m->close_pass_runs, OP_GE, 4);
++  tt_u64_op(m->close_pass_closed, OP_EQ, 22);
++
++  const smartlist_t *stores = relay_metrics_get_stores();
++  tt_assert(stores);
++  metrics_store_get_output(METRICS_FORMAT_PROMETHEUS,
++                           smartlist_get(stores, 0), prom_buf);
++  prom_str = buf_extract(prom_buf, NULL);
++  tt_assert(strstr(prom_str,
++    "tor_relay_dir_streams_total{phase=\"opened\"} 11\n"));
++  tt_assert(strstr(prom_str,
++    "tor_relay_dir_streams_total{phase=\"writing\"} 8\n"));
++  tt_assert(strstr(prom_str,
++    "tor_relay_dir_streams_total{phase=\"completed\"} 7\n"));
++  tt_assert(strstr(prom_str,
++    "tor_relay_dir_streams_total{phase=\"aborted_pre_http\"} 1\n"));
++  tt_assert(strstr(prom_str,
++    "tor_relay_dir_streams_total{phase=\"aborted_mid_http\"} 2\n"));
++  tt_assert(strstr(prom_str,
++    "tor_relay_dir_streams_total{phase=\"aborted_writing\"} 1\n"));
++  tt_assert(strstr(prom_str,
++    "tor_relay_dir_streams_total{phase=\"reused_circuit\"} 5\n"));
++  tt_assert(strstr(prom_str,
++    "tor_relay_dir_streams_active{state=\"opened_wait\"} 0\n"));
++  tt_assert(strstr(prom_str,
++    "tor_relay_dir_streams_active{state=\"writing\"} 0\n"));
++  tt_assert(strstr(prom_str,
++    "tor_relay_dir_http_requests_total{class=\"invalid\","
++    "status=\"rejected_early\"} 1\n"));
++  tt_assert(strstr(prom_str,
++    "tor_relay_dir_http_requests_total{class=\"hs_v3_fetch\","
++    "status=\"503\"} 1\n"));
++
++ done:
++  tor_free(prom_str);
++  buf_free(prom_buf);
++  relay_metrics_free();
++  SMARTLIST_FOREACH(live, connection_t *, c, free_test_conn(c));
++  smartlist_free(live);
++}
++
+ #define MAINLOOP_TEST(name) \
+   { #name, test_mainloop_## name , TT_FORK, NULL, NULL }
+ 
+@@ -774,5 +919,6 @@ struct testcase_t mainloop_tests[] = {
+   MAINLOOP_TEST(index_corruption_assertions),
+ #endif
+   MAINLOOP_TEST(randomized_cleanup_lifecycle),
++  MAINLOOP_TEST(normal_directory_and_metrics),
+   END_OF_TESTCASES
+ };
+-- 
+2.39.5 (Apple Git-154)
+

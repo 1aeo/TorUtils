@@ -1,0 +1,865 @@
+From 25d15d1abf6d9ebf6382e5a7800c58d317c27fff Mon Sep 17 00:00:00 2001
+From: joey <joey@Mac-Studio.local>
+Date: Wed, 21 Oct 2026 00:30:20 -0700
+Subject: [PATCH] mainloop: index connection_array, active_linked, and
+ closeable cleanup scans
+
+Replace linear O(N), O(A), and O(C) smartlist_contains/smartlist_remove scans across connection_array, active_linked_connection_lst, and closeable_connection_lst during connection teardown and linked-connection read activation/deactivation with O(1) index-tracked operations:
+
+1. Introduce connection_in_idx_list(), CONN_IDX_LIST_ADD(), and CONN_IDX_LIST_DEL() to validate index bounds/pointer identity and perform swap-delete index repair in O(1) across connection_array, closeable_connection_lst, and active_linked_connection_lst.
+2. Reset conn->conn_array_index to -1 in connection_remove().
+3. Add conn->active_linked_conn_idx and conn->closeable_conn_idx (initialized to -1 in connection_init()) and maintain them in O(1) across add_connection_to_closeable_list(), connection_start_reading_from_linked_conn(), connection_stop_reading_from_linked_conn(), and connection_unlink().
+4. Assert !connection_is_on_closeable_list(conn), !connection_in_array(conn), and !connection_in_active_linked_list(conn) in O(1) inside connection_free_().
+5. Fix direct smartlist_add(get_connection_array(), ...) test helpers in test_conflux_pool.c and test_hs_client.c to maintain conn_array_index and remove connections before connection_free_minimal().
+6. Add unit, peer-teardown, re-entrant mark-for-close, OOM-reindexing, corruption-assertion, and randomized lifecycle tests in test_mainloop.c.
+---
+ changes/bug_mainloop_index_cleanup_scans |   6 +
+ src/core/mainloop/connection.c           |   3 +
+ src/core/mainloop/mainloop.c             | 124 ++++---
+ src/core/mainloop/mainloop.h             |   4 +
+ src/core/or/connection_st.h              |   4 +
+ src/test/test_conflux_pool.c             |   5 +-
+ src/test/test_hs_client.c                |  14 +-
+ src/test/test_mainloop.c                 | 395 +++++++++++++++++++++++
+ 8 files changed, 512 insertions(+), 43 deletions(-)
+ create mode 100644 changes/bug_mainloop_index_cleanup_scans
+
+diff --git a/changes/bug_mainloop_index_cleanup_scans b/changes/bug_mainloop_index_cleanup_scans
+new file mode 100644
+index 0000000..1ffa3e1
+--- /dev/null
++++ b/changes/bug_mainloop_index_cleanup_scans
+@@ -0,0 +1,6 @@
++  o Major bugfixes (mainloop, relay, performance):
++    - Replace linear smartlist_contains() and smartlist_remove() scans
++      across connection_array, active_linked_connection_lst, and
++      closeable_connection_lst with O(1) index-tracked operations during
++      connection teardown and linked-connection read toggling. Prevents
++      main-thread CPU stalls under high linked-connection churn.
+diff --git a/src/core/mainloop/connection.c b/src/core/mainloop/connection.c
+index cd71bb8..82490f7 100644
+--- a/src/core/mainloop/connection.c
++++ b/src/core/mainloop/connection.c
+@@ -731,6 +731,8 @@ connection_init(time_t now, connection_t *conn, int type, int socket_family)
+ 
+   conn->s = TOR_INVALID_SOCKET; /* give it a default of 'not used' */
+   conn->conn_array_index = -1; /* also default to 'not used' */
++  conn->active_linked_conn_idx = -1; /* also default to 'not used' */
++  conn->closeable_conn_idx = -1; /* also default to 'not used' */
+   conn->global_identifier = n_connections_allocated++;
+ 
+   conn->type = type;
+@@ -968,6 +970,7 @@ connection_free_,(connection_t *conn))
+     return;
+   tor_assert(!connection_is_on_closeable_list(conn));
+   tor_assert(!connection_in_array(conn));
++  tor_assert(!connection_in_active_linked_list(conn));
+   /* Direct free can bypass normal closure. This releases the channel's guard
+    * attribution handle before cleanup callbacks can report another error.
+    * Destruction itself is not evidence of establishment failure; any eligible
+diff --git a/src/core/mainloop/mainloop.c b/src/core/mainloop/mainloop.c
+index 72bfc31..0e68fd7 100644
+--- a/src/core/mainloop/mainloop.c
++++ b/src/core/mainloop/mainloop.c
+@@ -165,10 +165,10 @@ static unsigned newnym_epoch = 0;
+ STATIC smartlist_t *connection_array = NULL;
+ /** List of connections that have been marked for close and need to be freed
+  * and removed from connection_array. */
+-static smartlist_t *closeable_connection_lst = NULL;
++STATIC smartlist_t *closeable_connection_lst = NULL;
+ /** List of linked connections that are currently reading data into their
+  * inbuf from their partner's outbuf. */
+-static smartlist_t *active_linked_connection_lst = NULL;
++STATIC smartlist_t *active_linked_connection_lst = NULL;
+ /** Flag: Set to true iff we entered the current libevent main loop via
+  * <b>loop_once</b>. If so, there's no need to trigger a loopexit in order
+  * to handle linked connections. */
+@@ -198,7 +198,6 @@ static int can_complete_circuits = 0;
+ #define LAZY_DESCRIPTOR_RETRY_INTERVAL (60)
+ 
+ static int conn_close_if_marked(int i);
+-static void connection_start_reading_from_linked_conn(connection_t *conn);
+ static int connection_should_read_from_linked_conn(connection_t *conn);
+ static void conn_read_callback(evutil_socket_t fd, short event, void *_conn);
+ static void conn_write_callback(evutil_socket_t fd, short event, void *_conn);
+@@ -237,6 +236,29 @@ note_that_we_maybe_cant_complete_circuits(void)
+   can_complete_circuits = 0;
+ }
+ 
++/** Append <b>conn</b> to the indexed smartlist <b>sl</b>, recording its index
++ * in <b>conn</b>-\><b>field</b>. */
++#define CONN_IDX_LIST_ADD(sl, conn, field) STMT_BEGIN {                 \
++  if (PREDICT_UNLIKELY(!(sl)))                                          \
++    (sl) = smartlist_new();                                             \
++  (conn)->field = smartlist_len(sl);                                    \
++  smartlist_add((sl), (conn));                                          \
++} STMT_END
++
++/** Remove <b>conn</b> from the indexed smartlist <b>sl</b> using its index
++ * field <b>field</b>, updating any swapped tail element's <b>field</b> in
++ * O(1) time and resetting <b>conn</b>-\><b>field</b> to -1. */
++#define CONN_IDX_LIST_DEL(sl, conn, field) STMT_BEGIN {                 \
++  int idx_ = (conn)->field;                                             \
++  (conn)->field = -1;                                                   \
++  smartlist_del((sl), idx_);                                            \
++  if (idx_ < smartlist_len(sl)) {                                       \
++    connection_t *swapped_ = smartlist_get((sl), idx_);                 \
++    tor_assert(swapped_->field == smartlist_len(sl));                   \
++    swapped_->field = idx_;                                             \
++  }                                                                     \
++} STMT_END
++
+ /** Add <b>conn</b> to the array of connections that we can poll on.  The
+  * connection's socket must be set; the connection starts out
+  * non-reading and non-writing.
+@@ -250,9 +272,8 @@ connection_add_impl(connection_t *conn, int is_connecting)
+              (conn->type == CONN_TYPE_AP &&
+               TO_EDGE_CONN(conn)->is_dns_request));
+ 
+-  tor_assert(conn->conn_array_index == -1); /* can only connection_add once */
+-  conn->conn_array_index = smartlist_len(connection_array);
+-  smartlist_add(connection_array, conn);
++  tor_assert(!connection_in_array(conn)); /* can only connection_add once */
++  CONN_IDX_LIST_ADD(connection_array, conn, conn_array_index);
+ 
+   (void) is_connecting;
+ 
+@@ -289,9 +310,6 @@ connection_unregister_events(connection_t *conn)
+ int
+ connection_remove(connection_t *conn)
+ {
+-  int current_index;
+-  connection_t *tmp;
+-
+   tor_assert(conn);
+ 
+   log_debug(LD_NET,"removing socket %d (type %s), n_conns now %d",
+@@ -304,18 +322,9 @@ connection_remove(connection_t *conn)
+ 
+   control_event_conn_bandwidth(conn);
+ 
+-  tor_assert(conn->conn_array_index >= 0);
+-  current_index = conn->conn_array_index;
++  tor_assert(connection_in_array(conn));
+   connection_unregister_events(conn); /* This is redundant, but cheap. */
+-  if (current_index == smartlist_len(connection_array)-1) { /* at the end */
+-    smartlist_del(connection_array, current_index);
+-    return 0;
+-  }
+-
+-  /* replace this one with the one at the end */
+-  smartlist_del(connection_array, current_index);
+-  tmp = smartlist_get(connection_array, current_index);
+-  tmp->conn_array_index = current_index;
++  CONN_IDX_LIST_DEL(connection_array, conn, conn_array_index);
+ 
+   return 0;
+ }
+@@ -333,7 +342,7 @@ static void
+ connection_unlink(connection_t *conn)
+ {
+   connection_about_to_close_connection(conn);
+-  if (conn->conn_array_index >= 0) {
++  if (connection_in_array(conn)) {
+     connection_remove(conn);
+   }
+   if (conn->linked_conn) {
+@@ -343,8 +352,12 @@ connection_unlink(connection_t *conn)
+       connection_start_reading(conn->linked_conn);
+     conn->linked_conn = NULL;
+   }
+-  smartlist_remove(closeable_connection_lst, conn);
+-  smartlist_remove(active_linked_connection_lst, conn);
++  if (connection_is_on_closeable_list(conn)) {
++    CONN_IDX_LIST_DEL(closeable_connection_lst, conn, closeable_conn_idx);
++  }
++  if (conn->linked) {
++    connection_stop_reading_from_linked_conn(conn);
++  }
+   if (conn->type == CONN_TYPE_EXIT) {
+     assert_connection_edge_not_dns_pending(TO_EDGE_CONN(conn));
+   }
+@@ -416,25 +429,58 @@ tor_init_connection_lists(void)
+ void
+ add_connection_to_closeable_list(connection_t *conn)
+ {
+-  tor_assert(!smartlist_contains(closeable_connection_lst, conn));
++  tor_assert(!connection_is_on_closeable_list(conn));
+   tor_assert(conn->marked_for_close);
+   assert_connection_ok(conn, time(NULL));
+-  smartlist_add(closeable_connection_lst, conn);
++  CONN_IDX_LIST_ADD(closeable_connection_lst, conn, closeable_conn_idx);
+   mainloop_schedule_postloop_cleanup();
+ }
+ 
++/** Return 1 if <b>conn</b> is at index <b>idx</b> in <b>sl</b>, or 0 if
++ * <b>idx</b> is -1. Assert that <b>idx</b> is either -1 or a valid index of
++ * <b>conn</b> in <b>sl</b>. */
++static int
++connection_in_idx_list(const smartlist_t *sl, const connection_t *conn,
++                       int idx)
++{
++  if (idx < 0) {
++    tor_assert(idx == -1);
++    return 0;
++  }
++  tor_assert(sl);
++  tor_assert(idx < smartlist_len(sl));
++  tor_assert(smartlist_get(sl, idx) == conn);
++  return 1;
++}
++
+ /** Return 1 if conn is on the closeable list, else return 0. */
+ int
+ connection_is_on_closeable_list(connection_t *conn)
+ {
+-  return smartlist_contains(closeable_connection_lst, conn);
++  tor_assert(conn);
++  return connection_in_idx_list(closeable_connection_lst, conn,
++                                conn->closeable_conn_idx);
+ }
+ 
+ /** Return true iff conn is in the current poll array. */
+ int
+ connection_in_array(connection_t *conn)
+ {
+-  return smartlist_contains(connection_array, conn);
++  tor_assert(conn);
++  return connection_in_idx_list(connection_array, conn,
++                                conn->conn_array_index);
++}
++
++/** Return true iff <b>conn</b> is on active_linked_connection_lst. */
++int
++connection_in_active_linked_list(const connection_t *conn)
++{
++  tor_assert(conn);
++  int in_list = connection_in_idx_list(active_linked_connection_lst, conn,
++                                       conn->active_linked_conn_idx);
++  tor_assert(in_list == (int)conn->active_on_link);
++  tor_assert(!in_list || conn->linked);
++  return in_list;
+ }
+ 
+ /** Set <b>*array</b> to an array of all connections. <b>*array</b> must not
+@@ -819,38 +865,33 @@ tor_event_loop_shutdown_is_pending(void)
+ /** Helper: Tell the main loop to begin reading bytes into <b>conn</b> from
+  * its linked connection, if it is not doing so already.  Called by
+  * connection_start_reading and connection_start_writing as appropriate. */
+-static void
++STATIC void
+ connection_start_reading_from_linked_conn(connection_t *conn)
+ {
+   tor_assert(conn);
+   tor_assert(conn->linked == 1);
+ 
+-  if (!conn->active_on_link) {
++  if (!connection_in_active_linked_list(conn)) {
+     conn->active_on_link = 1;
+-    smartlist_add(active_linked_connection_lst, conn);
++    CONN_IDX_LIST_ADD(active_linked_connection_lst, conn,
++                      active_linked_conn_idx);
+     mainloop_event_activate(schedule_active_linked_connections_event);
+-  } else {
+-    tor_assert(smartlist_contains(active_linked_connection_lst, conn));
+   }
+ }
+ 
+ /** Tell the main loop to stop reading bytes into <b>conn</b> from its linked
+  * connection, if is currently doing so.  Called by connection_stop_reading,
+- * connection_stop_writing, and connection_read. */
++ * connection_stop_writing, connection_read, and connection_unlink. */
+ void
+ connection_stop_reading_from_linked_conn(connection_t *conn)
+ {
+   tor_assert(conn);
+   tor_assert(conn->linked == 1);
+ 
+-  if (conn->active_on_link) {
++  if (connection_in_active_linked_list(conn)) {
+     conn->active_on_link = 0;
+-    /* FFFF We could keep an index here so we can smartlist_del
+-     * cleanly.  On the other hand, this doesn't show up on profiles,
+-     * so let's leave it alone for now. */
+-    smartlist_remove(active_linked_connection_lst, conn);
+-  } else {
+-    tor_assert(!smartlist_contains(active_linked_connection_lst, conn));
++    CONN_IDX_LIST_DEL(active_linked_connection_lst, conn,
++                      active_linked_conn_idx);
+   }
+ }
+ 
+@@ -861,7 +902,8 @@ close_closeable_connections(void)
+   int i;
+   for (i = 0; i < smartlist_len(closeable_connection_lst); ) {
+     connection_t *conn = smartlist_get(closeable_connection_lst, i);
+-    if (conn->conn_array_index < 0) {
++    tor_assert(conn->closeable_conn_idx == i);
++    if (!connection_in_array(conn)) {
+       connection_unlink(conn); /* blow it away right now */
+     } else {
+       if (!conn_close_if_marked(conn->conn_array_index))
+diff --git a/src/core/mainloop/mainloop.h b/src/core/mainloop/mainloop.h
+index 2110cc5..84a8232 100644
+--- a/src/core/mainloop/mainloop.h
++++ b/src/core/mainloop/mainloop.h
+@@ -22,6 +22,7 @@ int connection_add_impl(connection_t *conn, int is_connecting);
+ int connection_remove(connection_t *conn);
+ void connection_unregister_events(connection_t *conn);
+ int connection_in_array(connection_t *conn);
++int connection_in_active_linked_list(const connection_t *conn);
+ void add_connection_to_closeable_list(connection_t *conn);
+ int connection_is_on_closeable_list(connection_t *conn);
+ 
+@@ -101,6 +102,7 @@ extern struct token_bucket_rw_t global_relayed_bucket;
+ STATIC void run_connection_housekeeping(int i, time_t now);
+ STATIC int run_main_loop_until_done(void);
+ STATIC void close_closeable_connections(void);
++STATIC void connection_start_reading_from_linked_conn(connection_t *conn);
+ STATIC void teardown_periodic_events(void);
+ STATIC int get_my_roles(const or_options_t *);
+ STATIC int check_network_participation_callback(time_t now,
+@@ -108,6 +110,8 @@ STATIC int check_network_participation_callback(time_t now,
+ 
+ #ifdef TOR_UNIT_TESTS
+ extern smartlist_t *connection_array;
++extern smartlist_t *closeable_connection_lst;
++extern smartlist_t *active_linked_connection_lst;
+ 
+ /* We need the periodic_event_item_t definition. */
+ #include "core/mainloop/periodic.h"
+diff --git a/src/core/or/connection_st.h b/src/core/or/connection_st.h
+index 87ab6af..a14761c 100644
+--- a/src/core/or/connection_st.h
++++ b/src/core/or/connection_st.h
+@@ -99,6 +99,10 @@ struct connection_t {
+    * or has no socket. */
+   tor_socket_t s;
+   int conn_array_index; /**< Index into the global connection array. */
++  int active_linked_conn_idx; /**< Index into active_linked_connection_lst,
++                               * or -1 if not on that list. */
++  int closeable_conn_idx; /**< Index into closeable_connection_lst,
++                           * or -1 if not on that list. */
+ 
+   struct event *read_event; /**< Libevent event structure. */
+   struct event *write_event; /**< Libevent event structure. */
+diff --git a/src/test/test_conflux_pool.c b/src/test/test_conflux_pool.c
+index 48f24ba..65f10ff 100644
+--- a/src/test/test_conflux_pool.c
++++ b/src/test/test_conflux_pool.c
+@@ -1787,6 +1787,8 @@ test_conflux_cross_cancel_channel(void *arg)
+   request->want_onehop = 1;
+   request->chosen_exit_name = tor_strdup(
+       "$4242424242424242424242424242424242424242");
++  ENTRY_TO_CONN(request)->conn_array_index =
++    smartlist_len(get_connection_array());
+   smartlist_add(get_connection_array(), ENTRY_TO_CONN(request));
+ 
+   tt_assert(launch_new_set(2));
+@@ -1815,7 +1817,8 @@ test_conflux_cross_cancel_channel(void *arg)
+  done:
+   test_clear_circs();
+   if (request) {
+-    smartlist_remove(get_connection_array(), ENTRY_TO_CONN(request));
++    if (connection_in_array(ENTRY_TO_CONN(request)))
++      connection_remove(ENTRY_TO_CONN(request));
+     connection_free_(ENTRY_TO_CONN(request));
+   }
+   if (chan) {
+diff --git a/src/test/test_hs_client.c b/src/test/test_hs_client.c
+index 00842c9..2e1a460 100644
+--- a/src/test/test_hs_client.c
++++ b/src/test/test_hs_client.c
+@@ -522,6 +522,7 @@ test_descriptor_fetch(void *arg)
+   ENTRY_TO_EDGE_CONN(ec)->hs_ident = hs_ident_edge_conn_new(&service_pk);
+   tt_assert(ENTRY_TO_EDGE_CONN(ec)->hs_ident);
+   TO_CONN(ENTRY_TO_EDGE_CONN(ec))->state = AP_CONN_STATE_RENDDESC_WAIT;
++  ec->edge_.base_.conn_array_index = smartlist_len(get_connection_array());
+   smartlist_add(get_connection_array(), &ec->edge_.base_);
+ 
+   /* 1. FetchHidServDescriptors is false so we shouldn't be able to fetch. */
+@@ -558,9 +559,11 @@ test_descriptor_fetch(void *arg)
+     dir_conn->hs_ident = tor_malloc_zero(sizeof(hs_ident_dir_conn_t));
+     TO_CONN(dir_conn)->purpose = DIR_PURPOSE_FETCH_HSDESC;
+     ed25519_pubkey_copy(&dir_conn->hs_ident->identity_pk, &service_pk);
++    TO_CONN(dir_conn)->conn_array_index =
++      smartlist_len(get_connection_array());
+     smartlist_add(get_connection_array(), TO_CONN(dir_conn));
+     ret = hs_client_refetch_hsdesc(&service_pk);
+-    smartlist_remove(get_connection_array(), TO_CONN(dir_conn));
++    connection_remove(TO_CONN(dir_conn));
+     connection_free_minimal(TO_CONN(dir_conn));
+     tt_int_op(ret, OP_EQ, HS_CLIENT_FETCH_PENDING);
+   }
+@@ -580,6 +583,8 @@ test_descriptor_fetch(void *arg)
+   tt_int_op(ec->edge_.end_reason, OP_EQ, END_STREAM_REASON_RESOLVEFAILED);
+ 
+  done:
++  if (ec && connection_in_array(ENTRY_TO_CONN(ec)))
++    connection_remove(ENTRY_TO_CONN(ec));
+   connection_free_minimal(ENTRY_TO_CONN(ec));
+   UNMOCK(networkstatus_get_reasonably_live_consensus);
+   UNMOCK(router_have_minimum_dir_info);
+@@ -751,6 +756,7 @@ helper_build_socks_connection(const ed25519_public_key_t *service_pk,
+   entry_connection_t *socks = entry_connection_new(CONN_TYPE_AP, AF_INET);
+   ENTRY_TO_EDGE_CONN(socks)->hs_ident = hs_ident_edge_conn_new(service_pk);
+   TO_CONN(ENTRY_TO_EDGE_CONN(socks))->state = conn_state;
++  socks->edge_.base_.conn_array_index = smartlist_len(get_connection_array());
+   smartlist_add(get_connection_array(), &socks->edge_.base_);
+   return socks;
+ }
+@@ -847,6 +853,10 @@ test_desc_has_arrived_cleanup(void *arg)
+   retry_all_socks_conn_waiting_for_desc();
+ 
+  done:
++  if (socks1 && connection_in_array(ENTRY_TO_CONN(socks1)))
++    connection_remove(ENTRY_TO_CONN(socks1));
++  if (socks2 && connection_in_array(ENTRY_TO_CONN(socks2)))
++    connection_remove(ENTRY_TO_CONN(socks2));
+   connection_free_minimal(ENTRY_TO_CONN(socks1));
+   connection_free_minimal(ENTRY_TO_CONN(socks2));
+   hs_descriptor_free(desc);
+@@ -1246,6 +1256,8 @@ test_socks_hs_errors(void *arg)
+             SOCKS5_HS_BAD_CLIENT_AUTH);
+ 
+  done:
++  if (socks_conn && connection_in_array(ENTRY_TO_CONN(socks_conn)))
++    connection_remove(ENTRY_TO_CONN(socks_conn));
+   connection_free_minimal(ENTRY_TO_CONN(socks_conn));
+   connection_free_minimal(TO_CONN(dir_conn));
+   hs_descriptor_free(desc);
+diff --git a/src/test/test_mainloop.c b/src/test/test_mainloop.c
+index ccd3378..15796be 100644
+--- a/src/test/test_mainloop.c
++++ b/src/test/test_mainloop.c
+@@ -16,12 +16,16 @@
+ #include "lib/confmgt/confmgt.h"
+ 
+ #include "core/or/or.h"
++#include "core/or/connection_edge.h"
++#include "core/or/connection_st.h"
++#include "core/or/edge_connection_st.h"
+ #include "core/mainloop/connection.h"
+ #include "core/mainloop/mainloop.h"
+ #include "core/mainloop/mainloop_state_st.h"
+ #include "core/mainloop/mainloop_sys.h"
+ #include "core/mainloop/netstatus.h"
+ 
++#include "feature/dircommon/directory.h"
+ #include "feature/hs/hs_service.h"
+ 
+ #include "app/config/config.h"
+@@ -30,6 +34,10 @@
+ 
+ #include "app/main/subsysmgr.h"
+ 
++#ifndef _WIN32
++#include <sys/wait.h>
++#endif
++
+ static const uint64_t BILLION = 1000000000;
+ 
+ static void
+@@ -369,6 +377,387 @@ test_mainloop_dormant_save_state(void *arg)
+   tor_free(state);
+ }
+ 
++static void
++new_test_linked_pair(connection_t **a_out, connection_t **b_out,
++                     smartlist_t *live)
++{
++  connection_t *a = connection_new(CONN_TYPE_EXIT, AF_INET);
++  connection_t *b = connection_new(CONN_TYPE_DIR, AF_INET);
++  a->state = EXIT_CONN_STATE_OPEN;
++  a->purpose = EXIT_PURPOSE_CONNECT;
++  a->address = tor_strdup("127.0.0.1");
++  TO_EDGE_CONN(a)->edge_has_sent_end = 1;
++  TO_EDGE_CONN(a)->end_reason = END_STREAM_REASON_DONE;
++  b->state = DIR_CONN_STATE_SERVER_WRITING;
++  b->purpose = DIR_PURPOSE_SERVER;
++  b->address = tor_strdup("127.0.0.1");
++  connection_link_connections(a, b);
++  if (live) {
++    connection_add(a);
++    connection_add(b);
++    smartlist_add(live, a);
++    smartlist_add(live, b);
++  }
++  *a_out = a;
++  *b_out = b;
++}
++
++static void
++free_test_conn(connection_t *c)
++{
++  if (connection_in_active_linked_list(c))
++    connection_stop_reading_from_linked_conn(c);
++  if (connection_in_array(c))
++    connection_remove(c);
++  connection_free_(c);
++}
++
++static void
++mock_start_reading_marks_conn_for_close(connection_t *conn)
++{
++  if (!conn->marked_for_close)
++    connection_mark_for_close(conn);
++}
++
++static void
++assert_cleanup_containers_coherent(smartlist_t *live_conns)
++{
++  SMARTLIST_FOREACH_BEGIN(connection_array, connection_t *, c) {
++    tt_int_op(c->conn_array_index, OP_EQ, c_sl_idx);
++    tt_int_op(connection_in_array(c), OP_EQ, 1);
++    tt_assert(smartlist_contains(live_conns, c));
++  } SMARTLIST_FOREACH_END(c);
++  SMARTLIST_FOREACH_BEGIN(closeable_connection_lst, connection_t *, c) {
++    tt_int_op(c->closeable_conn_idx, OP_EQ, c_sl_idx);
++    tt_int_op(connection_is_on_closeable_list(c), OP_EQ, 1);
++    tt_assert(smartlist_contains(live_conns, c));
++  } SMARTLIST_FOREACH_END(c);
++  SMARTLIST_FOREACH_BEGIN(active_linked_connection_lst, connection_t *, c) {
++    tt_int_op(c->active_on_link, OP_EQ, 1);
++    tt_int_op(c->active_linked_conn_idx, OP_EQ, c_sl_idx);
++    tt_int_op(connection_in_active_linked_list(c), OP_EQ, 1);
++    tt_assert(smartlist_contains(live_conns, c));
++  } SMARTLIST_FOREACH_END(c);
++  SMARTLIST_FOREACH_BEGIN(live_conns, connection_t *, c) {
++    tt_int_op(connection_in_array(c), OP_EQ,
++              smartlist_contains(connection_array, c));
++    tt_int_op(connection_is_on_closeable_list(c), OP_EQ,
++              smartlist_contains(closeable_connection_lst, c));
++    tt_int_op(connection_in_active_linked_list(c), OP_EQ,
++              smartlist_contains(active_linked_connection_lst, c));
++  } SMARTLIST_FOREACH_END(c);
++ done:
++  ;
++}
++
++static void
++test_mainloop_active_linked_list_indexing(void *arg)
++{
++  (void)arg;
++  smartlist_t *live = smartlist_new();
++  connection_t *conns[6] = {NULL};
++
++  tor_init_connection_lists();
++  initialize_mainloop_events();
++
++  /* 1. Direct free of unadded connection_new object + empty list checks. */
++  connection_t *unadded = connection_new(CONN_TYPE_DIR, AF_INET);
++  tt_int_op(connection_in_array(unadded), OP_EQ, 0);
++  tt_int_op(connection_is_on_closeable_list(unadded), OP_EQ, 0);
++  tt_int_op(connection_in_active_linked_list(unadded), OP_EQ, 0);
++  connection_free_(unadded);
++
++  /* 2. Singleton add/remove and idempotent start/stop. */
++  new_test_linked_pair(&conns[0], &conns[1], NULL);
++  tt_int_op(connection_add(conns[0]), OP_EQ, 0);
++  tt_int_op(connection_in_array(conns[0]), OP_EQ, 1);
++  connection_start_reading_from_linked_conn(conns[0]);
++  connection_start_reading_from_linked_conn(conns[0]);
++  tt_int_op(smartlist_len(active_linked_connection_lst), OP_EQ, 1);
++  connection_stop_reading_from_linked_conn(conns[0]);
++  connection_stop_reading_from_linked_conn(conns[0]);
++  tt_int_op(smartlist_len(active_linked_connection_lst), OP_EQ, 0);
++  tt_int_op(connection_remove(conns[0]), OP_EQ, 0);
++  tt_int_op(connection_in_array(conns[0]), OP_EQ, 0);
++  connection_free_(conns[0]);
++  connection_free_(conns[1]);
++
++  /* 3. First, middle, and tail removal + swapped index repair. */
++  for (int i = 0; i < 6; i += 2) {
++    new_test_linked_pair(&conns[i], &conns[i + 1], live);
++    connection_start_reading_from_linked_conn(conns[i]);
++    connection_start_reading_from_linked_conn(conns[i + 1]);
++  }
++  assert_cleanup_containers_coherent(live);
++
++  connection_stop_reading_from_linked_conn(conns[0]);
++  tt_int_op(conns[5]->active_linked_conn_idx, OP_EQ, 0);
++  connection_stop_reading_from_linked_conn(conns[2]);
++  tt_int_op(conns[4]->active_linked_conn_idx, OP_EQ, 2);
++  connection_stop_reading_from_linked_conn(conns[3]);
++  tt_int_op(conns[3]->active_linked_conn_idx, OP_EQ, -1);
++  assert_cleanup_containers_coherent(live);
++
++  tt_int_op(connection_remove(conns[0]), OP_EQ, 0);
++  tt_int_op(conns[5]->conn_array_index, OP_EQ, 0);
++  tt_int_op(connection_remove(conns[2]), OP_EQ, 0);
++  tt_int_op(conns[4]->conn_array_index, OP_EQ, 2);
++  assert_cleanup_containers_coherent(live);
++
++ done:
++  SMARTLIST_FOREACH(live, connection_t *, c, free_test_conn(c));
++  smartlist_free(live);
++}
++
++static void
++test_mainloop_linked_peer_teardown_and_oom_reorder(void *arg)
++{
++  (void)arg;
++  smartlist_t *live = smartlist_new();
++  connection_t *a[3] = {NULL}, *b[3] = {NULL};
++
++  tor_init_connection_lists();
++  initialize_mainloop_events();
++
++  for (int i = 0; i < 3; ++i)
++    new_test_linked_pair(&a[i], &b[i], live);
++  b[1]->reading_from_linked_conn = 1;
++  buf_add(a[2]->outbuf, "hi", 2);
++  connection_start_reading_from_linked_conn(a[1]);
++  connection_start_reading_from_linked_conn(a[2]);
++  assert_cleanup_containers_coherent(live);
++
++  /* Mark a[0], a[1], a[2]; defer a[0] at idx 0 so idx 1..2 swap/close. */
++  for (int i = 0; i < 3; ++i)
++    connection_mark_for_close(a[i]);
++  assert_cleanup_containers_coherent(live);
++  a[0]->marked_for_close = 0;
++  smartlist_remove(live, a[1]);
++  smartlist_remove(live, a[2]);
++  close_closeable_connections();
++  tt_int_op(smartlist_len(closeable_connection_lst), OP_EQ, 1);
++  tt_int_op(a[0]->closeable_conn_idx, OP_EQ, 0);
++  tt_ptr_op(b[1]->linked_conn, OP_EQ, NULL);
++  tt_ptr_op(b[2]->linked_conn, OP_EQ, NULL);
++  tt_int_op(connection_in_active_linked_list(b[1]), OP_EQ, 1);
++  tt_int_op(connection_in_active_linked_list(b[2]), OP_EQ, 1);
++  assert_cleanup_containers_coherent(live);
++
++  a[0]->marked_for_close = 1;
++  smartlist_remove(live, a[0]);
++  close_closeable_connections();
++  tt_int_op(smartlist_len(closeable_connection_lst), OP_EQ, 0);
++  tt_ptr_op(b[0]->linked_conn, OP_EQ, NULL);
++  assert_cleanup_containers_coherent(live);
++
++  /* Simulate circuits_handle_oom() sorting/re-indexing connection_array. */
++  smartlist_reverse(connection_array);
++  SMARTLIST_FOREACH_BEGIN(connection_array, connection_t *, c) {
++    c->conn_array_index = c_sl_idx;
++  } SMARTLIST_FOREACH_END(c);
++  assert_cleanup_containers_coherent(live);
++
++  for (int i = 0; i < 3; ++i)
++    connection_mark_for_close(b[i]);
++  smartlist_clear(live);
++  close_closeable_connections();
++  tt_int_op(smartlist_len(connection_array), OP_EQ, 0);
++  tt_int_op(smartlist_len(active_linked_connection_lst), OP_EQ, 0);
++
++  /* Exercise re-entrant connection_mark_for_close() triggered from inside
++   * connection_unlink() before the current connection is swap-deleted from
++   * closeable_connection_lst. */
++  connection_t *ra = NULL, *rb = NULL;
++  new_test_linked_pair(&ra, &rb, live);
++  rb->reading_from_linked_conn = 1;
++  connection_mark_for_close(ra);
++  MOCK(connection_start_reading, mock_start_reading_marks_conn_for_close);
++  smartlist_clear(live);
++  close_closeable_connections();
++  UNMOCK(connection_start_reading);
++  tt_int_op(smartlist_len(closeable_connection_lst), OP_EQ, 0);
++  tt_int_op(smartlist_len(connection_array), OP_EQ, 0);
++  tt_int_op(smartlist_len(active_linked_connection_lst), OP_EQ, 0);
++
++ done:
++  UNMOCK(connection_start_reading);
++  SMARTLIST_FOREACH(live, connection_t *, c, free_test_conn(c));
++  smartlist_free(live);
++}
++
++#ifndef _WIN32
++#define ASSERT_CHILD_ABORTS(stmt) STMT_BEGIN {                    \
++  pid_t pid = fork();                                             \
++  tt_int_op(pid, OP_GE, 0);                                       \
++  if (pid == 0) {                                                 \
++    close(STDERR_FILENO);                                         \
++    close(STDOUT_FILENO);                                         \
++    stmt;                                                         \
++    _exit(0);                                                     \
++  }                                                               \
++  int status = 0;                                                 \
++  pid_t w;                                                        \
++  do {                                                            \
++    w = waitpid(pid, &status, 0);                                 \
++  } while (w < 0 && errno == EINTR);                              \
++  tt_int_op(w, OP_EQ, pid);                                       \
++  tt_assert(WIFSIGNALED(status) ||                                \
++            (WIFEXITED(status) && WEXITSTATUS(status) != 0));     \
++} STMT_END
++
++static void
++test_mainloop_index_corruption_assertions(void *arg)
++{
++  (void)arg;
++  connection_t *c1 = NULL, *c2 = NULL;
++  tor_init_connection_lists();
++  initialize_mainloop_events();
++
++  new_test_linked_pair(&c1, &c2, NULL);
++  tt_int_op(connection_add(c1), OP_EQ, 0);
++  tt_int_op(connection_add(c2), OP_EQ, 0);
++  connection_start_reading_from_linked_conn(c1);
++  connection_start_reading_from_linked_conn(c2);
++
++  ASSERT_CHILD_ABORTS({ c1->conn_array_index = -2;
++                        (void)connection_in_array(c1); });
++  ASSERT_CHILD_ABORTS({ c1->conn_array_index = 99;
++                        (void)connection_in_array(c1); });
++  ASSERT_CHILD_ABORTS({ c1->conn_array_index = c2->conn_array_index;
++                        (void)connection_in_array(c1); });
++  ASSERT_CHILD_ABORTS({ connection_array = NULL;
++                        (void)connection_in_array(c1); });
++  ASSERT_CHILD_ABORTS({ c2->conn_array_index = -1;
++                        connection_remove(c1); });
++  ASSERT_CHILD_ABORTS(connection_free_(c1));
++  ASSERT_CHILD_ABORTS({ c1->active_on_link = 0;
++                        (void)connection_in_active_linked_list(c1); });
++  ASSERT_CHILD_ABORTS({ c1->linked = 0;
++                        (void)connection_in_active_linked_list(c1); });
++  ASSERT_CHILD_ABORTS({ c1->active_linked_conn_idx = -1;
++                        (void)connection_in_active_linked_list(c1); });
++  ASSERT_CHILD_ABORTS({ c1->active_linked_conn_idx = 50;
++                        (void)connection_in_active_linked_list(c1); });
++  ASSERT_CHILD_ABORTS({ c1->active_linked_conn_idx =
++                          c2->active_linked_conn_idx;
++                        (void)connection_in_active_linked_list(c1); });
++  ASSERT_CHILD_ABORTS({ connection_remove(c1); connection_free_(c1); });
++  ASSERT_CHILD_ABORTS({ c1->closeable_conn_idx = 50;
++                        (void)connection_is_on_closeable_list(c1); });
++  ASSERT_CHILD_ABORTS({ c1->marked_for_close = 1;
++                        add_connection_to_closeable_list(c1);
++                        add_connection_to_closeable_list(c1); });
++  ASSERT_CHILD_ABORTS({ c1->marked_for_close = 1;
++                        add_connection_to_closeable_list(c1);
++                        c2->closeable_conn_idx = c1->closeable_conn_idx;
++                        (void)connection_is_on_closeable_list(c2); });
++  ASSERT_CHILD_ABORTS({ c1->marked_for_close = 1;
++                        add_connection_to_closeable_list(c1);
++                        connection_stop_reading_from_linked_conn(c1);
++                        connection_remove(c1);
++                        connection_free_(c1); });
++
++ done:
++  if (c1)
++    free_test_conn(c1);
++  if (c2)
++    free_test_conn(c2);
++}
++#endif /* !defined(_WIN32) */
++
++static void
++test_mainloop_randomized_cleanup_lifecycle(void *arg)
++{
++  (void)arg;
++  smartlist_t *live = smartlist_new();
++  uint64_t rng = UINT64_C(0x1ae020261018beef);
++
++  tor_init_connection_lists();
++  initialize_mainloop_events();
++
++  for (int step = 0; step < 2500; ++step) {
++    rng ^= rng >> 12;
++    rng ^= rng << 25;
++    rng ^= rng >> 27;
++    uint64_t r = rng * UINT64_C(2685821657736338717);
++    int op = (int)(r % 7);
++    int n_live = smartlist_len(live);
++
++    if (op == 0 || n_live == 0) {
++      if (n_live < 96) {
++        connection_t *a = NULL, *b = NULL;
++        new_test_linked_pair(&a, &b, live);
++        if (r & 0x100) {
++          a->reading_from_linked_conn = 1;
++          connection_start_reading_from_linked_conn(a);
++        }
++        if (r & 0x200) {
++          b->reading_from_linked_conn = 1;
++          connection_start_reading_from_linked_conn(b);
++        }
++      }
++    } else if (op == 1) {
++      connection_free_(connection_new(CONN_TYPE_DIR, AF_INET));
++    } else if (op == 2) {
++      connection_t *c = smartlist_get(live, (int)((r >> 8) % n_live));
++      c->reading_from_linked_conn = (r >> 17) & 1;
++      if ((r >> 16) & 1) {
++        connection_start_reading_from_linked_conn(c);
++      } else {
++        connection_stop_reading_from_linked_conn(c);
++      }
++    } else if (op == 3) {
++      int count = 1 + (int)((r >> 8) % 3);
++      for (int k = 0; k < count && smartlist_len(live) > 0; ++k) {
++        int idx = (int)((r >> (16 + k * 8)) % smartlist_len(live));
++        connection_t *victim = smartlist_get(live, idx);
++        if (!victim->marked_for_close)
++          connection_mark_for_close(victim);
++      }
++      assert_cleanup_containers_coherent(live);
++      SMARTLIST_FOREACH(closeable_connection_lst, connection_t *, c,
++                        smartlist_remove(live, c));
++      close_closeable_connections();
++    } else if (op == 4) {
++      connection_t *victim = smartlist_get(live, (int)((r >> 8) % n_live));
++      if (connection_in_array(victim))
++        connection_remove(victim);
++      connection_mark_for_close(victim);
++      assert_cleanup_containers_coherent(live);
++      smartlist_remove(live, victim);
++      close_closeable_connections();
++    } else if (op == 5) {
++      int len = smartlist_len(connection_array);
++      for (int i = len - 1; i > 0; --i) {
++        int j = (int)(((r >> 8) + (uint64_t)i * 2654435761U) %
++                      (uint64_t)(i + 1));
++        smartlist_swap(connection_array, i, j);
++      }
++      SMARTLIST_FOREACH_BEGIN(connection_array, connection_t *, c) {
++        c->conn_array_index = c_sl_idx;
++      } SMARTLIST_FOREACH_END(c);
++    } else {
++      int idx = (int)((r >> 8) % n_live);
++      connection_t *victim = smartlist_get(live, idx);
++      smartlist_del(live, idx);
++      free_test_conn(victim);
++    }
++    assert_cleanup_containers_coherent(live);
++  }
++
++  SMARTLIST_FOREACH(live, connection_t *, c, connection_mark_for_close(c));
++  assert_cleanup_containers_coherent(live);
++  smartlist_clear(live);
++  close_closeable_connections();
++  assert_cleanup_containers_coherent(live);
++  tt_int_op(smartlist_len(connection_array), OP_EQ, 0);
++  tt_int_op(smartlist_len(active_linked_connection_lst), OP_EQ, 0);
++
++ done:
++  SMARTLIST_FOREACH(live, connection_t *, c, free_test_conn(c));
++  smartlist_free(live);
++}
++
+ #define MAINLOOP_TEST(name) \
+   { #name, test_mainloop_## name , TT_FORK, NULL, NULL }
+ 
+@@ -379,5 +768,11 @@ struct testcase_t mainloop_tests[] = {
+   MAINLOOP_TEST(check_participation),
+   MAINLOOP_TEST(dormant_load_state),
+   MAINLOOP_TEST(dormant_save_state),
++  MAINLOOP_TEST(active_linked_list_indexing),
++  MAINLOOP_TEST(linked_peer_teardown_and_oom_reorder),
++#ifndef _WIN32
++  MAINLOOP_TEST(index_corruption_assertions),
++#endif
++  MAINLOOP_TEST(randomized_cleanup_lifecycle),
+   END_OF_TESTCASES
+ };
+-- 
+2.39.5 (Apple Git-154)
+
