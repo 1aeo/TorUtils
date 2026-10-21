@@ -11,7 +11,7 @@ Patches
 -------
 
 0001-conn-Only-uncount-connections-that-were-counted-as-o.patch   (tor#41350)
-  +23/-6 lines outside tests, in 5 files: one bit opened_in_rephist in
+  +23/-6 lines of C outside tests and changes/, in 5 files: one bit opened_in_rephist in
   connection_t, set by note_connection() and listener_connection_new(); the
   rep_hist_note_conn_closed() call in connection_mark_for_close_internal_()
   only runs if the bit is set, and clears it; connection_ext_or_transition()
@@ -117,6 +117,3 @@ after startup                          gauge(opened)=0   created=0   kernel ESTA
 7 real TLS connections open            gauge(opened)=7   created=7   kernel ESTAB=7
 +5 non-TLS +5 FIN while stalled        gauge(opened)=7   created=7   kernel ESTAB=7
 real connections closed                gauge(opened)=0   created=7   kernel ESTAB=0
-
-The Chutney numbers in analysis/tor41350-conn-gauge.md section A.4 are from
-the revision 1 lab run and were not re-run for revision 2.

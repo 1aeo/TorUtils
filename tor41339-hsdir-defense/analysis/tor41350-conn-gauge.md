@@ -14,8 +14,8 @@ after `:1468` by −1 on `main`.
 
 **How this was checked.** Source reading on all three trees, unit tests, and
 an offline single-relay lab run in a loopback-only network namespace
-(`unshare -n`; see `upstream/tor41350/lab/`). The Chutney numbers in A.4 come
-from the earlier lab run for revision 1 and were not re-run for this revision.
+(`unshare -n`; see `upstream/tor41350/lab/`). Revision 1's Chutney numbers
+couldn't be re-run for this revision, so they were removed.
 
 ---
 
@@ -29,7 +29,7 @@ counter by `fill_conn_counter_values()` (`:771-811`). Both read the
 file-static arrays in `src/feature/stats/rephist.c:1685-1692`.
 
 **Increments.** `rep_hist_note_conn_opened()` (`rephist.c:1696-1715`) bumps
-both `created` and `opened`. It is called from exactly three places:
+both `created` and `opened`. It is reached from exactly three places (called directly at `connection.c:654`, and through `note_connection()` at `status.c:151`, which has two callers):
 
 | Site | When |
 |-|-|
@@ -58,8 +58,9 @@ are therefore expected and are not drift.
 
 ### A.2 Unpaired paths (stock 0.4.9.14)
 
-None of these connections is ever passed to `rep_hist_note_conn_opened()`,
-but each is marked for close, so each mark subtracts 1 from a bucket that
+Except for Path 3 (counted as one type, uncounted as another), none of these
+connections is ever passed to `rep_hist_note_conn_opened()`, but each is
+marked for close, so each mark subtracts 1 from a bucket that
 holds real connections.
 
 | # | Path | Bucket pulled down | Evidence |
@@ -80,7 +81,7 @@ connections. `connection_or_clear_identity()` only clears a digest.
 `channel_close_for_error()` never calls back into the connection. Tor uses
 neither `SO_LINGER` nor `TCP_DEFER_ACCEPT`.
 
-**Upward drift (counted, never uncounted) is not reachable.** Revision 1
+**Apart from Path 3's `Extended OR` bucket, upward drift (counted, never uncounted) is not reachable.** Revision 1
 listed three "Path 7" leaks. All of them are dead code:
 `connection_add_impl()` (`src/core/mainloop/mainloop.c:245-271`) has a single
 `return 0;`, so the `connection_add()` / `connection_add_connecting()`
@@ -160,19 +161,13 @@ that only send FIN queue up in its accept backlog, then it is resumed with
 `created` stays at 7 in both builds: the failed connections are never counted
 as created either.
 
-**Chutney (revision 1 lab, not re-run).** A 4-node network with temporary
-instrumentation that classified every unpaired close. On the target exit and
-directory cache, 10 handshake-incomplete ORPort connections took
-`OR/received/ipv4` from 7 to 0 (7 effective and 3 clamped decrements, all
-marked at `connection_or.c:1687`). 25 `BEGIN_DIR` streams with 5 real exit
-sockets open took `Exit/initiated/ipv4` from 5 to 0 (5 effective and 20
-clamped). The revision-1 table showed 28 and 23 for these because it was
-cumulative and included 3 decrements from bootstrap. With the fix, the gauges
-matched `ss` throughout.
+Paths 2a and 3 are exercised only by the unit tests in A.5. For 2a, the
+test marks an uncounted socketless EXIT connection; for 3, it drives the real
+ExtOR transition. There is no lab run for either in this revision.
 
 ### A.5 Fix (`upstream/tor41350/0001-conn-Only-uncount-connections-that-were-counted-as-o.patch`)
 
-+23/−6 lines outside tests, in 5 files:
++23/−6 lines of C (excluding tests and the changes file), in 5 files:
 
 - **`connection_st.h`.** One new bit, `unsigned int opened_in_rephist:1;`,
   next to `from_listener`. It fits in existing bitfield padding. The file
@@ -192,7 +187,8 @@ which is why the DoS count stays correct for Path 1a connections while the
 gauge doesn't.
 
 **Why one bit is enough.** Every write to `from_listener` and `socket_family`
-happens before the connection is counted:
+either happens before the connection is counted or rewrites the value it was
+counted with:
 
 - `from_listener` is set at `connection.c:2098`.
 - `socket_family` is set in `connection_init()` (`:737`), at `:1744` (the
@@ -206,12 +202,13 @@ So revision 1's snapshot of `(from_listener, type, socket_family)` (three
 extra fields, including an `int`) bought nothing beyond what the transition
 hunk does.
 
-**Why clearing the bit matters.** `connection_finished_flushing()` only
-checks `CONN_IS_CLOSED`, so `connection_ext_or_transition()` can run on a
-connection that has already been marked (`connection.c:4661`, `:4665-4667`).
-Clearing the bit on close makes the transition a no-op in that case.
-Without it, the transition would uncount the connection twice and leave a
-phantom `OR` count.
+**Clearing the bit is defensive.** In 0.4.9.14 the transition can't run on
+a marked connection. `connection_handle_write_impl()` returns at once for a
+marked connection (`connection.c:4448`), and for `EXT_OR`,
+`connection_flushed_some()` has no branch and returns 0, so the mark at
+`:4661` can't precede `connection_finished_flushing()`. Clearing the bit on
+close, together with the guard at the transition, keeps this correct if that
+ever changes.
 
 **What changed from revision 1's patch.**
 
@@ -219,7 +216,7 @@ phantom `OR` count.
   conditionals. `note_connection()` has exactly two callers, each reached once
   per connection, so the `BUG()` guard and the added `tor_assert(conn)` were
   noise.
-- No `connection_free_minimal()` hook. Free without mark can't happen (A.2),
+- No `connection_free_minimal()` hook. A counted connection is never freed without a mark, except by `connection_free_all()` at shutdown (A.2),
   and keeping the decrement at mark time preserves its current semantics.
   Moving it to free time instead would make the gauge follow the socket until
   it is closed. That is offered upstream as an option.
@@ -230,8 +227,8 @@ phantom `OR` count.
   bridge with only PT clients. Keeping them under `Extended OR` would need a
   second bit. This is offered upstream as a question.
 - The tests moved to where the code under test lives. The lifecycle cases
-  are in `test_connection.c` instead of `test_stats.c`, which had needed 13
-  new includes. The ExtOR case is three assertions in the existing
+  are in `test_connection.c` instead of `test_stats.c`, which had needed 12
+  new includes and a `CONNECTION_PRIVATE` define. The ExtOR case is three assertions in the existing
   `extorport/handshake` test.
 - "Bugfix on 0.4.7.11", not "0.4.7.1-alpha". The gauge came in with
   `5603baf257`, first released in 0.4.7.11.

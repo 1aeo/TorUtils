@@ -43,13 +43,13 @@ Verdicts: **F** = falsified, **P** = partly correct, **N** = new issue,
    Revision 1's `connection_free_minimal()` "safety net" fixed nothing
    reachable, so it was dropped. Moving the decrement to free time is offered
    upstream as an option.
-3. **N, medium: clearing the bit on close is load-bearing.**
-   `connection_ext_or_transition()` can run on a connection that has already
-   been marked: `connection_finished_flushing()` only checks
-   `CONN_IS_CLOSED`, and the path is `connection.c:4661` → `:4665-4667`.
-   Without clear-on-close plus the bit guard at the transition, that
-   connection would be uncounted twice and leave a phantom `OR` count.
-   Revision 2 clears the bit and guards the transition.
+3. **I, low: clear the bit on close, and guard the transition.** Both are
+   defensive. One audit claimed the ExtOR transition could run on a marked
+   connection. A later review refuted that: `connection_handle_write_impl()`
+   returns early for marked connections (`connection.c:4448`), and
+   `connection_flushed_some()` can't fail for `EXT_OR`, so the mark at
+   `:4661` can't come first. Revision 2 keeps both because they cost two
+   lines and make the transition safe if that ever changes.
 4. **I, medium: choosing an ExtOR bucket.** Revision 1 kept ExtOR connections
    in the `Extended OR` bucket for their whole life, which needed the type
    snapshot. Revision 2 moves them to `OR` at the transition. This also bumps
@@ -132,7 +132,7 @@ Verdicts: **F** = falsified, **P** = partly correct, **N** = new issue,
     above 0. Removing the bit-clear wouldn't have failed the test. Revision 2's
     test checks this.
 18. **I, low: test placement.** `test_stats.c` needed `CONNECTION_PRIVATE` and
-    13 new includes. Revision 2 uses `test_connection.c`, which already has the
+    12 new includes and a define. Revision 2 uses `test_connection.c`, which already has the
     setup, and adds three assertions to the existing `extorport/handshake`
     test.
 19. **F, low: the "bugfix on" version.** The gauge came in with `5603baf257`,
