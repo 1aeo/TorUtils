@@ -2,7 +2,7 @@
 
 A 4-commit patch series for Tor `0.4.9.14` that answers `MetricsPort` scrapes from a dedicated thread, so they keep working when the relay's main event loop is saturated or at its socket limit. The main thread builds the metrics once per second. The worker thread does socket I/O and never runs metrics code; the only shared state it reads is `MetricsPortPolicy` and the socket counts, both under locks.
 
-The upstream proposal, written for `tpo/core/tor` on GitLab, is in [`GITLAB-ISSUE.md`](./GITLAB-ISSUE.md).
+Upstream issue: [tpo/core/tor#41458](https://gitlab.torproject.org/tpo/core/tor/-/work_items/41458), "MetricsPort stops answering when the main loop is saturated. Dedicated thread?" Its text, as posted, is in [`GITLAB-ISSUE.md`](./GITLAB-ISSUE.md).
 
 ## Patch series (`patches/`)
 
@@ -11,7 +11,7 @@ The upstream proposal, written for `tpo/core/tor` on GitLab, is in [`GITLAB-ISSU
 | 1 | `policies: Make metrics_policy_permits_address() thread-safe` | `src/core/or/policies.c`, `src/test/test_metrics.c` | +26 / −6 |
 | 2 | `net: Add tor_accept_socket_nonblocking_unlimited()` | `src/lib/net/socket.{c,h}` | +29 / −5 |
 | 3 | `metrics: Split MetricsPort request checks and response into helpers` | `src/feature/metrics/metrics.c` | +36 / −31 |
-| 4 | `metrics: Answer MetricsPort requests from a dedicated thread` | `changes/ticket_metricsport_worker`, `src/core/mainloop/connection.c`, `src/feature/metrics/metrics.{c,h}`, `src/test/test_metrics.c` | +310 / −2 |
+| 4 | `metrics: Answer MetricsPort requests from a dedicated thread` | `changes/ticket41458`, `src/core/mainloop/connection.c`, `src/feature/metrics/metrics.{c,h}`, `src/test/test_metrics.c` | +310 / −2 |
 | | **Total** | 8 files | **+401 / −44** (of which 97 are tests and the changes file) |
 
 1. **Policy lock.** `metrics_policy` is rebuilt on SIGHUP by `load_policy_from_option()`, which frees it and sets it to `NULL` first. A `NULL` policy means "accept" in `compare_tor_addr_to_addr_policy()`. The worker reads the policy, so it is now guarded by a mutex (created on first use, like `socket_accounting_lock()`), and the check fails closed when there is no policy.
@@ -32,7 +32,7 @@ git clone --branch tor-0.4.9.14 https://gitlab.torproject.org/tpo/core/tor.git
 cd tor && git am /path/to/metricsport-worker/patches/*.patch
 ./autogen.sh && ./configure --enable-fatal-warnings && make -j"$(nproc)"
 ./src/test/test metrics/.. policy/.. buffer/..   # includes the new metrics/worker test
-make check-spaces && python3 scripts/maint/lintChanges.py changes/ticket_metricsport_worker
+make check-spaces && python3 scripts/maint/lintChanges.py changes/ticket41458
 ```
 
 Results on Ubuntu 24.04 (gcc 13, glibc 2.39): builds with `--enable-fatal-warnings`; the full unit test suite passes (1596 ok, 31 skipped); `check-spaces`, `lintChanges.py`, and `practracker` report nothing new (`connection.c`, already over its size limit, grows by 5 lines).

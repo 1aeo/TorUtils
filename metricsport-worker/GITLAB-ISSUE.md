@@ -53,6 +53,3 @@ Lab results on one host:
 
 - [PoC branch](https://github.com/1aeo/TorUtils/tree/metricsport-worker/metricsport-worker)
 - tor-0.4.9.14: [connection.c](https://gitlab.torproject.org/tpo/core/tor/-/blob/tor-0.4.9.14/src/core/mainloop/connection.c#L1777-L1783), [metrics.c](https://gitlab.torproject.org/tpo/core/tor/-/blob/tor-0.4.9.14/src/feature/metrics/metrics.c#L70-L169), [socket.c](https://gitlab.torproject.org/tpo/core/tor/-/blob/tor-0.4.9.14/src/lib/net/socket.c#L377-L391)
-- Related `Sandbox 1` bug: tpo/core/tor#41060
-
-/label ~Feature

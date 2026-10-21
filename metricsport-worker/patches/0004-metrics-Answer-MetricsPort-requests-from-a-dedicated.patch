@@ -1,4 +1,4 @@
-From db4fce4e3d9566a79e12644e0a1cc94b1f8264d9 Mon Sep 17 00:00:00 2001
+From 4b15ed0a755074d185e25a6962a77233e772b299 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 06:26:32 +0000
 Subject: [PATCH 4/4] metrics: Answer MetricsPort requests from a dedicated
@@ -34,28 +34,30 @@ In more detail:
   - Windows has no poll(), so it keeps serving the MetricsPort from the
     main loop.
 
+Closes #41458.
+
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_018ZfqW8PgStnaE5cg75wM9u
 ---
- changes/ticket_metricsport_worker |   5 +
- src/core/mainloop/connection.c    |   9 +-
- src/feature/metrics/metrics.c     | 203 ++++++++++++++++++++++++++++++
- src/feature/metrics/metrics.h     |   7 ++
- src/test/test_metrics.c           |  88 +++++++++++++
+ changes/ticket41458            |   5 +
+ src/core/mainloop/connection.c |   9 +-
+ src/feature/metrics/metrics.c  | 203 +++++++++++++++++++++++++++++++++
+ src/feature/metrics/metrics.h  |   7 ++
+ src/test/test_metrics.c        |  88 ++++++++++++++
  5 files changed, 310 insertions(+), 2 deletions(-)
- create mode 100644 changes/ticket_metricsport_worker
+ create mode 100644 changes/ticket41458
 
-diff --git a/changes/ticket_metricsport_worker b/changes/ticket_metricsport_worker
+diff --git a/changes/ticket41458 b/changes/ticket41458
 new file mode 100644
-index 0000000..74d7826
+index 0000000..2064b77
 --- /dev/null
-+++ b/changes/ticket_metricsport_worker
++++ b/changes/ticket41458
 @@ -0,0 +1,5 @@
 +  o Minor features (metrics, relay):
 +    - Answer MetricsPort requests from a dedicated thread, using a copy of
 +      the metrics that the main thread refreshes every second, so that
 +      scrapes still succeed when the main event loop is overloaded or tor
-+      is at its socket limit.
++      is at its socket limit. Closes ticket 41458.
 diff --git a/src/core/mainloop/connection.c b/src/core/mainloop/connection.c
 index cd71bb8..580b792 100644
 --- a/src/core/mainloop/connection.c
