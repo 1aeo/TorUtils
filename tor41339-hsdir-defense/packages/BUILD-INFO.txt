@@ -28,21 +28,25 @@ only in its changelog entry):
 
 Quilt series applied (debian/patches), identical for both builds: 0000
 restoring doc/nofooter.conf, then tor41339-hsdir-defense/patches/0001-0013
-(byte-identical copies in ../engineering/deb/build-reordered/debian-patches/):
+(byte-identical copies in ../engineering/deb/build-reordered/debian-patches/).
+The packages were built before the co-author trailers were removed from
+the commit messages of 0011-0013; that changed only the patch headers and
+messages, not the code (the git tree is identical), so the hashes below
+are of the current files:
   feac23ee1a832a71ae4e57b8f34cdaf43b024ec342764814b86e504bf2502e0d  0000-restore-doc-nofooter.conf.patch
-  10a022f9254cae3e0e303c0f19457ffe77ece232de6abdd397606651d78c7ceb  0001-dirserv-Stop-unthrottled-warnings-on-malformed-HTTP-.patch
-  b7d0a32ec7e7d8a80ef07b0f50209bd6bb18bf5b22049219af57da4f6cada6bc  0002-dirserv-Don-t-buffer-request-bodies-larger-than-an-H.patch
-  b12c93706bfa73c047ac9e3d91218f94e08277f50ad6c73cf8ee278f1d5f9536  0003-dirserv-Discard-client-input-received-after-the-requ.patch
-  d92bc54ccfe62af2e75d028287ea6c24da738ea2c5040219428224a4e24b2cca  0004-hs_desc-Check-signature-length-before-verifying-the-.patch
-  304261c11f984868b850561a177e69214352c06c9927682246f4928b4fa29096  0005-hs_cache-Only-credit-HSDir-downloads-once-the-respon.patch
-  4dfd20653e9d91cf4b2219971f23f24dd6ec325019eeebe7d095d6e06133075f  0006-relay_metrics-Count-onion-service-descriptor-fetches.patch
-  363618a3ac9720d5c7d13b377d0d1d8e854478fc6e1460f6b4679968a9023cf2  0007-relay_metrics-Count-tunneled-directory-requests-and-.patch
-  02fdcabcf8b78caad45df2838632e5fc6dd9585baecbab3fe8cab22b981edc93  0008-relay_metrics-Add-a-gauge-of-tunneled-directory-serv.patch
-  809beb25e02d1941200c3dec10e8831999dda985eca51fe2b7682cb131705af5  0009-relay_metrics-Make-fill_dos_values-table-driven.patch
-  7a6b8dda853e16e9720243b8a18afce48ab59f0260207a005dc381bdabdfe446  0010-dos-Count-repeated-and-unknown-previous-hop-HSDir-re.patch
-  090fde83f1e117c298ed885a27273905964ccc99e0c77b834ea4080157c81d5c  0011-dos-Add-off-by-default-HSDir-circuit-reuse-and-previ.patch
-  0fa8f35fbcdc01229566b60292d52f5c877593572ffae3b0b221fa1f92ec382e  0012-dos-Add-an-off-by-default-limit-on-open-BEGIN_DIR-st.patch
-  ce6d287e48959a380f402a046b838ad13a714099d6bfea5f8c28f9a6237d0962  0013-hs_cache-Add-an-off-by-default-per-descriptor-fetch-.patch
+  dbf79d9aed66dc5905e7af0161cd040a4bab5f5e5de1e12e995bf856a4504d5f  0001-dirserv-Stop-unthrottled-warnings-on-malformed-HTTP-.patch
+  bb038d9659a2781e386faa1af0d93951cbe77f153fbf6330fe2a1ae42ff5f2eb  0002-dirserv-Don-t-buffer-request-bodies-larger-than-an-H.patch
+  2ae79edb04943b3126f188b05a635bf59f46653ff3639beaf0ac3542ea5957b6  0003-dirserv-Discard-client-input-received-after-the-requ.patch
+  4fa321a1aa50d817d2fd0f0a4ae40e9063830ca7dc784ed047dbb2dc23e54fd2  0004-hs_desc-Check-signature-length-before-verifying-the-.patch
+  882bbee3495b953ed1bdf5887e96af0adad742b95d3eaa0d7c0708ebd7e65cfe  0005-hs_cache-Only-credit-HSDir-downloads-once-the-respon.patch
+  d146232c5e827a0487a0b0bef685f12f7f24d941c9b20d9efdc39a2301fd7c4a  0006-relay_metrics-Count-onion-service-descriptor-fetches.patch
+  78b354325002971bdfa00026b2fdccda483415cc6bb8900afc9a360c58e5edca  0007-relay_metrics-Count-tunneled-directory-requests-and-.patch
+  047f4aa956bfbcf498751c951b3fe8f59f75b3feecae33ded0901c5ce64fd2fa  0008-relay_metrics-Add-a-gauge-of-tunneled-directory-serv.patch
+  e6487ff4cc4779ffaf884031b48b98284f2aa516befdafefe6c42019fc717882  0009-relay_metrics-Make-fill_dos_values-table-driven.patch
+  8bab6fd6f094a2ecca54be35b2bdc243fe0accdf698701e0985e56d0014329f1  0010-dos-Count-repeated-and-unknown-previous-hop-HSDir-re.patch
+  54df7a0005684750f9d618e8007a62b8400e97967352a2da47b6e5370060576a  0011-dos-Add-off-by-default-HSDir-circuit-reuse-and-previ.patch
+  9981964fd06f3dc8c1dede84bfe972a8525c9d0dd4dba4298be9bea804465fbc  0012-dos-Add-an-off-by-default-limit-on-open-BEGIN_DIR-st.patch
+  309001ae503e9ebdebbb81ace4639f9ccbfdbfe09d7e10fe7d9c94ad02861a7e  0013-hs_cache-Add-an-off-by-default-per-descriptor-fetch-.patch
   54c154c41100cc45b1d57db301b791fc427076496a1188cf47b27ea72961bf76  series
 
 Builders (driver ../engineering/deb/build-reordered/build-in-container-reordered.sh

@@ -1,4 +1,4 @@
-From 61ca55028483738def8230e4ab32227afb826d6a Mon Sep 17 00:00:00 2001
+From 0c0609efdbab4549aef72b201b6947d6eca4e92e Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 09:05:25 +0000
 Subject: [PATCH 13/13] hs_cache: Add an off-by-default per-descriptor fetch
@@ -30,9 +30,6 @@ off by default. Popular services can also legitimately exceed the
 default rate, which the counter shows.
 
 Part of #41339.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_0112dw5hzSb9kGftLP3nkYC5
 ---
  changes/ticket41339_hsdir_fetch_limit |  8 +++
  doc/man/tor.1.txt                     | 22 ++++++

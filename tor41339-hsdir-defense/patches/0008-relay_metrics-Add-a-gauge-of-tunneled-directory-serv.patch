@@ -1,4 +1,4 @@
-From 3824dc2efc9f68e29aba845ac1cbb6040679d29d Mon Sep 17 00:00:00 2001
+From 5c25e694ef7f908ddd5a42561f54303adc732704 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:45:05 +0000
 Subject: [PATCH 08/13] relay_metrics: Add a gauge of tunneled directory server

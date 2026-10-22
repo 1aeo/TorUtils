@@ -1,4 +1,4 @@
-From cf2c4df24587f87555ba713a5ccbcf73c8561c5a Mon Sep 17 00:00:00 2001
+From 0d762688a9722756f1aa49fbfb837fd88d8d9a3b Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:43:08 +0000
 Subject: [PATCH 07/13] relay_metrics: Count tunneled directory requests and

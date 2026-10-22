@@ -1,4 +1,4 @@
-From 4f3615470d79f6cb6731c4c9c1afad3a3b2ae2cf Mon Sep 17 00:00:00 2001
+From d61b2e186dfe61405368a925d9ea135b27683dde Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:48:27 +0000
 Subject: [PATCH 10/13] dos: Count repeated and unknown-previous-hop HSDir

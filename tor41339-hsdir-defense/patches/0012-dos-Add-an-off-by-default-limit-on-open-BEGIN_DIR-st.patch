@@ -1,4 +1,4 @@
-From 20be0fb501761f48d484d5ccae0a1c1b19fcd3b2 Mon Sep 17 00:00:00 2001
+From dc62d68184732850856e2180123c07af2f27d7a2 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 10:12:44 +0000
 Subject: [PATCH 12/13] dos: Add an off-by-default limit on open BEGIN_DIR
@@ -33,9 +33,6 @@ Unlike reusing DoSStreamCreation*, this leaves exit streams and the
 existing options and counters unchanged.
 
 Part of #41339.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_0112dw5hzSb9kGftLP3nkYC5
 ---
  changes/ticket41339_begindir_max_streams |   7 +
  doc/man/tor.1.txt                        |  17 +++

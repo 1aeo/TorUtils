@@ -1,4 +1,4 @@
-From 3366072f74adbe0123a36f89d8225fd335de3e34 Mon Sep 17 00:00:00 2001
+From 5476dd14c2c23c705994717b4cf843a625df72bb Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:40:13 +0000
 Subject: [PATCH 06/13] relay_metrics: Count onion service descriptor fetches
