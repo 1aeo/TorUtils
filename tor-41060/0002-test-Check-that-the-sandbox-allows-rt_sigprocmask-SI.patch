@@ -1,0 +1,69 @@
+From 7af7c6e72e3dba1e3f48deb0a19dd647e846ea05 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Thu, 22 Oct 2026 07:58:52 +0000
+Subject: [PATCH 2/2] test: Check that the sandbox allows
+ rt_sigprocmask(SIG_BLOCK)
+
+Add a regression test for bug 41060. pthread_create() blocks signals
+with SIG_BLOCK while it starts a thread, and then restores the mask it
+saved without checking that call, so inside the sandbox
+pthread_sigmask(SIG_BLOCK) has to work.
+
+Without the previous commit, the test fails every time, as SIG_BLOCK is
+refused with EPERM (except in fragile-hardening and LTTng builds, which
+already allowed it). The test doesn't check the signal mask after
+pthread_create() itself: without the fix, that mask is whatever was
+left on the stack, so such a check would depend on the libc and the
+build.
+
+The test also checks that the sandbox is active: on maint-0.4.9 and
+older branches, setup_sandbox() ignores a failure to install it, and
+the test would then pass without testing anything.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01QfypjVN44TWb81ExDAokwk
+---
+ src/test/test_sandbox.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/src/test/test_sandbox.c b/src/test/test_sandbox.c
+index edb5c0c232..36236d1111 100644
+--- a/src/test/test_sandbox.c
++++ b/src/test/test_sandbox.c
+@@ -346,6 +346,25 @@ test_sandbox_crypto_equix(void *arg)
+   equix_free(verify_ctx);
+ }
+ 
++/** Test that the sandbox allows rt_sigprocmask(SIG_BLOCK). pthread_create()
++ * blocks signals with SIG_BLOCK while it starts a thread, and then restores
++ * the saved mask without checking whether that call worked (bug 41060). */
++static void
++test_sandbox_thread_sigmask(void *arg)
++{
++  sigset_t set;
++
++  (void)arg;
++
++  tt_assert(sandbox_is_active());
++
++  sigfillset(&set);
++  tt_int_op(pthread_sigmask(SIG_BLOCK, &set, NULL), OP_EQ, 0);
++
++ done:
++  (void)0;
++}
++
+ #define SANDBOX_TEST_SKIPPED(name) \
+   { #name, test_sandbox_ ## name, TT_SKIP, NULL, NULL }
+ 
+@@ -409,6 +428,7 @@ struct testcase_t sandbox_tests[] = {
+ #endif
+ 
+   SANDBOX_TEST_IN_SANDBOX(crypto_equix),
++  SANDBOX_TEST_IN_SANDBOX(thread_sigmask),
+   END_OF_TESTCASES
+ };
+ 
+-- 
+2.43.0
+
