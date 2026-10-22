@@ -34,7 +34,7 @@ and whether fetches concentrate on a few descriptors, is not yet established
 ## The series (`patches/`)
 
 Apply with `git am` onto Tor 0.4.9.14, upstream `main`, or `maint-0.4.9`. The
-15 patches are ordered from easiest to merge upstream (bugfixes, then
+16 patches are ordered from easiest to merge upstream (bugfixes, then
 observe-only MetricsPort counters) to off-by-default enforcement, one upstream
 change per commit. `patches/torspec-param-spec.patch` is the companion
 param-spec and rend-spec text for the six new consensus parameters.
@@ -56,6 +56,7 @@ param-spec and rend-spec text for the six new consensus parameters.
 | 0013 | Metrics | Per-descriptor fetch bucket (`HSDirDescriptorFetchRate` 5/s, `HSDirDescriptorFetchBurst` 20), kept when a descriptor is replaced; fetches over it are counted as `hsdir_fetch_over_rate`. Compared with `hsdir_get_total{action="success"}`, it shows whether a flood concentrates on a few descriptors. Never refuses. | always on |
 | 0014 | Enforcement | `HSDirDescriptorFetchLimit` (AUTOBOOL over a consensus parameter) and `HSDirFetchBudget` (bytes/s; 0 = `HSDirFetchBudgetPercent`, default 50, of min(configured, observed bandwidth), at least 512 KB): shed descriptor fetches by closing their circuits once a second goes over the budget. No fetch is refused until then. In the second after, fetches within their descriptor's rate are answered first (up to half the budget) and the others by a lottery aimed at the budget; no second answers more than 1.5× the budget. Counted as `hsdir_fetch_pressure` and `hsdir_fetch_shed` either way. | **off** |
 | 0015 | Hardening | Reject a declared `Content-Length` that can never fit as soon as the headers arrive, instead of waiting for the bytes (every `fetch_from_buf_http()` caller that doesn't accept a partial body). | — |
+| 0016 | Bugfix | The heartbeat names HSDir fetches over the shed threshold. That counter includes fetches still answered while `HSDirDescriptorFetchLimit` is off. | — |
 
 The metrics (0006–0010, 0013) only count, and count only tunneled (linked)
 connections, so DirPort traffic stays out. Each defense (0011, 0012, 0014)
@@ -83,7 +84,7 @@ Upstream merge requests, each built from fresh `main`: 0001–0003 (0002 needs
 0001's context), 0004, 0005, then the stack 0006–0010 on top of 0001–0005
 (0007's context includes a line from 0003), then 0011, 0012, 0013 and 0014,
 each on the one before (0012 reuses 0011's option helper), for separate
-discussion, and 0015 on 0002 (its test extends 0002's). The commits are
+discussion, 0015 on 0002 (its test extends 0002's), and 0016 on 0014. The commits are
 upstream style (`subsystem: Summary`, `changes/` entries that pass
 `lintChanges.py`, `check-spaces` clean, man page renders without asciidoc
 warnings). Each commit builds with `--enable-fatal-warnings` and passes
@@ -95,7 +96,8 @@ files (`connection_edge.c`, `hs_descriptor.c`) that stock already has over
 the limit.
 
 `packages/` holds the `+tor41339.6` `.deb`s for Ubuntu 24.04 and 26.04, built
-from all 15 patches with every defense off (see `packages/BUILD-INFO.txt`). The
+from 0001–0015 with every defense off (see `packages/BUILD-INFO.txt`).
+0016 is a review fix and is not in those packages. The
 earlier `+tor41339.3` canary packages were built from a legacy 7-patch series
 that exported only the four `hsdir_*` counters of 0010 and the 0011 rules. The
 operator documents below were written for those canary builds; for the options

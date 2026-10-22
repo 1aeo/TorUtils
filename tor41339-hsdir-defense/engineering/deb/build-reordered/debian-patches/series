@@ -14,3 +14,4 @@
 0013-hs_cache-Count-fetches-of-each-descriptor-over-a-per.patch
 0014-dos-Shed-onion-service-descriptor-fetches-over-a-byt.patch
 0015-proto_http-Reject-a-declared-body-that-can-never-fit.patch
+0016-dos-Name-the-heartbeat-s-HSDir-shed-count-for-what-i.patch

@@ -1,0 +1,60 @@
+From 8a7e2d982bf0f52b731d5bc1bda0e409cf460baf Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Thu, 22 Oct 2026 16:04:49 +0000
+Subject: [PATCH] dos: Name the heartbeat's HSDir shed count for what it counts
+
+The shed counter increments for every fetch the shed path would
+refuse, including while HSDirDescriptorFetchLimit is off and the
+fetch is still answered. The heartbeat prints that counter only
+once the defense is on, so "shed" included fetches that were
+served. Call them fetches over the shed threshold.
+
+Part of #41339.
+---
+ changes/ticket41339_hsdir_shed_heartbeat | 4 ++++
+ src/core/or/dos.c                        | 3 ++-
+ src/test/test_dos.c                      | 3 ++-
+ 3 files changed, 8 insertions(+), 2 deletions(-)
+ create mode 100644 changes/ticket41339_hsdir_shed_heartbeat
+
+diff --git a/changes/ticket41339_hsdir_shed_heartbeat b/changes/ticket41339_hsdir_shed_heartbeat
+new file mode 100644
+index 0000000..54044e2
+--- /dev/null
++++ b/changes/ticket41339_hsdir_shed_heartbeat
+@@ -0,0 +1,4 @@
++  o Minor bugfixes (DoS-resistance, onion service directory):
++    - The heartbeat counts HSDir descriptor fetches over the shed
++      threshold, including fetches still answered while
++      HSDirDescriptorFetchLimit is off. Part of ticket 41339.
+diff --git a/src/core/or/dos.c b/src/core/or/dos.c
+index ce19c01..9f24922 100644
+--- a/src/core/or/dos.c
++++ b/src/core/or/dos.c
+@@ -1329,7 +1329,8 @@ dos_log_heartbeat(void)
+ 
+   if (dos_should_shed_hsdir_fetches()) {
+     smartlist_add_asprintf(elems,
+-                           "%" PRIu64 " HSDir descriptor fetches shed",
++                           "%" PRIu64 " HSDir descriptor fetches over "
++                           "the shed threshold",
+                            dos_dir_stats[DOS_DIR_HSDIR_FETCH_SHED]);
+   } else {
+     smartlist_add_asprintf(elems, "[HSDirDescriptorFetchLimit disabled]");
+diff --git a/src/test/test_dos.c b/src/test/test_dos.c
+index d700014..f8836a6 100644
+--- a/src/test/test_dos.c
++++ b/src/test/test_dos.c
+@@ -800,7 +800,8 @@ test_dos_dir_heartbeat(void *arg)
+   expect_single_log_msg_containing("1 BEGIN_DIR streams over the limit");
+   expect_single_log_msg_containing("1 circuits with repeated HSDir requests, "
+                                    "2 HSDir requests from unknown relays, "
+-                                   "1 HSDir descriptor fetches shed");
++                                   "1 HSDir descriptor fetches over "
++                                   "the shed threshold");
+ 
+  done:
+   teardown_capture_of_logs();
+-- 
+2.43.0
+
