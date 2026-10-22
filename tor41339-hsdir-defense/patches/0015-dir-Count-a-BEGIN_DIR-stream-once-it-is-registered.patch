@@ -1,0 +1,64 @@
+From 9cbbeafd849ff2197b734defafe18b2c5386e913 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Thu, 22 Oct 2026 06:50:33 +0000
+Subject: [PATCH 15/16] dir: Count a BEGIN_DIR stream once it is registered
+
+connection_exit_connect_dir() counted the stream before connection_add().
+If either add failed, both connections were freed rather than closed, so
+the stream was in tor_relay_streams_total and in none of the tunneled
+directory request totals.
+
+Count it only after the directory connection is on the connection list.
+A later failure to send CONNECTED still counts, and is counted as
+unparsed when that connection closes from COMMAND_WAIT.
+
+Part of #41339.
+---
+ changes/begindir_stream_count |  5 +++++
+ src/core/or/connection_edge.c | 11 ++++++++---
+ 2 files changed, 13 insertions(+), 3 deletions(-)
+ create mode 100644 changes/begindir_stream_count
+
+diff --git a/changes/begindir_stream_count b/changes/begindir_stream_count
+new file mode 100644
+index 0000000..c655eb9
+--- /dev/null
++++ b/changes/begindir_stream_count
+@@ -0,0 +1,5 @@
++  o Minor bugfixes (statistics):
++    - Count a BEGIN_DIR stream only after its directory connection is
++      registered. One we free because the connection table is full was
++      counted in the stream total and then never appeared in the tunneled
++      directory request totals. Part of ticket 41339.
+diff --git a/src/core/or/connection_edge.c b/src/core/or/connection_edge.c
+index b400f6f..e086ecc 100644
+--- a/src/core/or/connection_edge.c
++++ b/src/core/or/connection_edge.c
+@@ -4699,9 +4699,6 @@ connection_exit_connect_dir(edge_connection_t *exitconn)
+ 
+   log_info(LD_EXIT, "Opening local connection for anonymized directory exit");
+ 
+-  /* Note the BEGIN_DIR stream as seen. */
+-  rep_hist_note_exit_stream(RELAY_COMMAND_BEGIN_DIR);
+-
+   exitconn->base_.state = EXIT_CONN_STATE_OPEN;
+ 
+   dirconn = dir_connection_new(tor_addr_family(&exitconn->base_.addr));
+@@ -4745,6 +4742,14 @@ connection_exit_connect_dir(edge_connection_t *exitconn)
+     return 0;
+   }
+ 
++  /* Count the stream only now that its directory connection is registered.
++   * Counting it before the connection_add() failures above would put it in
++   * tor_relay_streams_total and in none of the tunneled directory request
++   * totals: those connections are freed here, not closed. A failure to send
++   * CONNECTED still counts, and is counted as unparsed when that directory
++   * connection closes from COMMAND_WAIT. */
++  rep_hist_note_exit_stream(RELAY_COMMAND_BEGIN_DIR);
++
+   connection_start_reading(TO_CONN(dirconn));
+   connection_start_reading(TO_CONN(exitconn));
+ 
+-- 
+2.43.0
+
