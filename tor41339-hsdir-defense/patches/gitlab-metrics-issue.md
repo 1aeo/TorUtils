@@ -29,7 +29,7 @@ All values would be relay-wide, with no behaviour change. Only tunneled (linked)
 
 | Metric | Labels | Counts |
 |---|---|---|
-| `tor_relay_hsdir_get_total` | `action="success\|not_found\|single_hop"` | descriptor fetches answered 200, 404 (including malformed keys), or 503 because the request isn't anonymous (single-hop, or its stream or circuit is already closing) |
+| `tor_relay_hsdir_get_total` | `action="success\|not_found\|single_hop"` | descriptor fetches answered 200, 404 (including malformed keys), or 503 because the request isn't anonymous (a single-hop connection, or a stream or circuit that is already closing). A 503 written after the circuit is already marked is not sent: stock drops relay cells on a marked circuit (`src/core/or/relay.c:799` and `:3460` in 0.4.9.14), so the client sees the close |
 | `tor_relay_hsdir_post_total` | `action="success\|bad_url\|invalid\|not_newer\|single_hop"` | uploads accepted, or rejected for the reason given |
 | `tor_relay_dir_requests_total` | `type="non_hs\|unparsed"` | other directory requests; streams with no valid request |
 | `tor_relay_dir_responses_total` | `type="hs_descriptor\|other"` | responses fully handed to the linked exit stream |
@@ -38,7 +38,7 @@ All values would be relay-wide, with no behaviour change. Only tunneled (linked)
 
 **Notes**
 
-- **Reconciliation.** On a public relay, every tunneled BEGIN_DIR stream ends up in exactly one bucket. Up to scrape timing, `streams_total{BEGIN_DIR}` ≈ `hsdir_get` + `hsdir_post` + `dir_requests` + `dir_server_conns{command_wait}`. Similarly, `hsdir_get{success}` − `dir_responses{hs_descriptor}` − `dir_server_conns{writing_hs_descriptor}` counts descriptor responses abandoned before hand-off, and `hsdir_request_total` = `hsdir_get` + `hsdir_post` − their `single_hop`. "Written out" means handed to the exit edge, not delivered to the client; stock's own comment there calls it "only an intermediate step".
+- **Reconciliation.** On a public relay, every tunneled BEGIN_DIR stream ends up in exactly one bucket. Up to scrape timing, `streams_total{BEGIN_DIR}` ≈ `hsdir_get` + `hsdir_post` + `dir_requests` + `dir_server_conns{command_wait}`. Similarly, `hsdir_get{success}` − `dir_responses{hs_descriptor}` − `dir_server_conns{writing_hs_descriptor}` counts descriptor responses that were queued and not fully written out to the linked exit (a partial flush can already have handed some bytes; the response counter waits for an empty outbuf). And `hsdir_request_total` = `hsdir_get` + `hsdir_post` − their `single_hop`. "Written out" means handed to the exit edge, not delivered to the client; stock's own comment there calls it "only an intermediate step".
 - **Cost.**
   - Increments only on paths that already run.
   - One known-relay lookup per anonymous HS request, the check RefuseUnknownExits already makes.

@@ -227,3 +227,168 @@ The source-built tip (0014–0016, not yet 0017) bootstrapped the one-guard chut
 - Rebuilding `+tor41339.5` with 0014–0017. The host has no Docker, and the build script expects the Ubuntu source package inside a container. The existing debs were checked as shipped.
 - `make check-docs` was run once, on the tree that already had the manual edit. I did not rebuild the asciidoc man page (`--disable-asciidoc`). `checkOptionDocs.pl` exited 0.
 - Per-commit `make test` was not repeated for 0017 inside the 16-commit loop. 0017's full `make test` on the tip exited 0 separately, and the saturation assertion was run on its own before that.
+
+## Round 2
+
+Reviewed the 15-patch series on `tor41339-hsdir-defense-clean` (`4bebda3`) after merging it into `tor41339-series-review` with a merge commit. The series applies with `git am` on tag `tor-0.4.9.14` (`8fe2745aee2c`) and on `main` at `8dbbbe6e86`. Line numbers are stock 0.4.9.14 unless the sentence says the series tree. One follow-up commit, `patches/0016`, fixes the heartbeat wording below. It is not in the `+tor41339.6` packages.
+
+### Commit verdicts
+
+| Commit | Verdict | Why |
+|---|---|---|
+| 0001 | Agree | Unchanged from round 1. The rate-limit test is still `TT_FORK`. |
+| 0002 | Agree, with the same false rationale | The body cap is `min(16 MB, HSV3MaxDescriptorSize)` for non-authorities (`directory_handle_command()` in the series tree). Stock `fetch_from_buf_http()` still does not compare `Content-Length` to the limit until the body is buffered. See decision 4. 0015 is the early reject, so dropping it from 0002 is fine. |
+| 0003 | Agree | Unchanged. A partial request stays in `COMMAND_WAIT`. |
+| 0004 | Agree | Unchanged. Length is checked before the signing-cert parse. |
+| 0005 | Agree | Credit moved to `connection_dir_finished_flushing()` after the `marked_for_close` return. Series `directory.c` around the flush handler. |
+| 0006 | Agree | `-2` is only the not-newer path. See decision 3. |
+| 0007 | Agree | Linked checks only. The DirPort assertion is in `test_hs_cache.c` (`directory_handle_command_get` / `post` on an unlinked connection, then the metrics stay put). |
+| 0008 | Agree | The gauge requires `c->linked`, so an ordinary exit is not `draining`. A linked exit counts as `draining` only when its directory side is gone or marked. The gauge test keeps `conn_array_index` consistent with `connection_remove()`. |
+| 0009 | Agree | Table lists the same stock counters. No value changes. |
+| 0010 | Agree | `n_hsdir_requests` is a 2-bit field (`or_circuit_st.h`), zeroed by `tor_malloc_zero` in `or_circuit_new()` (`circuitlist.c:1140`). The series test asks four times and expects the field to stay at 2. |
+| 0011 | Agree | `dos_defense_enabled()` is the stock single-hop function with the parameter name passed in. See decision 5. The reuse close is accounted once. See decision 6. |
+| 0012 | Agree | BEGIN_DIR only, default 64, public relays only, counted either way. The integration test takes a linked connection off the active linked list before `connection_free_()`. The mark-down sentence matches `dirclient.c:727` and `channel.c:1936`. See decision 7. |
+| 0013 | Agree | Count-only. `dos_hsdir_desc_fetch_allowed()` is not called from this commit. The bucket is copied on replace (`hs_cache.c` in the series tree, the `fetch_limiter` assignment next to `n_downloaded`). The test replaces a descriptor and expects the next fetch, in the same second, to still be over rate. Never refuses. |
+| 0014 | Agree, with one cost caveat | The state machine matches the man page. See decision 8. No division by zero: shedding requires `asked > budget`, and `first <= budget/2`, so the denominator is positive. `CLAMP` is `(min, v, max)` (`src/lib/intmath/cmp.h:34`). |
+| 0015 | Agree | `max_bodylen <= contentlen` in the `!force_complete` branch (`proto_http.c` in the series tree). `force_complete = 1` still returns the bytes it has. The changes text names every caller that does not set `force_complete`. |
+
+`connection_add_impl()` still always returns 0 (`src/core/mainloop/mainloop.c:244` through the `return 0` at `:271`, same on `main`). The `< 0` branches in `connection_exit_connect_dir()` (`connection_edge.c:4722` and `:4740` in the series tree) are unreachable. The round-1 "count the stream after `connection_add()`" fix was correctly left out. `tor_event_new` is still not checked, and a NULL event would not make the function return -1.
+
+### Decisions
+
+#### 1. Metric families
+
+**Agree.** Outcomes are their own families, on the pattern of `tor_relay_intro1_total{action}`. The open-connection series is a gauge. Increments are behind `linked` or behind `connection_dir_is_anonymous()`, which requires a linked edge. A DirPort connection fails that check. The issue text matches.
+
+#### 2. Keep `hsdir_request_total`?
+
+**Agree, keep it.** It is the anonymous subset, not the sum of the GET and POST families:
+
+`hsdir_request_total = (every hsdir_get action except single_hop) + (every hsdir_post action except single_hop)`
+
+`note_hs_dir_request()` runs only after the anonymity check. `single_hop` is the failure of that check, including a circuit that is already marked. The canary already graphs the dos-family name.
+
+#### 3. `hs_cache_store_as_dir()` returns -2
+
+**Agree. Callers are still correct.** `cache_store_v3_as_dir()` returns -1 only from the revision-counter reject. A failed decode leaves `ret` at -1. The POST handler switches on 0, -2, and default (`dircache.c` in the series tree). `test_hs_cache.c` and `test_stats.c` expect -2 for a duplicate and -1 for junk. No other production caller.
+
+#### 4. Does stock reject `contentlen >= max_bodylen` on every path?
+
+**Disagree for the header-only path. Agree that 0002 no longer needs its own early reject.** Stock rejects once `bodylen >= max_bodylen` (`proto_http.c:86`) before it parses `Content-Length` (`:92`). A declared length over the limit with a short body returns 0 while `force_complete` is 0. The directory server passes `force_complete = 0` (`dircache.c` in the series tree, the `connection_fetch_from_buf_http` call). 0015 rejects `contentlen >= max_bodylen` in that branch for every such caller. Callers that pass `force_complete = 1` still accept a short buffer. The equality is tested: a declared length equal to `hs_cache_get_max_descriptor_size()` is refused before any body byte.
+
+#### 5. Is `dos_defense_enabled()` an acceptable touch of stock code?
+
+**Agree.** Stock `dos_should_refuse_single_hop_client()` (`dos.c:1009` in 0.4.9.14) is: not a public relay, then the torrc value when it is not -1, else the consensus parameter defaulting to 0. The helper is that sequence. `public_server_mode()` is `server_mode() && !BridgeRelay` (`routermode.c:43`). The single-hop test still requires the stock parameter name.
+
+#### 6. Reuse close, with no HTTP response
+
+**Agree, counted once.** `directory_handle_command_get()` sets `SERVER_WRITING` before the handler. On the second request, `allow_hs_dir_request()` marks the circuit and returns false. The handler increments `refused` and returns. No response is queued. `connection_dir_about_to_close()` increments `unparsed` only in `COMMAND_WAIT`, so this close is not `unparsed` and not `success`. A later request on that circuit, still inside the same loop, fails `connection_dir_is_anonymous()` because the circuit is marked (`directory.c:249`) and is counted `single_hop`. See decision 8 for why that 503 is not delivered.
+
+#### 7. BEGIN_DIR ceiling instead of an exit-wide rate
+
+**Agree that dropping the rate is right, and that 64 off by default is acceptable.** `connection_exit_begin_conn()` still returns from the BEGIN_DIR branch before `dos_stream_new_begin_or_resolve_cell()`. The resource held is the linked pair, which ConnLimit does not count. A rate without a live cap does not free those pairs.
+
+The default 64 is above what a client holds open at once. `max_dl_per_request()` returns 500 when `dirclient_must_use_begindir()` (`routerlist.c:2531`), and `router_is_already_dir_fetching()` ignores tunnel connections (`node_select.c:247`). Those constants bound how many hashes go in one URL. They do not say 36 streams are open together. Round 1, on this same client code, measured a maximum of 1 concurrent BEGIN_DIR on a one-guard client and 2 on a bridge. This round's basic-min client never had more than one origin stream open, on one circuit, across the bootstrap poll in the lab section. A refused BEGIN_DIR sends `END_STREAM_REASON_MISC` and never calls `connection_exit_connect_dir()`, so it is not in `streams_total`. The client fails that request. For a non-onion-service fetch, `connection_dir_client_request_failed()` marks the relay down (`dirclient.c:727`) unless `entry_list_is_constrained()`. `channel_do_open_actions()` clears that only when we opened the channel (`channel.c:1936`: `started_here = channel_is_outgoing(chan)`, then `router_set_status(..., 1)` at `:1938`). The manual says "until it next connects to this relay", and "it" is the client. That matches. An onion-service purpose skips the mark-down. The option is off unless the operator or the consensus turns it on. That is an acceptable footgun for an off-by-default limit.
+
+#### 8. Count-only rate, then pressure-gated shedding
+
+**Agree the machine does what it says. The byte cost of driving the lottery toward zero is lower than the asked-byte formula.**
+
+No fetch is refused until some second has `asked > budget`. In that second the relay still answers until `answered` would pass `budget * 3 / 2`, and a single descriptor larger than that is served because the cap is skipped while `answered == 0` (`dos.c` in the series tree, `dos_hsdir_desc_fetch_allowed()`). The next consecutive second sheds. A gap of two seconds clears it (`now == sec + 1` fails). One quiet second of shedding after a spike is the tradeoff against cutting the over-budget second itself: the flood second still completes up to one and a half budgets, and only the following second pays the lottery. An every-other-second flood never enters a shedding second, and is held to 1.5× in each flood second. The tests cover that.
+
+`asked += len` happens before the shed branch, including for fetches that are not served. After the 1.5× cap, further GETs increase `asked` without a response. The next second's odds are `(budget - first) / (asked - first)` with `first = min(asked_light, budget/2)`. Filling the half-budget of within-rate fetches and then adding shed GETs is the known `(budget/2) * (1 + 1/p)` in descriptor-bytes asked. The relay does not send those extra descriptor bytes. Concrete case: budget 1 MB, descriptors 10 KB. The attacker gets 150 answers in a non-shedding second (1.5 MB served) and then 10,000 more GETs that hit the cap. `asked` is about 101.5 MB. The next second's lottery is about 0.5% for a fetch that is not answered first. The relay's extra response cost for that dilution is zero. CPU and the request bytes remain. Arming the defense still costs on the order of one budget of served descriptor bytes, which is the "about as much as overloading the relay" part. I did not find a path that denies a cached descriptor with high probability without first causing a second that serves up to 1.5× the budget. Misses never enter `dos_hsdir_desc_fetch_allowed()` (the lookup fails first). Burning the victim's burst is cheap (one token per shed GET) and only moves the victim from the first-class half into that same lottery.
+
+Shedding the second after an over-budget second, even if that second is quiet, is the right tradeoff against FCFS inside the flood second. FCFS would let the sender who filled the previous second also win the next one by arriving first. The cost is one second of lottery for everyone, including a victim whose own rate still has tokens, once other within-rate fetches have used half the budget. The code clears shedding as soon as a second stays within budget. It does not stick.
+
+The automatic budget is sensible. `bwhist_bandwidth_assess()` is 0 until history exists (`bwhist.c:241`, maxima from `bwhist_load_state()` at `:511`). The series uses observed bandwidth only when it is greater than 0, otherwise the configured rate, then at least 512 KB. A new relay cannot be an HSDir yet: the flag needs `MinUptimeHidServDirectoryV2` of 96 hours plus Stable, Fast, and Running (`dirauth_options.inc`, `voteflags.c:160`). The 512 KB floor can sit above a tiny configured rate. The relay's bandwidth token bucket still limits the bytes. The floor makes shedding less aggressive, not more.
+
+Closing the circuit instead of sending 503 is right. `DIR_503_TIMEOUT` is `60*60` (`routerlist.h:49`). A 503 sets `last_dir_503_at` (`dirclient.c:2127`). The shed path writes no response; it marks the circuit `END_CIRC_REASON_RESOURCELIMIT`. For a stock client the circuit is the one BEGIN_DIR from `ISO_STREAM` (`dirclient.c:1389`), and the purpose is an onion-service fetch, which does not mark the relay down.
+
+A sibling request already queued on that circuit is counted `single_hop`, not `refused`. **Agree, leave it there.** `connection_dir_is_anonymous()` returns false when the circuit is marked, before `note_hs_dir_request()`, so the request is not in `hsdir_request_total`. Counting it as `refused` would break `hsdir_request_total = hsdir_get + hsdir_post - single_hop`. The 503 that the handler queues is not sent: `connection_edge_send_command()` returns -1 when the circuit is marked (`relay.c:799`), and `append_cell_to_circuit_queue()` returns 0 (`relay.c:3460`). `last_dir_503_at` is not set. This is the circuit-reusing case. Stock anonymous directory requests do not share a circuit.
+
+The consensus parameter can turn shedding on for every public relay. The leak exists only while someone pays to keep that HSDir over budget, which is a different oracle from the old per-descriptor refusal on an idle relay. Default 0, and the manual states the leak. I would not flip it network-wide until that leak is an accepted cost. **Agree the parameter may exist. Disagree with treating the name as final.** `HSDirDescriptorFetchLimit` used to mean "refuse over the per-descriptor rate". It now means "shed when over the byte budget". Nothing upstream has shipped the name. The private `.5` torrcs are why this series kept it. Rename before an upstream proposal. I did not rename it here.
+
+#### 9. Heartbeat wording
+
+**Disagree, and fixed.** The notice is "DoS mitigation since startup" (`dos.c` in 0.4.9.14, the `dos_log_heartbeat` format string; the series keeps it). The fragments for BEGIN_DIR ("over the limit"), repeated circuits, and unknown previous hops do not say the defense refused them, and the counters increment either way. The shed line said "fetches shed". That counter increments on the shed label before `return !dos_should_shed_hsdir_fetches()`, so a fetch answered while the option is off is included. After a long disabled period, enabling the option makes the heartbeat report those serves as sheds. 0016 prints "over the shed threshold" instead. The disabled line is still `[HSDirDescriptorFetchLimit disabled]`.
+
+### Accounting on a public relay
+
+`streams_total{BEGIN_DIR}` counts inside `connection_exit_connect_dir()`, after the BEGIN_DIR refusal return. Every accepted stream is then either still in `command_wait` or has been classified:
+
+- HS GET and POST take the `hsdir_*` families, including `refused` and `single_hop`.
+- Anything else linked is `dir_requests` (`non_hs`, or `unparsed` for a bad URL, an unknown method that stays in `COMMAND_WAIT` until close, or a close from `COMMAND_WAIT`).
+- A success still in `SERVER_WRITING` with `hs_ident` set is in `hsdir_get{success}` and in the `writing_hs_descriptor` gauge, not in `command_wait`.
+
+That holds. These paths do not:
+
+- A BEGIN_DIR refused by 0012 never reaches `streams_total`. It is only `begindir_over_max`. Leave it out of the identity. The issue, which does not discuss enforcement, correctly omits it.
+- A non-public POST writes 503 and increments nothing (`directory_handle_command_post()`, the `public_server_mode` check). That relay is not public. The identity is for a public relay. Document, do not count it as a public-relay hole.
+- `connection_add()` cannot fail, so the connect-dir error branches do not drop a counted stream.
+- Identity 2's remainder is responses queued and not fully flushed. `connection_dir_finished_flushing()` runs when the outbuf is empty, so some bytes may already have been handed to the exit. The issue now says "not fully written out" rather than "abandoned before hand-off".
+
+`hsdir_get{success} - dir_responses{hs_descriptor} - dir_server_conns{writing_hs_descriptor}` is that remainder, plus scrape timing. DirPort HS requests are not in either side.
+
+### Lifetimes
+
+`note_hs_dir_request()`, `allow_hs_dir_request()`, and the shed close run only after `connection_dir_is_anonymous()` has required a linked edge that is not marked, an OR circuit that is not an origin and not marked, and a non-NULL `p_chan` (`directory.c:211` through `:266`). Both the encrypted check and that walk happen first, on GET and on POST. The gauge does not follow `on_circuit` or `p_chan`. `hs_cache_get_dir_fetch_limiter()` is called only after a lookup that just returned the descriptor, on the same thread. A marked circuit takes the `single_hop` branch and does not touch `p_chan`.
+
+### Tests and mutants
+
+New tests mock `monotime_coarse` and, for the lottery, `hsdir_fetch_lottery_draw`. The shedding tests and the HS cache tests are `TT_FORK`, so the static `hsdir_fetch` struct starts at zero. I mutated the built tree and restored it:
+
+| Mutant | Result |
+|---|---|
+| Consensus parameter spelled `HSDirDescriptorFetchLimitt` | Caught. `dos/hsdir_fetch_shedding` expected a refusal and got an answer (`test_dos.c:905`). |
+| `linked` check on non-HS dir requests inverted | Caught. `hs_cache/dir_request_response_metrics` expected 2 `non_hs` and got 1. |
+| `asked <= budget` changed to `asked < budget` | Caught. Three exact-budget seconds counted pressure 3 instead of 0. |
+| Shed handler's `goto done` removed | Caught. `hs_cache/hsdir_desc_fetch_shedding` saw an HTTP 200 body instead of an empty reply. |
+| Lottery numerator uses `hsdir_fetch_budget()` (the new second) instead of the previous second's budget | Not caught. `dos/hsdir_fetch_shedding` and `dos/hsdir_fetch_shedding_edges` passed, 2 tests ok. The tests keep the budget constant across the second boundary where they check the odds. |
+
+The half-budget cap, the 1.5× count of 15, the 1000-ppm floor, the bridge that counts and does not refuse, and the descriptor-replace bucket are all asserted. I did not find a non-forked test that leaks the new static counters.
+
+### Build and packaging
+
+Commands were `./configure --enable-fatal-warnings --disable-asciidoc` and `make -j4 && make test` on each commit from 0001 through 0015, then `make check-spaces`, `make check-changes`, and `make check-docs`. Started 8:51 AM PT, finished 8:55 AM PT on 22 October 2026. Every commit passed. Counts, 23 skipped throughout: 1604, 1605, 1606, 1606, 1608, 1609, 1610, 1611, 1611, 1612, 1615, 1617, 1618, 1621, 1621. `check-docs` exited 0. It prints the stock "Not in man page" and "Orphaned in man page" lists; the new option names are not in the missing list.
+
+`python3 scripts/maint/practracker/practracker.py` on the series tip and on stock both exited 98, with the same four kinds (`function-size` 59, `file-size` 11, `dependency-violation` 22, `include-count` 6). Stripping the trailing counts, the location sets are equal. `dos.c`'s dependency-violation exception is 8 in the series and 6 in stock, and `dos.c` is not a new problem line. `directory_handle_command_post()` is a warning at 136 lines in the series and 125 in stock, same location.
+
+The tip with `--disable-module-relay` (`HAVE_MODULE_RELAY` unset in `orconfig.h`) passed `make test`: 1621 ok, 23 skipped, exit 0. That tree includes 0016.
+
+`git am` of `patches/0001`–`0015` on `main` at `8dbbbe6e86` applied all 15.
+
+Packaging, this host has no Docker, so the container scripts were not executed. Fail-closed checks of the same shell forms:
+
+- `REV` unset, as `in-container.sh` does with `set -u`, exits 127.
+- `EXPECT_PATCHES` unset, as `build-in-container-reordered.sh` does, exits 127 and prints the "set EXPECT_PATCHES" message.
+- `in-container.sh` checks 8 option names and 26 metric series (`8 + 4 + 6 + 2 + 2 + 4`) and ends with `exit $fail`, so a failed `check` prints `RESULT: FAIL` and a nonzero status.
+
+Both `+tor41339.6` binaries start on this host. `--dump-config full` with `DisableNetwork 1` shows, for noble and for resolute: `HSDirOneRequestPerCircuit auto`, `HSDirRefuseUnknownPrevHop auto`, `DoSBeginDirLimitEnabled auto`, `DoSBeginDirMaxStreams 0`, `HSDirDescriptorFetchRate 5`, `HSDirDescriptorFetchBurst 20`, `HSDirDescriptorFetchLimit auto`, `HSDirFetchBudget 0`. `auto` with no consensus parameter is off.
+
+A private chutney `basic-min` network (four authorities, one exit, one client), `Sandbox 1`, listen address loopback, generated directory authorities checked as loopback-only before start. Noble binary and resolute binary each bootstrapped. `Caught a bad syscall` was 0 in every notice log. Each live process had `Seccomp` 2. The generated torrcs set `Sandbox 1` and do not set the eight defense options, so the defaults above are what ran. Chutney's stop needed its own SIGKILL after SIGINT; that is the stop helper, and the syscall count was taken before it.
+
+A second basic-min run with the noble binary polled the client's control socket for origin streams through bootstrap (855 samples). The most streams open at once was 1, all on one circuit. That bounds concurrent BEGIN_DIR streams on that client by 1. It is not a bridge and not a single configured directory guard.
+
+Client-lab: Docker is not installed, so `engineering/client-lab/run-client-lab.sh` was not re-run. The script exits nonzero if the image is missing, a client cannot bootstrap, or a baseline fetch fails (`RESULT: FAIL` if the container exits without `RESULT: PASS`). The checked-in `.6` transcripts match the README table: C1 is 20/20 and 39/40, C3 is 19/20 and 37/40, together 115 of 120, shed counts 1487, 1395, 2900, and 2768 equal `refused`, and C0 shed counts are 2920 and 2870. Those transcripts are from the packaged `.6` image, not from a run in this review.
+
+### Issue text
+
+`patches/gitlab-metrics-issue.md` does not mention patches, code changes, or enforcement. The stock claims checked out: the stream is counted in `connection_exit_connect_dir()` before any HTTP request; BEGIN_DIR returns before the known-relay check (`connection_edge.c:4210` is inside `if (!bcell.is_begindir)`); anonymized directory fetches use `ISO_STREAM` (`dirclient.c:1389`); HS fetches use `DIRIND_ANONYMOUS` (`hs_client.c:416`, `hs_service.c:4051`); `TestingDirConnectionMaxStall` defaults to 5 minutes (`config.c:775`). Two sentences were loose and are now tighter: a 503 queued on an already-marked circuit is not sent (`relay.c:799`), and the success-minus-response remainder is "not fully written out", not "before any byte was handed off".
+
+### Findings, by severity
+
+1. **Medium, design, not changed.** Once a second has served 1.5× the budget, more GETs still increase `asked` and so the next second's lottery denominator, without the relay sending those descriptors (`dos_hsdir_desc_fetch_allowed()`, the `asked += len` before the cap). Denying one descriptor to a small probability costs request processing on top of one arming second, not `(budget/2)*(1+1/p)` of served bytes. The odds match the comment, which is about demand, and the relay's served bytes stay capped. I would not change it in this series. An upstream writeup should say the formula is in descriptor-bytes asked, not bytes sent.
+
+2. **Low, fixed in 0016.** The heartbeat said "fetches shed" for a counter that includes fetches still answered while shedding is off. Failure: run an hour with the option off under load, then enable it; the next heartbeat reports those serves as sheds.
+
+3. **Low, issue text only.** The metrics draft said a closing circuit is "answered 503" and that the success remainder was "abandoned before hand-off". The 503 is queued and then dropped with the circuit. The remainder includes a partial flush. Both sentences are corrected. No relay code change: moving those requests to `refused` would break the `hsdir_request_total` identity, and the 503 does not reach the client.
+
+4. **Low, test gap.** A mutant that computes lottery odds from the new second's budget instead of the previous second's survives while the tests hold the budget constant. The code uses the previous second, which is what the comment says. No production change.
+
+### Unverified this round
+
+- Re-running `engineering/client-lab/run-client-lab.sh`. No Docker. The README numbers were checked against the stored `.6` transcripts, not against a new run.
+- A bridge, and a client limited to one directory guard, measured again. Round 1's figures for those two cases stand. This round measured the basic-min client only.
+- Arti's `HsCircPool`, still with no Arti tree here.
+- Rebuilding the `.6` packages with 0016. The packages stay 0000 plus 0001–0015.
+- `make check-docs` on stock, to diff the orphan list. The series run exited 0 and did not list the new options as missing.
