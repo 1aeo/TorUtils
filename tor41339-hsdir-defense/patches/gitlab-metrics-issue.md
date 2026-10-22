@@ -38,7 +38,7 @@ All values would be relay-wide, with no behaviour change. Only tunneled (linked)
 
 **Notes**
 
-- **Reconciliation.** On a public relay, every tunneled BEGIN_DIR stream ends up in exactly one bucket. Up to scrape timing, `streams_total{BEGIN_DIR}` ≈ `hsdir_get` + `hsdir_post` + `dir_requests` + `dir_server_conns{command_wait}`. Similarly, `hsdir_get{success}` − `dir_responses{hs_descriptor}` − `dir_server_conns{writing_hs_descriptor}` counts descriptor responses abandoned before hand-off. "Written out" means handed to the exit edge, not delivered to the client; stock's own comment there calls it "only an intermediate step".
+- **Reconciliation.** On a public relay, every tunneled BEGIN_DIR stream ends up in exactly one bucket. Up to scrape timing, `streams_total{BEGIN_DIR}` ≈ `hsdir_get` + `hsdir_post` + `dir_requests` + `dir_server_conns{command_wait}`. Similarly, `hsdir_get{success}` − `dir_responses{hs_descriptor}` − `dir_server_conns{writing_hs_descriptor}` counts descriptor responses abandoned before hand-off, and `hsdir_request_total` = `hsdir_get` + `hsdir_post` − their `single_hop`. "Written out" means handed to the exit edge, not delivered to the client; stock's own comment there calls it "only an intermediate step".
 - **Cost.**
   - Increments only on paths that already run.
   - One known-relay lookup per anonymous HS request, the check RefuseUnknownExits already makes.

@@ -11,8 +11,6 @@
 0010-dos-Count-repeated-and-unknown-previous-hop-HSDir-re.patch
 0011-dos-Add-off-by-default-HSDir-circuit-reuse-and-previ.patch
 0012-dos-Add-an-off-by-default-limit-on-open-BEGIN_DIR-st.patch
-0013-hs_cache-Add-an-off-by-default-per-descriptor-fetch-.patch
-0014-proto_http-Reject-a-declared-body-that-can-never-fit.patch
-0015-dir-Count-a-BEGIN_DIR-stream-once-it-is-registered.patch
-0016-man-State-who-marks-a-relay-down-after-a-BEGIN_DIR-r.patch
-0017-test-Lock-the-HSDir-per-circuit-counter-at-2.patch
+0013-hs_cache-Count-fetches-of-each-descriptor-over-a-per.patch
+0014-dos-Shed-onion-service-descriptor-fetches-over-a-byt.patch
+0015-proto_http-Reject-a-declared-body-that-can-never-fit.patch

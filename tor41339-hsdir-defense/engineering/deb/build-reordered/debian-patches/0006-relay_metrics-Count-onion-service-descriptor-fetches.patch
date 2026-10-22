@@ -1,7 +1,7 @@
-From 3366072f74adbe0123a36f89d8225fd335de3e34 Mon Sep 17 00:00:00 2001
+From 9534cb4128446c1b8bc1f299bdc2e05cfa7191cf Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:40:13 +0000
-Subject: [PATCH 06/13] relay_metrics: Count onion service descriptor fetches
+Subject: [PATCH 06/15] relay_metrics: Count onion service descriptor fetches
  and uploads
 
 An HSDir answers every rejected descriptor upload with the same 400,

@@ -1,7 +1,7 @@
-From dd06af230a205ecd4dff1b2438d32dac26652b58 Mon Sep 17 00:00:00 2001
+From 0d043aa3132b48dffaad0785e17ee9f792c9198d Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:56:30 +0000
-Subject: [PATCH 11/13] dos: Add off-by-default HSDir circuit-reuse and
+Subject: [PATCH 11/15] dos: Add off-by-default HSDir circuit-reuse and
  previous-hop defenses
 
 Tor and Arti clients and onion services make each onion service
@@ -30,9 +30,6 @@ tunneled request is still counted once. The heartbeat shows the counts
 once a defense is enabled.
 
 Part of #41339.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_0112dw5hzSb9kGftLP3nkYC5
 ---
  changes/ticket41339_hsdir_defenses |   8 ++
  doc/man/tor.1.txt                  |  21 ++++
@@ -457,7 +454,7 @@ index 6c57e85cb8..409b34df9b 100644
    END_OF_TESTCASES
  };
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index f94a76d39d..14bb2e0ced 100644
+index 5d703a7006..8bd14227dc 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -42,6 +42,9 @@
@@ -489,7 +486,7 @@ index f94a76d39d..14bb2e0ced 100644
    connection_free_minimal(TO_CONN(edge_conn));
    connection_free_minimal(TO_CONN(conn));
  }
-@@ -1162,6 +1170,162 @@ test_hsdir_reuse_and_prev_hop_counters(void *arg)
+@@ -1180,6 +1188,162 @@ test_hsdir_reuse_and_prev_hop_counters(void *arg)
    tor_free(chan);
  }
  
@@ -652,7 +649,7 @@ index f94a76d39d..14bb2e0ced 100644
  struct testcase_t hs_cache[] = {
    /* Encoding tests. */
    { "directory", test_directory, TT_FORK,
-@@ -1182,6 +1346,8 @@ struct testcase_t hs_cache[] = {
+@@ -1200,6 +1364,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "hsdir_reuse_and_prev_hop_counters",
      test_hsdir_reuse_and_prev_hop_counters, TT_FORK, NULL, NULL },

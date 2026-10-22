@@ -22,12 +22,12 @@ V=$(dpkg-query -W -f='${Version}' tor); echo "$V"
 check [ "${V##*+tor41339.}" = "$REV" ]
 echo "--- new option defaults (expect every defense off: auto with no consensus parameter, or 0)"
 install -d -m 700 /tmp/dc && printf 'DataDirectory /tmp/dc\nSocksPort 0\nLog notice stdout\n' > /tmp/dc.torrc
-OPTS='HSDirOneRequestPerCircuit|HSDirRefuseUnknownPrevHop|DoSBeginDirLimitEnabled|DoSBeginDirMaxStreams|HSDirDescriptorFetchLimit|HSDirDescriptorFetchRate|HSDirDescriptorFetchBurst'
+OPTS='HSDirOneRequestPerCircuit|HSDirRefuseUnknownPrevHop|DoSBeginDirLimitEnabled|DoSBeginDirMaxStreams|HSDirDescriptorFetchRate|HSDirDescriptorFetchBurst|HSDirDescriptorFetchLimit|HSDirFetchBudget'
 tor --defaults-torrc /dev/null -f /tmp/dc.torrc --dump-config full | grep -E "^($OPTS|RefuseUnknownExits) "
-NO=$(tor --list-torrc-options | grep -cxE "$OPTS"); echo "NEW_OPTIONS=$NO (expect 7)"; check [ "$NO" -eq 7 ]
-# The new series: 6 tor_relay_dos_total types, 4 + 6 HSDir GET/POST
+NO=$(tor --list-torrc-options | grep -cxE "$OPTS"); echo "NEW_OPTIONS=$NO (expect 8)"; check [ "$NO" -eq 8 ]
+# The new series: 8 tor_relay_dos_total types, 4 + 6 HSDir GET/POST
 # outcomes, 2 + 2 tunneled dir request/response types, 4 connection states.
-SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate)|begindir_over_max)"\}'
+SERIES='tor_relay_dos_total\{type="(hsdir_(request_total|req_reused|circ_reused|unknown_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|begindir_over_max)"\}'
 SERIES="$SERIES"'|tor_relay_hsdir_get_total\{action="(success|not_found|single_hop|refused)"\}'
 SERIES="$SERIES"'|tor_relay_hsdir_post_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}'
 SERIES="$SERIES"'|tor_relay_dir_requests_total\{type="(non_hs|unparsed)"\}'
@@ -44,7 +44,7 @@ for i in 1 2 3 4; do
   curl -s http://127.0.0.1:9650/metrics | grep -E "^($SERIES) "
 done
 N=$(curl -s http://127.0.0.1:9650/metrics | grep -cE "^($SERIES) ")
-echo "NEW_METRIC_SERIES=$N (expect 24)"; check [ "$N" -eq 24 ]
+echo "NEW_METRIC_SERIES=$N (expect 26)"; check [ "$N" -eq 26 ]
 curl -s http://127.0.0.1:9650/metrics | grep -E '^# TYPE tor_relay_(hsdir|dir)_'
 echo "--- bootstrap"; check grep -qE 'Bootstrapped 100%' /var/lib/tor-lab/notice.log
 echo "--- notice log"; cat /var/lib/tor-lab/notice.log

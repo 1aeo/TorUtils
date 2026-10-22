@@ -1,7 +1,7 @@
-From 4f3615470d79f6cb6731c4c9c1afad3a3b2ae2cf Mon Sep 17 00:00:00 2001
+From d072d01cd6c047ff47d60489d09c653b4f3a6d2a Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:48:27 +0000
-Subject: [PATCH 10/13] dos: Count repeated and unknown-previous-hop HSDir
+Subject: [PATCH 10/15] dos: Count repeated and unknown-previous-hop HSDir
  requests
 
 Tor makes every anonymized directory request, including each onion
@@ -21,22 +21,22 @@ and two bits on or_circuit_t.
 
 Part of #41339.
 ---
- changes/ticket41339_hsdir_reuse_counters |  8 ++
+ changes/ticket41339_hsdir_reuse_counters | 10 +++
  src/core/or/dos.c                        | 17 +++++
  src/core/or/dos.h                        | 17 +++++
  src/core/or/or_circuit_st.h              |  4 +
  src/feature/dircache/dircache.c          | 32 ++++++++
  src/feature/relay/relay_metrics.c        |  5 ++
- src/test/test_hs_cache.c                 | 95 ++++++++++++++++++++++--
- 7 files changed, 173 insertions(+), 5 deletions(-)
+ src/test/test_hs_cache.c                 | 97 ++++++++++++++++++++++--
+ 7 files changed, 177 insertions(+), 5 deletions(-)
  create mode 100644 changes/ticket41339_hsdir_reuse_counters
 
 diff --git a/changes/ticket41339_hsdir_reuse_counters b/changes/ticket41339_hsdir_reuse_counters
 new file mode 100644
-index 0000000000..3cd5003287
+index 0000000000..fddcdb39c6
 --- /dev/null
 +++ b/changes/ticket41339_hsdir_reuse_counters
-@@ -0,0 +1,8 @@
+@@ -0,0 +1,10 @@
 +  o Minor features (metrics port, relay):
 +    - Count, on the MetricsPort, the anonymous onion service directory
 +      requests an HSDir receives, the requests and circuits that repeat them
@@ -44,7 +44,9 @@ index 0000000000..3cd5003287
 +      tor_relay_dos_total{type="hsdir_request_total"|"hsdir_req_reused"|
 +      "hsdir_circ_reused"|"hsdir_unknown_prev_hop"}. Stock clients and
 +      services repeat none, and use an unknown previous hop only while our
-+      consensus lags theirs. Part of ticket 41339.
++      consensus lags theirs. hsdir_request_total counts the requests of
++      tor_relay_hsdir_get_total and tor_relay_hsdir_post_total that are not
++      single_hop. Part of ticket 41339.
 diff --git a/src/core/or/dos.c b/src/core/or/dos.c
 index b789f87aae..f6963823ee 100644
 --- a/src/core/or/dos.c
@@ -211,7 +213,7 @@ index 8aee3da717..aee312deeb 100644
  
    for (size_t i = 0; i < ARRAY_LENGTH(entries); i++) {
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index b3b9843cda..f94a76d39d 100644
+index b06163e5aa..5d703a7006 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -25,6 +25,7 @@
@@ -267,7 +269,7 @@ index b3b9843cda..f94a76d39d 100644
  /* HSDirs count descriptor fetches and uploads by outcome. */
  static void
  test_hsdir_get_post_metrics(void *arg)
-@@ -1079,6 +1089,79 @@ test_dir_server_conns_gauge(void *arg)
+@@ -1095,6 +1105,81 @@ test_dir_server_conns_gauge(void *arg)
    }
  }
  
@@ -299,19 +301,21 @@ index b3b9843cda..f94a76d39d 100644
 +  circ0 = dos_get_dir_stat(DOS_DIR_HSDIR_CIRC_REUSED);
 +  unknown0 = dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
 +
-+  /* Three requests on one circuit, one on another: the zeroed previous hop
-+   * identity is not a known relay. */
++  /* Four requests on one circuit, one on another: the zeroed previous hop
++   * identity is not a known relay. The 2-bit per-circuit counter stays at 2
++   * instead of wrapping. */
 +  circ = or_circuit_new(0, NULL);
 +  circ->p_chan = chan;
-+  for (int i = 0; i < 3; i++)
++  for (int i = 0; i < 4; i++)
 +    hsdir_request_on_circ(circ, GET("/tor/hs/3/x"), NULL);
++  tt_int_op(circ->n_hsdir_requests, OP_EQ, 2);
 +  hsdir_request_on_new_circ(chan, "POST /tor/hs/3/publish HTTP/1.0\r\n\r\n",
 +                            "x");
-+  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_REQUEST), OP_EQ, req0 + 4);
-+  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_REQ_REUSED), OP_EQ, reused0 + 2);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_REQUEST), OP_EQ, req0 + 5);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_REQ_REUSED), OP_EQ, reused0 + 3);
 +  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_CIRC_REUSED), OP_EQ, circ0 + 1);
 +  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP), OP_EQ,
-+            unknown0 + 4);
++            unknown0 + 5);
 +  tt_i64_op(get_metric(METRICS_NAME(relay_dos_total), "type",
 +                       "hsdir_circ_reused"), OP_EQ, circ0 + 1);
 +
@@ -322,14 +326,14 @@ index b3b9843cda..f94a76d39d 100644
 +  smartlist_add(mock_hsdir_ns->routerstatus_list, &known_rs);
 +  MOCK(networkstatus_get_latest_consensus, mock_hsdir_get_latest_consensus);
 +  hsdir_request_on_new_circ(chan, GET("/tor/hs/3/x"), NULL);
-+  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_REQUEST), OP_EQ, req0 + 5);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_REQUEST), OP_EQ, req0 + 6);
 +  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP), OP_EQ,
-+            unknown0 + 4);
++            unknown0 + 5);
 +
 +  /* Single-hop requests are refused, and not counted here. */
 +  chan->is_client = 1;
 +  hsdir_request_on_new_circ(chan, GET("/tor/hs/3/x"), NULL);
-+  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_REQUEST), OP_EQ, req0 + 5);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_REQUEST), OP_EQ, req0 + 6);
 +
 + done:
 +  UNMOCK(connection_write_to_buf_impl_);
@@ -347,7 +351,7 @@ index b3b9843cda..f94a76d39d 100644
  struct testcase_t hs_cache[] = {
    /* Encoding tests. */
    { "directory", test_directory, TT_FORK,
-@@ -1097,6 +1180,8 @@ struct testcase_t hs_cache[] = {
+@@ -1113,6 +1198,8 @@ struct testcase_t hs_cache[] = {
      TT_FORK, NULL, NULL },
    { "dir_server_conns_gauge", test_dir_server_conns_gauge, TT_FORK,
      NULL, NULL },

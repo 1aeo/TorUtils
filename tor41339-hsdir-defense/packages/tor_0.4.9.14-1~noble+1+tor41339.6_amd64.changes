@@ -1,0 +1,37 @@
+Format: 1.8
+Date: Thu, 22 Oct 2026 09:44:54 +0000
+Source: tor
+Binary: tor tor-geoipdb
+Built-For-Profiles: noudeb
+Architecture: amd64 all
+Version: 0.4.9.14-1~noble+1+tor41339.6
+Distribution: noble
+Urgency: medium
+Maintainer: Peter Palfrader <weasel@debian.org>
+Changed-By: 1aeo <github@1aeo.com>
+Description:
+ tor        - anonymizing overlay network for TCP
+ tor-geoipdb - GeoIP database for Tor
+Changes:
+ tor (0.4.9.14-1~noble+1+tor41339.6) noble; urgency=medium
+ .
+   * Apply the tor#41339 HSDir defensive series (patches 0001-0015): HTTP
+     and onion service descriptor hardening, MetricsPort counters for
+     HSDir fetches and uploads and tunneled directory requests, HSDir and
+     BEGIN_DIR defenses and pressure-gated shedding of descriptor fetches
+     over a byte budget, all off by default; restore doc/nofooter.conf.
+Checksums-Sha1:
+ f6bd5b60d566cd47aa0649a763891586e0892cdd 6938784 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.6_amd64.ddeb
+ 3cc7345b2f94ff696ef63b62c48167575a34bd1f 2824982 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.6_all.deb
+ 071372cbdf0afb1b074036bbba69693e0d4d9cb2 8662 tor_0.4.9.14-1~noble+1+tor41339.6_amd64.buildinfo
+ 60d75d0663c0e3d1c6cad9d6d8e7f473632106d8 1761298 tor_0.4.9.14-1~noble+1+tor41339.6_amd64.deb
+Checksums-Sha256:
+ b27efc9e3b28de77b7d7c7b8b677ed19fe16cd3efc71a0113bc6cb6b7e1ea80e 6938784 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.6_amd64.ddeb
+ c58bfb223ed21f16fef00e953c6afdd6716fbeb99359eadf239cc8abce87cbd2 2824982 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.6_all.deb
+ 5637190abf2aa18d9d6be97e54cfcbe7c52b8b8ddcf72fb329e2396da9edca58 8662 tor_0.4.9.14-1~noble+1+tor41339.6_amd64.buildinfo
+ 64c0ef0c18ae6e7ad7074821754a808fc8c9ad35eb86e63d2f91437c1a95f55e 1761298 tor_0.4.9.14-1~noble+1+tor41339.6_amd64.deb
+Files:
+ 973b755dae1a64fe133507a53866f435 6938784 debug optional tor-dbgsym_0.4.9.14-1~noble+1+tor41339.6_amd64.ddeb
+ eaf9d0d7d70b595d69c5045d40ef97f2 2824982 net optional tor-geoipdb_0.4.9.14-1~noble+1+tor41339.6_all.deb
+ 3e7da2942013dc8230c4f788727f254e 8662 net optional tor_0.4.9.14-1~noble+1+tor41339.6_amd64.buildinfo
+ ba7011bd8492da61e357d0dc4b54817a 1761298 net optional tor_0.4.9.14-1~noble+1+tor41339.6_amd64.deb

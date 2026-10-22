@@ -1,21 +1,21 @@
-Provenance: tor 0.4.9.14 + the tor#41339 series, +tor41339.5, amd64, for
-  Ubuntu 24.04 (noble):    tor_0.4.9.14-1~noble+1+tor41339.5_amd64.deb
-  Ubuntu 26.04 (resolute): tor_0.4.9.14-1~resolute+1+tor41339.5_amd64.deb
+Provenance: tor 0.4.9.14 + the tor#41339 series, +tor41339.6, amd64, for
+  Ubuntu 24.04 (noble):    tor_0.4.9.14-1~noble+1+tor41339.6_amd64.deb
+  Ubuntu 26.04 (resolute): tor_0.4.9.14-1~resolute+1+tor41339.6_amd64.deb
 plus tor-geoipdb (all) for each. Checksums: SHA256SUMS.
 
 The two builds are the same code with the same features. They differ only in
 the system libraries each Ubuntu release ships (24.04: OpenSSL 3.0.13,
 zlib 1.3, liblzma 5.4.5, libzstd 1.5.5; 26.04: OpenSSL 3.5.5, zlib 1.3.1,
 liblzma 5.8.3, libzstd 1.5.7; libevent 2.1.12 on both) and the compiler
-(gcc 13.3 and gcc 15.2). Identical: configure feature summary and configure
-line, the 64-entry package file list, Depends/Recommends/Suggests, and NEEDED
-sonames.
+(gcc 13.3 and gcc 15.2). Identical: configure line, the 64-entry package
+file list, Depends, and the debian/patches series.
 
-Every defense is off: HSDirOneRequestPerCircuit, HSDirRefuseUnknownPrevHop and
-DoSBeginDirLimitEnabled default to auto, and no consensus sets their
-parameters; HSDirDescriptorFetchLimit defaults to 0. The MetricsPort series of
-0006-0010, and the hardening of 0001-0005, are always active, so the build is
-not equivalent to stock.
+Every defense is off: HSDirOneRequestPerCircuit, HSDirRefuseUnknownPrevHop,
+DoSBeginDirLimitEnabled and HSDirDescriptorFetchLimit default to auto, and no
+consensus sets their parameters; HSDirFetchBudget defaults to 0 (automatic,
+used only once shedding is enabled). The MetricsPort series of 0006-0010 and
+0013-0014, and the hardening of 0001-0005 and 0015, are always active, so the
+build is not equivalent to stock.
 
 Source packages (deb.torproject.org; the Debian packaging of the two differs
 only in its changelog entry):
@@ -27,43 +27,48 @@ only in its changelog entry):
   tor_0.4.9.14-1~resolute+1.dsc        sha256 ac8614f4144d0bd50c8ba3e50b7431b0f29459b0c2c0e08087b71369f6248c51
 
 Quilt series applied (debian/patches), identical for both builds: 0000
-restoring doc/nofooter.conf, then tor41339-hsdir-defense/patches/0001-0013
+restoring doc/nofooter.conf, then tor41339-hsdir-defense/patches/0001-0015
 (byte-identical copies in ../engineering/deb/build-reordered/debian-patches/):
   feac23ee1a832a71ae4e57b8f34cdaf43b024ec342764814b86e504bf2502e0d  0000-restore-doc-nofooter.conf.patch
-  10a022f9254cae3e0e303c0f19457ffe77ece232de6abdd397606651d78c7ceb  0001-dirserv-Stop-unthrottled-warnings-on-malformed-HTTP-.patch
-  b7d0a32ec7e7d8a80ef07b0f50209bd6bb18bf5b22049219af57da4f6cada6bc  0002-dirserv-Don-t-buffer-request-bodies-larger-than-an-H.patch
-  b12c93706bfa73c047ac9e3d91218f94e08277f50ad6c73cf8ee278f1d5f9536  0003-dirserv-Discard-client-input-received-after-the-requ.patch
-  d92bc54ccfe62af2e75d028287ea6c24da738ea2c5040219428224a4e24b2cca  0004-hs_desc-Check-signature-length-before-verifying-the-.patch
-  304261c11f984868b850561a177e69214352c06c9927682246f4928b4fa29096  0005-hs_cache-Only-credit-HSDir-downloads-once-the-respon.patch
-  4dfd20653e9d91cf4b2219971f23f24dd6ec325019eeebe7d095d6e06133075f  0006-relay_metrics-Count-onion-service-descriptor-fetches.patch
-  363618a3ac9720d5c7d13b377d0d1d8e854478fc6e1460f6b4679968a9023cf2  0007-relay_metrics-Count-tunneled-directory-requests-and-.patch
-  02fdcabcf8b78caad45df2838632e5fc6dd9585baecbab3fe8cab22b981edc93  0008-relay_metrics-Add-a-gauge-of-tunneled-directory-serv.patch
-  809beb25e02d1941200c3dec10e8831999dda985eca51fe2b7682cb131705af5  0009-relay_metrics-Make-fill_dos_values-table-driven.patch
-  7a6b8dda853e16e9720243b8a18afce48ab59f0260207a005dc381bdabdfe446  0010-dos-Count-repeated-and-unknown-previous-hop-HSDir-re.patch
-  090fde83f1e117c298ed885a27273905964ccc99e0c77b834ea4080157c81d5c  0011-dos-Add-off-by-default-HSDir-circuit-reuse-and-previ.patch
-  0fa8f35fbcdc01229566b60292d52f5c877593572ffae3b0b221fa1f92ec382e  0012-dos-Add-an-off-by-default-limit-on-open-BEGIN_DIR-st.patch
-  ce6d287e48959a380f402a046b838ad13a714099d6bfea5f8c28f9a6237d0962  0013-hs_cache-Add-an-off-by-default-per-descriptor-fetch-.patch
-  54c154c41100cc45b1d57db301b791fc427076496a1188cf47b27ea72961bf76  series
+  3a786cce438253d2a4f70e4227ecee628ae5d1d056d7bb4ddadadedd2f9b4fba  0001-dirserv-Stop-unthrottled-warnings-on-malformed-HTTP-.patch
+  a34f359abdd87151dffa6e26472e52f9b626ff00c6a31cc31aa0d0b747e9fded  0002-dirserv-Don-t-buffer-request-bodies-larger-than-an-H.patch
+  5e6191a81fec501c83d0525d9a4e5d59c6521b7a2cd00f5cc2c3dc2e08c59202  0003-dirserv-Discard-client-input-received-after-the-requ.patch
+  fdb795e78c431a3303ee01bb0d77a4275da991e033745be7ab067c2ae593d436  0004-hs_desc-Check-signature-length-before-verifying-the-.patch
+  e112f3afeeda066ddc42a8f39c9cf4104784eef91823d95bb886fa20abf58bad  0005-hs_cache-Only-credit-HSDir-downloads-once-the-respon.patch
+  fc7997951028ffcaa6ee87599b6d08f0c788f2b4b609fa4526945b51fdfad650  0006-relay_metrics-Count-onion-service-descriptor-fetches.patch
+  e66d9c4dc020acdb73549e2474bea31d6a15ca6c879158c63e10e072f592ad55  0007-relay_metrics-Count-tunneled-directory-requests-and-.patch
+  e7d0d7d3d089e9d766d8649a7ff80c3076a52c7dee2a4eb26cd675616777655a  0008-relay_metrics-Add-a-gauge-of-tunneled-directory-serv.patch
+  0b4af5f1a9140879a6e538ea3bd4c9e01ed9b416fd6f1f3a4a31ddac7c982d62  0009-relay_metrics-Make-fill_dos_values-table-driven.patch
+  79c863974d202757c56d9b9e4b0de7d783bbd829e16998cb6abd9cc22f0325c7  0010-dos-Count-repeated-and-unknown-previous-hop-HSDir-re.patch
+  545817d44ce48802ea47fd5e26c5ed1ec14e3572b48194003043abbf29d3c428  0011-dos-Add-off-by-default-HSDir-circuit-reuse-and-previ.patch
+  77988b615444b54871064ff9dcd592f9e6c7d0837c49cb87e27366020ec996d2  0012-dos-Add-an-off-by-default-limit-on-open-BEGIN_DIR-st.patch
+  811f0a57917aa55473a5d8d06607b5cb599ebf74e8683c05279f06553a82636f  0013-hs_cache-Count-fetches-of-each-descriptor-over-a-per.patch
+  dd8f59e19d0ec776dab93e306a0529101bf0121a73c873a1a549b5661c029164  0014-dos-Shed-onion-service-descriptor-fetches-over-a-byt.patch
+  4518d01d6c20e152236d8d1a4f3b277ffb870ebed280859010448a5a5489c4ca  0015-proto_http-Reject-a-declared-body-that-can-never-fit.patch
+  1ae3f4d7657bbcaa242ee38f22b827c5cd0620f6efa5125cfd3c6ed129eb5702  series
 
 Builders (driver ../engineering/deb/build-reordered/build-in-container-reordered.sh
-with SUITE=noble or resolute, REV=5, EXPECT_PATCHES=14; dpkg-buildpackage -b;
+with SUITE=noble or resolute, REV=6, EXPECT_PATCHES=16; dpkg-buildpackage -b;
 set -o pipefail so a failed build cannot be masked):
   noble:    fresh ubuntu:24.04 container (Canonical LTS image,
             digest sha256:5ce7043d3beb84e91bfeecacb5fafc80602bf247a1dd6016bc0fe7d69d707eca), gcc 13
   resolute: fresh ubuntu:26.04 container (Canonical LTS image,
             digest sha256:51e35c02a42cf2a6646c5879f5752b38098ed0a20056a989f0af3a3c5e697c9a), gcc 15
 
-dh_auto_test (make test), both builds: 1617 tests ok, 24 skipped, 0 failed.
+dh_auto_test (make test), both builds: 1620 tests ok, 24 skipped, 0 failed.
 Compiler warnings on lines the series adds: none in either build. The only
 warnings in files the series touches are in unchanged upstream test code:
 test_hs_descriptor.c:151 -Wmaybe-uninitialized (both builds) and
 test_dir_handle_get.c:2410 -Wmaybe-uninitialized (gcc 15 only).
-Each binary contains the 7 new option names and every new metric name, and
-its manual gives DoSBeginDirMaxStreams a default of 64.
+Each binary contains the 8 new option names and every new metric name, and
+its manual renders the new entries (DoSBeginDirMaxStreams default 64,
+HSDirDescriptorFetchLimit default 0, the metric selectors with braces).
 
 The same series, built from git with --enable-fatal-warnings, builds and
-passes make test at each of the 13 commits (1596 to 1610 tests), and with
---disable-module-relay at the tip.
+passes make test at each of the 15 commits (1596 to 1613 tests), passes
+check-spaces, check-changes and check-docs, renders the man page with no
+asciidoc warning, builds and passes with --disable-module-relay at the tip,
+and applies with git am onto tor main (8dbbbe6e86).
 
 Install: only the tor package is needed; tor-geoipdb is a Recommends
 (unchanged GeoIP data). Pick the package matching the host's release
@@ -71,5 +76,6 @@ Install: only the tor package is needed; tor-geoipdb is a Recommends
 Install-and-run checks (private loopback lab): ../engineering/deb/install-run-reordered/
 (noble) and ../engineering/deb/resolute/ (resolute). Live controls with
 HS traffic, every defense switched on and off: ../engineering/deb/resolute/controls/.
+Stock C tor and Arti clients under shedding: ../engineering/client-lab/.
 ../engineering/deb/resolute/DELIVERY.md records the earlier +tor41339.3
 handoff and has not been redone for this build.

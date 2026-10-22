@@ -1,7 +1,7 @@
-From a265f97fa8aa562d396c4c51557c6db6ef643429 Mon Sep 17 00:00:00 2001
+From 3987d608ffc011733b559d63c20f14a9e9eace4b Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 04/13] hs_desc: Check signature length before verifying the
+Subject: [PATCH 04/15] hs_desc: Check signature length before verifying the
  signing cert
 
 desc_decode_plaintext_v3() verified the descriptor signing key

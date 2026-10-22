@@ -1,0 +1,306 @@
+{
+  "_comment": [
+    "Data-driven phase list for the client-reachability harness. Edit freely.",
+    "Each phase: name, desc, sets, load, relays, probe.",
+    "sets: the named runs that include the phase ('dry' = .5 plumbing run,",
+    "'full' = the .6 experiment). PHASES may name sets and/or phases. B0 is",
+    "the baseline and always runs first; the run fails closed if any B0",
+    "fetch fails.",
+    "load.mode: none | concentrated (onion D at every HSDir holding it) |",
+    "spread (the 'spread' onions; with common_hsdir, all at the one HSDir",
+    "that holds the most of them). load.pattern: steady (one fetch per",
+    "target HSDir every 1/rate s, so every HSDir sees load in every second)",
+    "or reuse (bursts of 5 fetches on one circuit, then a pause of 2 s or",
+    "more). rate_per_hsdir / rate_per_onion are fetches per second.",
+    "relays: list of {set, conf}, applied after every relay is reset to",
+    "DEFAULTS. set: all | none | serving:<role> (every HSDir holding the",
+    "onion) | serving_one:<role> | serving_clientfirst:<role> (the HSDir a",
+    "stock client asks first, so it is in the clients' fetch set). conf",
+    "tokens DEFAULTS / OFF / BUDGET expand at runtime; BUDGET is the BUDGET",
+    "env value. Options this tor does not know (HSDirFetchBudget on .5) are",
+    "dropped, so one file runs on .5 and .6.",
+    "probe.onions: roles D (loaded) and E (control). probe.attempts: per",
+    "onion: N, {ctor: N, arti: M} or {ctor: {D: N, E: M}, arti: ...}.",
+    "Requests are spread evenly over the phase, both clients at once. The",
+    "C tor probe can make about one request per 2 s in all (six client",
+    "nodes, one NEWNYM per node per 10 s), so keep its D+E total under",
+    "PHASE_S / 2."
+  ],
+  "roles": {
+    "D": "first",
+    "E": "last",
+    "spread": [
+      "first",
+      1,
+      2,
+      3,
+      "last"
+    ]
+  },
+  "phases": [
+    {
+      "name": "B0",
+      "desc": "baseline: no load, every HSDir at defaults",
+      "sets": [
+        "full",
+        "dry"
+      ],
+      "baseline": true,
+      "load": {
+        "mode": "none"
+      },
+      "relays": [
+        {
+          "set": "all",
+          "conf": "DEFAULTS"
+        }
+      ],
+      "probe": {
+        "onions": [
+          "D",
+          "E"
+        ],
+        "attempts": {
+          "ctor": 6,
+          "arti": 10
+        }
+      }
+    },
+    {
+      "name": "C0",
+      "desc": "steady load on D at every HSDir holding it; enforcement off (FetchLimit=0) everywhere, small budget on .6 (observe mode: counters move, nothing refused)",
+      "sets": [
+        "full",
+        "dry"
+      ],
+      "load": {
+        "mode": "concentrated",
+        "pattern": "steady",
+        "rate_per_hsdir": 10
+      },
+      "relays": [
+        {
+          "set": "all",
+          "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 BUDGET"
+        }
+      ],
+      "probe": {
+        "onions": [
+          "D",
+          "E"
+        ],
+        "attempts": {
+          "ctor": 8,
+          "arti": 12
+        }
+      }
+    },
+    {
+      "name": "C1",
+      "desc": ".6: same load; FetchLimit=1 + small budget on EVERY HSDir (shedding everywhere; E's fetches are within their rate and answered first)",
+      "sets": [
+        "full"
+      ],
+      "load": {
+        "mode": "concentrated",
+        "pattern": "steady",
+        "rate_per_hsdir": 10
+      },
+      "relays": [
+        {
+          "set": "all",
+          "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 BUDGET"
+        }
+      ],
+      "probe": {
+        "onions": [
+          "D",
+          "E"
+        ],
+        "attempts": {
+          "ctor": 10,
+          "arti": 20
+        }
+      }
+    },
+    {
+      "name": "C3",
+      "desc": ".6: the C1 setup with the load client at its maximum rate (30/s requested per HSDir; it reaches about 80 fetches/s in all), FetchLimit=1 + small budget on EVERY HSDir: lower lottery odds, the limit of what client retries recover",
+      "sets": [
+        "full"
+      ],
+      "load": {
+        "mode": "concentrated",
+        "pattern": "steady",
+        "rate_per_hsdir": 30
+      },
+      "relays": [
+        {
+          "set": "all",
+          "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 BUDGET"
+        }
+      ],
+      "probe": {
+        "onions": [
+          "D",
+          "E"
+        ],
+        "attempts": {
+          "ctor": 10,
+          "arti": 20
+        }
+      }
+    },
+    {
+      "name": "C2",
+      "desc": ".6: same load; FetchLimit=1 + small budget on ONE HSDir that clients ask for D, others at defaults (failover)",
+      "sets": [
+        "full"
+      ],
+      "load": {
+        "mode": "concentrated",
+        "pattern": "steady",
+        "rate_per_hsdir": 10
+      },
+      "relays": [
+        {
+          "set": "serving_clientfirst:D",
+          "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 BUDGET"
+        }
+      ],
+      "probe": {
+        "onions": [
+          "D",
+          "E"
+        ],
+        "attempts": {
+          "ctor": {
+            "D": 16,
+            "E": 6
+          },
+          "arti": 24
+        }
+      }
+    },
+    {
+      "name": "S0",
+      "desc": ".6: spread load: several onions at one common HSDir, each below its per-descriptor rate (4/s < 5/s), together over the budget; observe mode",
+      "sets": [
+        "full"
+      ],
+      "load": {
+        "mode": "spread",
+        "pattern": "steady",
+        "rate_per_onion": 4,
+        "common_hsdir": true
+      },
+      "relays": [
+        {
+          "set": "all",
+          "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 BUDGET"
+        }
+      ],
+      "probe": {
+        "onions": [
+          "D",
+          "E"
+        ],
+        "attempts": {
+          "ctor": 8,
+          "arti": 12
+        }
+      }
+    },
+    {
+      "name": "S1",
+      "desc": ".6: same spread load; FetchLimit=1 + small budget on EVERY HSDir (relay-wide budget, lottery among fetches within their rate)",
+      "sets": [
+        "full"
+      ],
+      "load": {
+        "mode": "spread",
+        "pattern": "steady",
+        "rate_per_onion": 4,
+        "common_hsdir": true
+      },
+      "relays": [
+        {
+          "set": "all",
+          "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 BUDGET"
+        }
+      ],
+      "probe": {
+        "onions": [
+          "D",
+          "E"
+        ],
+        "attempts": {
+          "ctor": 10,
+          "arti": 20
+        }
+      }
+    },
+    {
+      "name": "P5all",
+      "desc": ".5 stand-in: per-descriptor refusals (FetchLimit=1, Rate=1, Burst=1) on EVERY HSDir holding D, under the same steady load, so nearly every fetch of D is refused by closing its circuit",
+      "sets": [
+        "dry"
+      ],
+      "load": {
+        "mode": "concentrated",
+        "pattern": "steady",
+        "rate_per_hsdir": 10
+      },
+      "relays": [
+        {
+          "set": "serving:D",
+          "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=1"
+        }
+      ],
+      "probe": {
+        "onions": [
+          "D",
+          "E"
+        ],
+        "attempts": {
+          "ctor": {
+            "D": 10,
+            "E": 6
+          },
+          "arti": 16
+        }
+      }
+    },
+    {
+      "name": "P5one",
+      "desc": ".5 stand-in: the same refusals on ONE HSDir that clients ask for D (the stock client's first choice), the others at defaults; a refused fetch should fail over",
+      "sets": [
+        "dry"
+      ],
+      "load": {
+        "mode": "concentrated",
+        "pattern": "steady",
+        "rate_per_hsdir": 10
+      },
+      "relays": [
+        {
+          "set": "serving_clientfirst:D",
+          "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=1"
+        }
+      ],
+      "probe": {
+        "onions": [
+          "D",
+          "E"
+        ],
+        "attempts": {
+          "ctor": {
+            "D": 16,
+            "E": 6
+          },
+          "arti": 24
+        }
+      }
+    }
+  ]
+}

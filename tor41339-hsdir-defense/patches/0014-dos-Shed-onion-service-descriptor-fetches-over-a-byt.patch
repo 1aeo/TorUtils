@@ -1,0 +1,913 @@
+From 0b8f865fd466188a7eda0328cec61e213a06ce22 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Thu, 22 Oct 2026 08:16:46 +0000
+Subject: [PATCH 14/15] dos: Shed onion service descriptor fetches over a byte
+ budget
+
+Nothing bounds the descriptor bytes an HSDir answers per second. A
+flood of fetches such as the one in tor#41339 takes as much as the
+relay can serve, and every descriptor's clients compete with it.
+
+Add HSDirFetchBudget, the descriptor bytes per second an HSDir answers
+before it sheds fetches. If it is 0, the default, it is
+HSDirFetchBudgetPercent (a consensus parameter, default 50) percent of
+the lower of the relay's configured and observed bandwidth, and at
+least 512 KB. No fetch is refused until a second goes over the budget.
+In the second after one over the budget, fetches still within their
+descriptor's HSDirDescriptorFetchRate are answered first, up to half the
+budget, and the others by a lottery whose odds would have kept the
+previous second within it, so a flood of a few descriptors is shed
+before the fetches of the others. No second answers more than one and a
+half times the budget, unless a single descriptor is larger than that;
+this also bounds a flood that pauses every other second. The new
+includes for the bandwidth estimates raise dos.c's practracker
+dependency-violation exception to 8.
+
+A shed fetch closes its circuit with END_CIRC_REASON_RESOURCELIMIT, as
+HSDirOneRequestPerCircuit does, and is counted as action "refused" in
+tor_relay_hsdir_get_total. Clients retry it at another of the
+descriptor's HSDirs; a 503 would also make them avoid this relay for
+other directory requests. Shedding is enforced only on public relays
+with HSDirDescriptorFetchLimit, an AUTOBOOL over the consensus
+parameter of the same name (default 0). Either way, fetches while over
+the budget, and those that are or would be shed, are counted as
+tor_relay_dos_total{type="hsdir_fetch_pressure"} and
+{type="hsdir_fetch_shed"}, so an operator can check a budget first.
+
+Unlike refusing every fetch over a per-descriptor rate, this refuses
+nothing until the relay goes over its budget, so denying a descriptor
+at one HSDir takes about as many fetches as loading the relay. While it
+sheds, whether a fetch is answered first still depends on the
+descriptor's shared rate limiter, so someone who keeps the HSDir over
+its budget can learn roughly how often a descriptor is fetched there. A
+flood spread over many descriptors, each within its rate, is shed by
+the lottery like any other, at the budget.
+
+Part of #41339.
+---
+ changes/ticket41339_hsdir_fetch_shedding |   9 +
+ doc/man/tor.1.txt                        |  33 +++
+ scripts/maint/practracker/exceptions.txt |   2 +-
+ src/core/or/dos.c                        | 156 +++++++++++-
+ src/core/or/dos.h                        |  11 +-
+ src/core/or/dos_options.inc              |  11 +-
+ src/feature/dircache/dircache.c          |  14 +-
+ src/feature/relay/relay_metrics.c        |   3 +
+ src/test/test_dos.c                      | 297 ++++++++++++++++++++++-
+ src/test/test_hs_cache.c                 | 101 ++++++++
+ src/test/test_status.c                   |   3 +-
+ 11 files changed, 627 insertions(+), 13 deletions(-)
+ create mode 100644 changes/ticket41339_hsdir_fetch_shedding
+
+diff --git a/changes/ticket41339_hsdir_fetch_shedding b/changes/ticket41339_hsdir_fetch_shedding
+new file mode 100644
+index 0000000000..91fe24bd76
+--- /dev/null
++++ b/changes/ticket41339_hsdir_fetch_shedding
+@@ -0,0 +1,9 @@
++  o Minor features (DoS-resistance, onion service directory):
++    - Add the HSDirDescriptorFetchLimit and HSDirFetchBudget options, and
++      the HSDirDescriptorFetchLimit and HSDirFetchBudgetPercent consensus
++      parameters. When enabled (off by default), an HSDir that is asked for
++      more onion service descriptor bytes in a second than its budget sheds
++      fetches in that second and the next, answering first those within
++      their descriptor's HSDirDescriptorFetchRate. Until then, it refuses
++      nothing. Such fetches are counted on the MetricsPort whether or not it
++      is enabled. Part of ticket 41339.
+diff --git a/doc/man/tor.1.txt b/doc/man/tor.1.txt
+index ee4de20141..c48ce68878 100644
+--- a/doc/man/tor.1.txt
++++ b/doc/man/tor.1.txt
+@@ -3192,6 +3192,8 @@ MetricsPort.
+     The rate of fetches per second of each cached onion service descriptor,
+     at least 1, over which an HSDir counts them as
+     tor_relay_dos_total\{type="hsdir_fetch_over_rate"} on the MetricsPort.
++    While it sheds fetches, it answers those within this rate first, up to
++    half of HSDirFetchBudget a second. See HSDirDescriptorFetchLimit.
+     (Default: 5)
+ 
+ [[HSDirDescriptorFetchBurst]] **HSDirDescriptorFetchBurst** __NUM__::
+@@ -3201,6 +3203,37 @@ MetricsPort.
+     the most fetches in any one second that count as within the rate.
+     (Default: 20)
+ 
++[[HSDirDescriptorFetchLimit]] **HSDirDescriptorFetchLimit** **0**|**1**|**auto**::
++
++    Shed onion service descriptor fetches, by closing their circuits, when
++    this HSDir is asked for more descriptor bytes in a second than
++    HSDirFetchBudget. No fetch is refused until a second goes over the
++    budget. In the second after one over the budget, fetches within their
++    descriptor's HSDirDescriptorFetchRate and HSDirDescriptorFetchBurst are
++    answered first, up to half the budget, and the others at random, with
++    odds that would have kept the second before within the budget; so a
++    flood of fetches of a few descriptors is shed before the fetches of the
++    others. In no second is more than one and a half times the budget
++    answered, unless a single descriptor is larger than that. Clients retry
++    a refused fetch at another of the descriptor's HSDirs. While this HSDir
++    sheds, someone who keeps it over its budget can learn roughly how often
++    a descriptor is fetched here. Whatever this value, fetches made once a
++    second's requests exceed the budget, or in the second after, are
++    counted on the MetricsPort as
++    tor_relay_dos_total\{type="hsdir_fetch_pressure"}, and those that are,
++    or would be, refused as \{type="hsdir_fetch_shed"}; with this option
++    off, every fetch is answered. "auto" means use the consensus parameter.
++    If not defined in the consensus, the value is 0. (Default: auto)
++
++[[HSDirFetchBudget]] **HSDirFetchBudget** __N__ **bytes**|**KBytes**|**MBytes**|**GBytes**|**TBytes**|**KBits**|**MBits**|**GBits**|**TBits**::
++
++    The onion service descriptor bytes per second this HSDir answers before
++    it sheds fetches. See HSDirDescriptorFetchLimit. If 0, use
++    HSDirFetchBudgetPercent (a consensus parameter, by default 50) percent of
++    the lower of this relay's configured bandwidth rate and its observed
++    bandwidth, and at least 512 KBytes. Fetches of descriptors this HSDir
++    does not have are not counted. (Default: 0)
++
+ 
+ For onion services, mitigations are a work in progress and multiple options
+ are currently available.
+diff --git a/scripts/maint/practracker/exceptions.txt b/scripts/maint/practracker/exceptions.txt
+index 3d033c568f..1d0948d4c5 100644
+--- a/scripts/maint/practracker/exceptions.txt
++++ b/scripts/maint/practracker/exceptions.txt
+@@ -144,7 +144,7 @@ problem dependency-violation /src/core/or/connection_edge.h 1
+ problem function-size /src/core/or/connection_or.c:connection_or_group_set_badness_() 105
+ problem function-size /src/core/or/connection_or.c:connection_or_client_learned_peer_id() 142
+ problem dependency-violation /src/core/or/connection_or.c 21
+-problem dependency-violation /src/core/or/dos.c 6
++problem dependency-violation /src/core/or/dos.c 8
+ problem dependency-violation /src/core/or/extendinfo.c 6
+ problem dependency-violation /src/core/or/onion.c 2
+ problem file-size /src/core/or/or.h 1150
+diff --git a/src/core/or/dos.c b/src/core/or/dos.c
+index 7f1dbf89b7..ce19c01a5b 100644
+--- a/src/core/or/dos.c
++++ b/src/core/or/dos.c
+@@ -18,7 +18,9 @@
+ #include "feature/hs/hs_dos.h"
+ #include "feature/nodelist/networkstatus.h"
+ #include "feature/nodelist/nodelist.h"
++#include "feature/relay/relay_config.h"
+ #include "feature/relay/routermode.h"
++#include "feature/stats/bwhist.h"
+ #include "feature/stats/geoip_stats.h"
+ #include "lib/crypt_ops/crypto_rand.h"
+ #include "lib/time/compat_time.h"
+@@ -751,15 +753,101 @@ dos_should_refuse_unknown_hsdir_prev_hop(void)
+                              "HSDirRefuseUnknownPrevHop");
+ }
+ 
++/** Return true iff an HSDir should refuse the descriptor fetches it sheds
++ * while over HSDirFetchBudget. */
++static int
++dos_should_shed_hsdir_fetches(void)
++{
++  return dos_defense_enabled(dos_get_options()->HSDirDescriptorFetchLimit,
++                             "HSDirDescriptorFetchLimit");
++}
++
++/** Lowest automatic HSDirFetchBudget, in bytes per second. */
++#define HSDIR_FETCH_BUDGET_MIN (512 * 1024)
++/** Lowest chance, in millionths, that a fetch an HSDir doesn't answer first
++ * is answered while it sheds. */
++#define HSDIR_FETCH_LOTTERY_MIN_PPM 1000
++
++/** Descriptor fetches an HSDir was asked for and answered, in bytes, in the
++ * current second. See dos_hsdir_desc_fetch_allowed(). */
++static struct {
++  /** The second this is for. */
++  uint32_t sec;
++  /** HSDirFetchBudget in this second, in bytes per second. */
++  uint64_t budget;
++  /** Was the HSDir asked for more than its budget in the second before? */
++  bool shedding;
++  /** Chance, in millionths, that a fetch not answered first is answered. */
++  uint32_t lottery_ppm;
++  /** Bytes asked for; of those, within their descriptor's rate; answered
++   * first; answered in all. */
++  uint64_t asked, asked_light, light, answered;
++} hsdir_fetch;
++
++/** Return the onion service descriptor bytes an HSDir answers per second
++ * before it sheds fetches: HSDirFetchBudget, or if it is 0, a share of the
++ * lower of the relay's configured and observed bandwidth. */
++STATIC uint64_t
++hsdir_fetch_budget(void)
++{
++  uint64_t budget = dos_get_options()->HSDirFetchBudget;
++
++  if (!budget) {
++    uint64_t rate = relay_get_effective_bwrate(get_options());
++    const int observed = bwhist_bandwidth_assess();
++    if (observed > 0)
++      rate = MIN(rate, (uint64_t) observed);
++    budget = rate * networkstatus_get_param(NULL, "HSDirFetchBudgetPercent",
++                                            50, 1, 100) / 100;
++    budget = MAX(budget, HSDIR_FETCH_BUDGET_MIN);
++  }
++  return MIN(budget, UINT32_MAX);
++}
++
++/** Return a random number below a million. */
++MOCK_IMPL(STATIC uint32_t,
++hsdir_fetch_lottery_draw,(void))
++{
++  return crypto_fast_rng_get_uint(get_thread_fast_rng(), 1000000);
++}
++
++/** If <b>now</b> isn't the current second of HSDir fetch accounting, start
++ * it. We shed in it iff we were asked for more than our budget in the second
++ * just before, with lottery odds that would have kept that second within
++ * the budget. */
++static void
++hsdir_fetch_new_second(uint32_t now)
++{
++  if (now == hsdir_fetch.sec && hsdir_fetch.budget)
++    return;
++
++  const uint64_t budget = hsdir_fetch.budget;
++  const uint64_t first = MIN(hsdir_fetch.asked_light, budget / 2);
++
++  hsdir_fetch.shedding = now == hsdir_fetch.sec + 1 &&
++                         hsdir_fetch.asked > budget;
++  hsdir_fetch.lottery_ppm = 1000000;
++  if (hsdir_fetch.shedding) {
++    hsdir_fetch.lottery_ppm = (uint32_t)
++      CLAMP(HSDIR_FETCH_LOTTERY_MIN_PPM,
++            (budget - first) * 1000000 / (hsdir_fetch.asked - first),
++            1000000);
++  }
++  hsdir_fetch.sec = now;
++  hsdir_fetch.budget = hsdir_fetch_budget();
++  hsdir_fetch.asked = hsdir_fetch.asked_light = 0;
++  hsdir_fetch.light = hsdir_fetch.answered = 0;
++}
++
+ /** Take a token from <b>bucket</b>, the fetch rate limiter of a cached onion
+- * service descriptor, and count the fetch if it was empty. */
+-void
+-dos_hsdir_note_desc_fetch(token_bucket_ctr_t *bucket)
++ * service descriptor, at <b>now</b>. Return whether it had one; count the
++ * fetch if not. */
++static bool
++hsdir_desc_fetch_within_rate(token_bucket_ctr_t *bucket, uint32_t now)
+ {
+   const dos_options_t *options = dos_get_options();
+   const uint32_t rate = MAX(options->HSDirDescriptorFetchRate, 1);
+   const uint32_t burst = MAX(options->HSDirDescriptorFetchBurst, 1);
+-  const uint32_t now = (uint32_t) monotime_coarse_absolute_sec();
+ 
+   if (!bucket->cfg.rate) {
+     token_bucket_ctr_init(bucket, rate, burst, now);
+@@ -768,10 +856,56 @@ dos_hsdir_note_desc_fetch(token_bucket_ctr_t *bucket)
+     token_bucket_ctr_adjust(bucket, rate, burst);
+   }
+   token_bucket_ctr_refill(bucket, now);
+-  if (token_bucket_ctr_get(bucket) > 0)
++  if (token_bucket_ctr_get(bucket) > 0) {
+     token_bucket_ctr_dec(bucket, 1);
+-  else
+-    dos_note_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE);
++    return true;
++  }
++  dos_note_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE);
++  return false;
++}
++
++/** Return whether an HSDir should answer a fetch of <b>len</b> bytes of a
++ * cached onion service descriptor whose fetch rate limiter is <b>bucket</b>.
++ *
++ * We refuse no fetch until a second goes over HSDirFetchBudget. In the
++ * second after one over it, we answer fetches within their descriptor's rate
++ * first, up to half the budget, and the others by lottery, so that a flood
++ * of a few descriptors is shed before the fetches of the others. In no second
++ * do we answer more than one and a half times the budget, unless a single
++ * descriptor is larger than that. We count the fetches we would shed, and
++ * only refuse them if HSDirDescriptorFetchLimit is enabled. */
++bool
++dos_hsdir_desc_fetch_allowed(token_bucket_ctr_t *bucket, size_t len)
++{
++  const uint32_t now = (uint32_t) monotime_coarse_absolute_sec();
++  const bool light = hsdir_desc_fetch_within_rate(bucket, now);
++
++  hsdir_fetch_new_second(now);
++  hsdir_fetch.asked += len;
++  if (light)
++    hsdir_fetch.asked_light += len;
++  if (!hsdir_fetch.shedding && hsdir_fetch.asked <= hsdir_fetch.budget)
++    goto answer;
++
++  dos_note_dir_stat(DOS_DIR_HSDIR_FETCH_PRESSURE);
++  if (hsdir_fetch.answered &&
++      hsdir_fetch.answered + len > hsdir_fetch.budget * 3 / 2)
++    goto shed;
++  if (!hsdir_fetch.shedding)
++    goto answer;
++  if (light && hsdir_fetch.light + len <= hsdir_fetch.budget / 2) {
++    hsdir_fetch.light += len;
++    goto answer;
++  }
++  if (hsdir_fetch_lottery_draw() < hsdir_fetch.lottery_ppm)
++    goto answer;
++
++ shed:
++  dos_note_dir_stat(DOS_DIR_HSDIR_FETCH_SHED);
++  return !dos_should_shed_hsdir_fetches();
++ answer:
++  hsdir_fetch.answered += len;
++  return true;
+ }
+ 
+ /* Called when a CREATE cell is received from the given channel. */
+@@ -1193,6 +1327,14 @@ dos_log_heartbeat(void)
+     smartlist_add_asprintf(elems, "[HSDirRefuseUnknownPrevHop disabled]");
+   }
+ 
++  if (dos_should_shed_hsdir_fetches()) {
++    smartlist_add_asprintf(elems,
++                           "%" PRIu64 " HSDir descriptor fetches shed",
++                           dos_dir_stats[DOS_DIR_HSDIR_FETCH_SHED]);
++  } else {
++    smartlist_add_asprintf(elems, "[HSDirDescriptorFetchLimit disabled]");
++  }
++
+   char *msg = smartlist_join_strings(elems, ", ", 0, NULL);
+ 
+   log_notice(LD_HEARTBEAT,
+diff --git a/src/core/or/dos.h b/src/core/or/dos.h
+index cf59bfcb00..27839e21be 100644
+--- a/src/core/or/dos.h
++++ b/src/core/or/dos.h
+@@ -99,6 +99,12 @@ typedef enum dos_dir_stat_t {
+   /** Fetches of a cached onion service descriptor over
+    * HSDirDescriptorFetchRate. */
+   DOS_DIR_HSDIR_FETCH_OVER_RATE,
++  /** Fetches of a cached onion service descriptor while the HSDir is over
++   * HSDirFetchBudget. */
++  DOS_DIR_HSDIR_FETCH_PRESSURE,
++  /** Such fetches that the HSDir sheds, or would if
++   * HSDirDescriptorFetchLimit were enabled. */
++  DOS_DIR_HSDIR_FETCH_SHED,
+ 
+   DOS_DIR_STAT_MAX
+ } dos_dir_stat_t;
+@@ -107,7 +113,7 @@ void dos_note_dir_stat(dos_dir_stat_t stat);
+ uint64_t dos_get_dir_stat(dos_dir_stat_t stat);
+ int dos_should_close_reused_hsdir_circ(void);
+ int dos_should_refuse_unknown_hsdir_prev_hop(void);
+-void dos_hsdir_note_desc_fetch(token_bucket_ctr_t *bucket);
++bool dos_hsdir_desc_fetch_allowed(token_bucket_ctr_t *bucket, size_t len);
+ void dos_note_circ_max_outq(const channel_t *chan);
+ 
+ uint32_t dos_get_num_cc_marked_addr(void);
+@@ -240,6 +246,9 @@ MOCK_DECL(STATIC unsigned int, get_param_conn_enabled,
+ MOCK_DECL(STATIC unsigned int, get_param_stream_enabled,
+           (const networkstatus_t *ns));
+ 
++STATIC uint64_t hsdir_fetch_budget(void);
++MOCK_DECL(STATIC uint32_t, hsdir_fetch_lottery_draw, (void));
++
+ #endif /* defined(DOS_PRIVATE) */
+ 
+ #endif /* !defined(TOR_DOS_H) */
+diff --git a/src/core/or/dos_options.inc b/src/core/or/dos_options.inc
+index 02cb5e6268..475ee4e9f8 100644
+--- a/src/core/or/dos_options.inc
++++ b/src/core/or/dos_options.inc
+@@ -88,11 +88,20 @@ CONF_VAR(HSDirOneRequestPerCircuit, AUTOBOOL, 0, "auto")
+ CONF_VAR(HSDirRefuseUnknownPrevHop, AUTOBOOL, 0, "auto")
+ 
+ /** Fetches per second of each cached onion service descriptor over which an
+- * HSDir counts them. */
++ * HSDir counts them; while it sheds, it answers those within it first. */
+ CONF_VAR(HSDirDescriptorFetchRate, POSINT, 0, "5")
+ 
+ /** Burst of fetches of each cached descriptor allowed before they count as
+  * over HSDirDescriptorFetchRate. */
+ CONF_VAR(HSDirDescriptorFetchBurst, POSINT, 0, "20")
+ 
++/** Autobool: Should an HSDir refuse the descriptor fetches it sheds while
++ * over HSDirFetchBudget? Overrides the consensus parameter of the same
++ * name. */
++CONF_VAR(HSDirDescriptorFetchLimit, AUTOBOOL, 0, "auto")
++
++/** Onion service descriptor bytes per second an HSDir answers before it
++ * sheds fetches; 0 means a share of the relay's bandwidth. */
++CONF_VAR(HSDirFetchBudget, MEMUNIT, 0, "0")
++
+ END_CONF_STRUCT(dos_options_t)
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index 59b59566bb..ef3e680206 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1460,7 +1460,19 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+   /* Decode blinded key. This is certain to work else
+    * hs_cache_lookup_as_dir() would have failed. */
+   ed25519_public_from_base64(&blinded_key, pubkey_str);
+-  dos_hsdir_note_desc_fetch(hs_cache_get_dir_fetch_limiter(&blinded_key));
++  if (!dos_hsdir_desc_fetch_allowed(
++                        hs_cache_get_dir_fetch_limiter(&blinded_key),
++                        strlen(desc_str))) {
++    static ratelim_t fetch_lim = RATELIM_INIT(600);
++    log_fn_ratelim(&fetch_lim, LOG_PROTOCOL_WARN, LD_REND,
++                   "Closing a circuit that fetched an onion service "
++                   "descriptor while we are over HSDirFetchBudget.");
++    relay_increment_hsdir_get_action(HSDIR_GET_REFUSED);
++    circuit_mark_for_close(
++                       TO_EDGE_CONN(TO_CONN(conn)->linked_conn)->on_circuit,
++                       END_CIRC_REASON_RESOURCELIMIT);
++    goto done;
++  }
+ 
+   /* Found requested descriptor! Pass it to this nice client. */
+   relay_increment_hsdir_get_action(HSDIR_GET_SUCCESS);
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index a3d82b952b..c14327298f 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -469,6 +469,9 @@ fill_dos_values(void)
+     { "begindir_over_max", dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX) },
+     { "hsdir_fetch_over_rate",
+       dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE) },
++    { "hsdir_fetch_pressure",
++      dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_PRESSURE) },
++    { "hsdir_fetch_shed", dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_SHED) },
+   };
+ 
+   for (size_t i = 0; i < ARRAY_LENGTH(entries); i++) {
+diff --git a/src/test/test_dos.c b/src/test/test_dos.c
+index 51c0807ea9..d70001409f 100644
+--- a/src/test/test_dos.c
++++ b/src/test/test_dos.c
+@@ -23,6 +23,7 @@
+ #include "feature/nodelist/nodelist.h"
+ #include "feature/nodelist/routerlist.h"
+ #include "feature/hibernate/hibernate.h"
++#include "feature/stats/bwhist.h"
+ 
+ #include "feature/nodelist/networkstatus_st.h"
+ #include "app/config/or_options_st.h"
+@@ -788,7 +789,9 @@ test_dos_dir_heartbeat(void *arg)
+   dos_opts->HSDirOneRequestPerCircuit = 1;
+   dos_opts->HSDirRefuseUnknownPrevHop = 1;
+   dos_opts->DoSBeginDirLimitEnabled = 1;
++  dos_opts->HSDirDescriptorFetchLimit = 1;
+   dos_note_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX);
++  dos_note_dir_stat(DOS_DIR_HSDIR_FETCH_SHED);
+   dos_note_dir_stat(DOS_DIR_HSDIR_CIRC_REUSED);
+   dos_note_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
+   dos_note_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
+@@ -796,12 +799,300 @@ test_dos_dir_heartbeat(void *arg)
+   dos_log_heartbeat();
+   expect_single_log_msg_containing("1 BEGIN_DIR streams over the limit");
+   expect_single_log_msg_containing("1 circuits with repeated HSDir requests, "
+-                                   "2 HSDir requests from unknown relays");
++                                   "2 HSDir requests from unknown relays, "
++                                   "1 HSDir descriptor fetches shed");
+ 
+  done:
+   teardown_capture_of_logs();
+ }
+ 
++static uint32_t lottery_draw;
++static uint32_t
++mock_hsdir_fetch_lottery_draw(void)
++{
++  return lottery_draw;
++}
++
++static int observed_bw;
++static int
++mock_bwhist_bandwidth_assess(void)
++{
++  return observed_bw;
++}
++
++/** Ask for <b>n</b> fetches of <b>len</b> bytes of the descriptor whose fetch
++ * rate limiter is <b>bucket</b>. Return how many are answered. */
++static int
++hsdir_fetches(token_bucket_ctr_t *bucket, int n, size_t len)
++{
++  int answered = 0;
++  for (int i = 0; i < n; i++)
++    answered += dos_hsdir_desc_fetch_allowed(bucket, len);
++  return answered;
++}
++
++static void
++test_dos_hsdir_fetch_shedding(void *arg)
++{
++  dos_options_t *dos_opts = get_dos_options(get_options_mutable());
++  or_options_t *options = get_options_mutable();
++  token_bucket_ctr_t a, b;
++  const uint64_t billion = 1000000000;
++  uint64_t now = 100 * billion;
++  uint64_t shed;
++  (void) arg;
++
++  memset(&a, 0, sizeof(a));
++  memset(&b, 0, sizeof(b));
++  monotime_enable_test_mocking();
++  monotime_coarse_set_mock_time_nsec(now);
++  MOCK(hsdir_fetch_lottery_draw, mock_hsdir_fetch_lottery_draw);
++  MOCK(networkstatus_get_latest_consensus,
++       mock_networkstatus_get_latest_consensus);
++  options->ORPort_set = 1;
++  dos_opts->HSDirDescriptorFetchLimit = 1;
++  dos_opts->HSDirDescriptorFetchRate = 1;
++  dos_opts->HSDirDescriptorFetchBurst = 1;
++  dos_opts->HSDirFetchBudget = 1000; /* Ten 100-byte fetches a second. */
++  lottery_draw = 999999; /* Every lottery is lost. */
++
++  /* Within the budget, nothing is refused, even over a descriptor's rate. */
++  for (int i = 0; i < 3; i++) {
++    tt_int_op(hsdir_fetches(&a, 10, 100), OP_EQ, 10);
++    monotime_coarse_set_mock_time_nsec(now += billion);
++  }
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE), OP_EQ, 27);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_PRESSURE), OP_EQ, 0);
++
++  /* In a first second over it, at most half again the budget is answered. */
++  tt_int_op(hsdir_fetches(&a, 100, 100), OP_EQ, 15);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_PRESSURE), OP_EQ, 90);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_SHED), OP_EQ, 85);
++
++  /* In the next second, fetches within their descriptor's rate are answered
++   * first; the others are shed unless they win the lottery, still up to half
++   * again the budget. */
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  tt_int_op(hsdir_fetches(&b, 1, 100), OP_EQ, 1);
++  tt_int_op(hsdir_fetches(&a, 100, 100), OP_EQ, 1);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_SHED), OP_EQ, 85 + 99);
++  lottery_draw = 0;
++  tt_int_op(hsdir_fetches(&a, 100, 100), OP_EQ, 13);
++
++  /* The odds would have kept the last second within the budget: of its
++   * 20100 bytes asked for, 200 were within their rates, so a fetch is
++   * answered with chance (1000 - 200) / (20100 - 200). */
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  lottery_draw = 40201;
++  tt_int_op(hsdir_fetches(&a, 2, 100), OP_EQ, 1);
++  lottery_draw = 40200;
++  tt_int_op(hsdir_fetches(&a, 1, 100), OP_EQ, 1);
++
++  /* With the defense off, the same fetches are counted, and answered. */
++  dos_opts->HSDirDescriptorFetchLimit = 0;
++  lottery_draw = 999999;
++  shed = dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_SHED);
++  tt_int_op(hsdir_fetches(&a, 10, 100), OP_EQ, 10);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_SHED), OP_EQ, shed + 10);
++
++  /* The consensus can enable it, the torrc overrides it, and it only applies
++   * to public relays. */
++  dos_opts->HSDirDescriptorFetchLimit = -1;
++  tt_int_op(hsdir_fetches(&a, 1, 100), OP_EQ, 1);
++  dummy_ns = tor_malloc_zero(sizeof(networkstatus_t));
++  dummy_ns->net_params = smartlist_new();
++  smartlist_add(dummy_ns->net_params, (char *) "HSDirDescriptorFetchLimit=1");
++  tt_int_op(hsdir_fetches(&a, 1, 100), OP_EQ, 0);
++  options->ORPort_set = 0;
++  tt_int_op(hsdir_fetches(&a, 1, 100), OP_EQ, 1);
++  options->ORPort_set = 1;
++  dos_opts->HSDirDescriptorFetchLimit = 1;
++
++  /* A flood every other second is held to half again the budget. */
++  lottery_draw = 0;
++  for (int i = 0; i < 2; i++) {
++    monotime_coarse_set_mock_time_nsec(now += billion);
++    tt_int_op(hsdir_fetches(&b, 1, 100), OP_EQ, 1);
++    monotime_coarse_set_mock_time_nsec(now += billion);
++    tt_int_op(hsdir_fetches(&a, 100, 100), OP_EQ, 15);
++  }
++
++  /* After a second without fetches, nothing is shed. */
++  lottery_draw = 999999;
++  monotime_coarse_set_mock_time_nsec(now += 2 * billion);
++  tt_int_op(hsdir_fetches(&a, 10, 100), OP_EQ, 10);
++
++  /* By default, the budget is a share of the lower of the configured and
++   * the observed bandwidth, and at least 512 KB. */
++  dos_opts->HSDirFetchBudget = 0;
++  MOCK(bwhist_bandwidth_assess, mock_bwhist_bandwidth_assess);
++  options->BandwidthRate = options->MaxAdvertisedBandwidth = 10000000;
++  options->RelayBandwidthRate = 0;
++  observed_bw = 4000000;
++  tt_u64_op(hsdir_fetch_budget(), OP_EQ, 2000000);
++  observed_bw = 0;
++  tt_u64_op(hsdir_fetch_budget(), OP_EQ, 5000000);
++  smartlist_add(dummy_ns->net_params, (char *) "HSDirFetchBudgetPercent=20");
++  tt_u64_op(hsdir_fetch_budget(), OP_EQ, 2000000);
++  options->BandwidthRate = 100000;
++  tt_u64_op(hsdir_fetch_budget(), OP_EQ, 512 * 1024);
++
++ done:
++  monotime_disable_test_mocking();
++  UNMOCK(hsdir_fetch_lottery_draw);
++  UNMOCK(networkstatus_get_latest_consensus);
++  UNMOCK(bwhist_bandwidth_assess);
++  if (dummy_ns)
++    smartlist_free(dummy_ns->net_params);
++  tor_free(dummy_ns);
++}
++
++/* Edges of HSDir fetch shedding that test_dos_hsdir_fetch_shedding() does
++ * not reach. Budget 1000, fetches of 100 bytes, rate 1, burst 1. */
++static void
++test_dos_hsdir_fetch_shedding_edges(void *arg)
++{
++  dos_options_t *dos_opts = get_dos_options(get_options_mutable());
++  or_options_t *options = get_options_mutable();
++  token_bucket_ctr_t heavy, lb[6], r;
++  const uint64_t billion = 1000000000;
++  uint64_t now = 0;
++  uint64_t shed, over;
++  uint32_t max_draw = 0;
++  int n;
++  (void) arg;
++
++  memset(&heavy, 0, sizeof(heavy));
++  memset(lb, 0, sizeof(lb));
++  memset(&r, 0, sizeof(r));
++  monotime_enable_test_mocking();
++  monotime_coarse_set_mock_time_nsec(now);
++  MOCK(networkstatus_get_latest_consensus,
++       mock_networkstatus_get_latest_consensus);
++
++  /* the documented defaults. */
++  tt_int_op(dos_opts->HSDirDescriptorFetchRate, OP_EQ, 5);
++  tt_int_op(dos_opts->HSDirDescriptorFetchBurst, OP_EQ, 20);
++  tt_int_op(dos_opts->HSDirDescriptorFetchLimit, OP_EQ, -1);
++  tt_u64_op(dos_opts->HSDirFetchBudget, OP_EQ, 0);
++  options->ORPort_set = 1;
++  dos_opts->HSDirDescriptorFetchLimit = 1;
++  dos_opts->HSDirDescriptorFetchRate = 1;
++  dos_opts->HSDirDescriptorFetchBurst = 1;
++  dos_opts->HSDirFetchBudget = 1000;
++
++  /* the real lottery draws below a million, over the whole range. */
++  for (int i = 0; i < 1000; i++) {
++    uint32_t d = hsdir_fetch_lottery_draw();
++    tt_u64_op(d, OP_LT, 1000000);
++    max_draw = MAX(max_draw, d);
++  }
++  tt_u64_op(max_draw, OP_GE, 500000);
++  MOCK(hsdir_fetch_lottery_draw, mock_hsdir_fetch_lottery_draw);
++  lottery_draw = 999999;
++
++  /* second 0, the first of the process, is within the budget too. */
++  tt_int_op(hsdir_fetches(&heavy, 10, 100), OP_EQ, 10);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_PRESSURE), OP_EQ, 0);
++
++  /* a new HSDirFetchBudget applies from the next second. */
++  dos_opts->HSDirFetchBudget = 2000;
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  tt_int_op(hsdir_fetches(&heavy, 20, 100), OP_EQ, 20);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_PRESSURE), OP_EQ, 0);
++  dos_opts->HSDirFetchBudget = 1000;
++
++  /* a second's first answer is never over the ceiling, however large.
++   * However far over the budget a second was, a fetch the next second still
++   * wins the lottery with a chance of 1000 in a million. */
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  tt_int_op(hsdir_fetches(&heavy, 1, 2000000), OP_EQ, 1);
++  tt_int_op(hsdir_fetches(&heavy, 1, 100), OP_EQ, 0);
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  tt_int_op(hsdir_fetches(&heavy, 1, 100), OP_EQ, 1); /* Within its rate. */
++  lottery_draw = 999;
++  tt_int_op(hsdir_fetches(&heavy, 1, 100), OP_EQ, 1);
++  lottery_draw = 1000;
++  tt_int_op(hsdir_fetches(&heavy, 1, 100), OP_EQ, 0);
++
++  /* an over-budget second: 2000 bytes asked, 100 within their rate. */
++  lottery_draw = 999999;
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  tt_int_op(hsdir_fetches(&heavy, 20, 100), OP_EQ, 15);
++
++  /* while shedding, fetches within their rate are answered first up to
++   * half the budget, and no further. */
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  for (n = 0; n < 6; n++)
++    if (!hsdir_fetches(&lb[n], 1, 100))
++      break;
++  tt_int_op(n, OP_EQ, 5);
++  tt_int_op(hsdir_fetches(&heavy, 20, 100), OP_EQ, 0);
++
++  /* the share of fetches within their rate is per second; the odds
++   * count at most half the budget of the 700 bytes asked within their rate:
++   * (1000 - 500) / (2600 - 500), or 238095 in a million. */
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  for (n = 0; n < 6; n++)
++    if (!hsdir_fetches(&lb[n], 1, 100))
++      break;
++  tt_int_op(n, OP_EQ, 5);
++  lottery_draw = 238094;
++  tt_int_op(hsdir_fetches(&heavy, 2, 100), OP_EQ, 2);
++  lottery_draw = 238095;
++  tt_int_op(hsdir_fetches(&heavy, 1, 100), OP_EQ, 0);
++  lottery_draw = 999999;
++  tt_int_op(hsdir_fetches(&heavy, 20, 100), OP_EQ, 0);
++
++  /* when not enforcing, fetches that would be shed don't count towards
++   * the hard ceiling, so the counters mirror enforcement. */
++  dos_opts->HSDirDescriptorFetchLimit = 0;
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  shed = dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_SHED);
++  tt_int_op(hsdir_fetches(&heavy, 20, 100), OP_EQ, 20);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_SHED), OP_EQ, shed + 19);
++  tt_int_op(hsdir_fetches(&lb[0], 1, 100), OP_EQ, 1);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_SHED), OP_EQ, shed + 19);
++
++  /* a new HSDirDescriptorFetchRate alone applies to a cached bucket. */
++  dos_opts->HSDirDescriptorFetchBurst = 3;
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  hsdir_fetches(&r, 3, 100);
++  over = dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE);
++  hsdir_fetches(&r, 1, 100);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE), OP_EQ, over + 1);
++  dos_opts->HSDirDescriptorFetchRate = 3;
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  hsdir_fetches(&r, 3, 100);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE), OP_EQ, over + 1);
++
++  /* an explicit budget is capped at UINT32_MAX, and the consensus
++   * percentage is clamped to [1, 100]. */
++  dos_opts->HSDirFetchBudget = UINT64_C(1) << 40;
++  tt_u64_op(hsdir_fetch_budget(), OP_EQ, UINT32_MAX);
++  dos_opts->HSDirFetchBudget = 0;
++  MOCK(bwhist_bandwidth_assess, mock_bwhist_bandwidth_assess);
++  observed_bw = 0;
++  options->BandwidthRate = options->MaxAdvertisedBandwidth = 100000000;
++  options->RelayBandwidthRate = 0;
++  dummy_ns = tor_malloc_zero(sizeof(networkstatus_t));
++  dummy_ns->net_params = smartlist_new();
++  smartlist_add(dummy_ns->net_params, (char *) "HSDirFetchBudgetPercent=0");
++  tt_u64_op(hsdir_fetch_budget(), OP_EQ, 1000000);
++  smartlist_clear(dummy_ns->net_params);
++  smartlist_add(dummy_ns->net_params, (char *) "HSDirFetchBudgetPercent=200");
++  tt_u64_op(hsdir_fetch_budget(), OP_EQ, 100000000);
++
++ done:
++  monotime_disable_test_mocking();
++  UNMOCK(hsdir_fetch_lottery_draw);
++  UNMOCK(networkstatus_get_latest_consensus);
++  UNMOCK(bwhist_bandwidth_assess);
++  if (dummy_ns)
++    smartlist_free(dummy_ns->net_params);
++  tor_free(dummy_ns);
++}
++
+ struct testcase_t dos_tests[] = {
+   { "conn_creation", test_dos_conn_creation, TT_FORK, NULL, NULL },
+   { "circuit_creation", test_dos_circuit_creation, TT_FORK, NULL, NULL },
+@@ -814,5 +1105,9 @@ struct testcase_t dos_tests[] = {
+     NULL, NULL },
+   { "begindir_refused", test_dos_begindir_refused, TT_FORK, NULL, NULL },
+   { "dir_heartbeat", test_dos_dir_heartbeat, TT_FORK, NULL, NULL },
++  { "hsdir_fetch_shedding", test_dos_hsdir_fetch_shedding, TT_FORK,
++    NULL, NULL },
++  { "hsdir_fetch_shedding_edges", test_dos_hsdir_fetch_shedding_edges,
++    TT_FORK, NULL, NULL },
+   END_OF_TESTCASES
+ };
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index a1b8285924..dd86806d43 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -11,6 +11,7 @@
+ #define DIRCLIENT_PRIVATE
+ #define HS_CACHE_PRIVATE
+ #define CHANNEL_OBJECT_PRIVATE
++#define DOS_PRIVATE
+ 
+ #include "trunnel/ed25519_cert.h"
+ #include "feature/hs/hs_cache.h"
+@@ -1444,6 +1445,104 @@ test_hsdir_desc_fetch_over_rate(void *arg)
+   tor_free(get);
+ }
+ 
++static uint32_t
++mock_hsdir_fetch_lottery_draw(void)
++{
++  return 999999; /* Every lottery is lost. */
++}
++
++/* While over HSDirFetchBudget, an HSDir with HSDirDescriptorFetchLimit sheds
++ * fetches by closing their circuit, answering those within their
++ * descriptor's rate first. */
++static void
++test_hsdir_desc_fetch_shedding(void *arg)
++{
++  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
++  ed25519_keypair_t kp_a, kp_b;
++  hs_descriptor_t *desc_a = NULL, *desc_b = NULL;
++  char *str_a = NULL, *str_b = NULL, *get_a = NULL, *get_b = NULL;
++  char key[ED25519_BASE64_LEN+1];
++  dos_options_t *dos_opts;
++  or_circuit_t *circ;
++  int64_t served, refused;
++  const uint64_t billion = 1000000000;
++  uint64_t now = 100 * billion;
++  (void) arg;
++
++  init_test();
++  monotime_enable_test_mocking();
++  monotime_coarse_set_mock_time_nsec(now);
++  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
++  MOCK(circuit_mark_for_close_, mock_circuit_mark_for_close);
++  MOCK(hsdir_fetch_lottery_draw, mock_hsdir_fetch_lottery_draw);
++  get_options_mutable()->ORPort_set = 1; /* Accept uploads, and enforce. */
++  tt_int_op(ed25519_keypair_generate(&kp_a, 0), OP_EQ, 0);
++  tt_int_op(ed25519_keypair_generate(&kp_b, 0), OP_EQ, 0);
++  desc_a = hs_helper_build_hs_desc_with_ip(&kp_a);
++  desc_b = hs_helper_build_hs_desc_with_ip(&kp_b);
++  tt_int_op(hs_desc_encode_descriptor(desc_a, &kp_a, NULL, &str_a), OP_EQ, 0);
++  tt_int_op(hs_desc_encode_descriptor(desc_b, &kp_b, NULL, &str_b), OP_EQ, 0);
++  tt_int_op(hs_cache_store_as_dir(str_a), OP_EQ, 0);
++  tt_int_op(hs_cache_store_as_dir(str_b), OP_EQ, 0);
++  ed25519_public_to_base64(key, &desc_a->plaintext_data.blinded_pubkey);
++  tor_asprintf(&get_a, GET("/tor/hs/3/%s"), key);
++  ed25519_public_to_base64(key, &desc_b->plaintext_data.blinded_pubkey);
++  tor_asprintf(&get_b, GET("/tor/hs/3/%s"), key);
++  dos_opts = get_dos_options(get_options_mutable());
++  dos_opts->HSDirDescriptorFetchLimit = 1;
++  dos_opts->HSDirDescriptorFetchRate = 1;
++  dos_opts->HSDirDescriptorFetchBurst = 1;
++  dos_opts->HSDirFetchBudget = 4 * strlen(str_a);
++  served = GET_METRIC("success");
++  refused = GET_METRIC("refused");
++
++  /* A's first six fetches fit in half again the budget; the seventh closes
++   * its circuit without an answer. */
++  for (int i = 0; i < 6; i++) {
++    hsdir_request_on_new_circ(chan, get_a, NULL);
++    tt_assert(!strcmpstart(hsdir_reply, "HTTP/1.0 200 "));
++  }
++  circ = or_circuit_new(0, NULL);
++  circ->p_chan = chan;
++  hsdir_request_on_circ(circ, get_a, NULL);
++  tt_str_op(hsdir_reply, OP_EQ, "");
++  tt_int_op(TO_CIRCUIT(circ)->marked_for_close_reason, OP_EQ,
++            END_CIRC_REASON_RESOURCELIMIT);
++
++  /* In the next second, B and A's fetch within its rate are answered; A's
++   * next one is shed. */
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  hsdir_request_on_new_circ(chan, get_b, NULL);
++  tt_assert(!strcmpstart(hsdir_reply, "HTTP/1.0 200 "));
++  hsdir_request_on_new_circ(chan, get_a, NULL);
++  tt_assert(!strcmpstart(hsdir_reply, "HTTP/1.0 200 "));
++  hsdir_request_on_new_circ(chan, get_a, NULL);
++  tt_str_op(hsdir_reply, OP_EQ, "");
++  tt_i64_op(GET_METRIC("success"), OP_EQ, served + 8);
++  tt_i64_op(GET_METRIC("refused"), OP_EQ, refused + 2);
++  tt_i64_op(get_metric(METRICS_NAME(relay_dos_total), "type",
++                       "hsdir_fetch_shed"), OP_EQ, 2);
++  tt_i64_op(get_metric(METRICS_NAME(relay_dos_total), "type",
++                       "hsdir_fetch_pressure"), OP_EQ, 6);
++
++ done:
++  monotime_disable_test_mocking();
++  UNMOCK(connection_write_to_buf_impl_);
++  UNMOCK(circuit_mark_for_close_);
++  UNMOCK(hsdir_fetch_lottery_draw);
++  SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
++                    TO_OR_CIRCUIT(c)->p_chan = NULL);
++  circuit_free_all();
++  tor_free(hsdir_reply);
++  tor_free(chan);
++  hs_descriptor_free(desc_a);
++  hs_descriptor_free(desc_b);
++  tor_free(str_a);
++  tor_free(str_b);
++  tor_free(get_a);
++  tor_free(get_b);
++}
++
+ struct testcase_t hs_cache[] = {
+   /* Encoding tests. */
+   { "directory", test_directory, TT_FORK,
+@@ -1468,6 +1567,8 @@ struct testcase_t hs_cache[] = {
+     test_hsdir_reuse_and_prev_hop_defenses, TT_FORK, NULL, NULL },
+   { "hsdir_desc_fetch_over_rate", test_hsdir_desc_fetch_over_rate, TT_FORK,
+     NULL, NULL },
++  { "hsdir_desc_fetch_shedding", test_hsdir_desc_fetch_shedding, TT_FORK,
++    NULL, NULL },
+   { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
+     NULL, NULL },
+   { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
+diff --git a/src/test/test_status.c b/src/test/test_status.c
+index 258549e45e..7c9f49e626 100644
+--- a/src/test/test_status.c
++++ b/src/test/test_status.c
+@@ -369,7 +369,8 @@ test_status_hb_not_in_consensus(void *arg)
+                  "[DoSBeginDirLimitEnabled disabled], "
+                  "0 INTRODUCE2 rejected, "
+                  "[HSDirOneRequestPerCircuit disabled], "
+-                 "[HSDirRefuseUnknownPrevHop disabled].\n");
++                 "[HSDirRefuseUnknownPrevHop disabled], "
++                 "[HSDirDescriptorFetchLimit disabled].\n");
+   tt_int_op(mock_saved_log_n_entries(), OP_EQ, 6);
+ 
+  done:
+-- 
+2.43.0
+
