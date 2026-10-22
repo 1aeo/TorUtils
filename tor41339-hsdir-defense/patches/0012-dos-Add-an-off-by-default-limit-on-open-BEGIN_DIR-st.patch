@@ -1,7 +1,7 @@
-From dc62d68184732850856e2180123c07af2f27d7a2 Mon Sep 17 00:00:00 2001
+From d61aaf08859060b0ee2685c9e3693f6a3e75ac28 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 10:12:44 +0000
-Subject: [PATCH 12/13] dos: Add an off-by-default limit on open BEGIN_DIR
+Subject: [PATCH 12/15] dos: Add an off-by-default limit on open BEGIN_DIR
  streams per circuit
 
 BEGIN_DIR returns before the stream creation defense, as the comment
@@ -16,8 +16,10 @@ DoSBeginDirMaxStreams (default 64). When enabled, a public relay
 refuses a BEGIN_DIR stream on a circuit that already has that many open
 directory streams. It sends END_STREAM_REASON_MISC, like the stream
 defense, but tor clients ignore the reason on BEGIN_DIR streams: they
-treat the refusal as a failed directory request and, except for onion
-service requests, consider the relay down until their next consensus.
+treat the refusal as a failed directory request. Unless the client uses
+bridges or EntryNodes, or the request is for an onion service, it also
+considers the relay down until its next consensus or until it next
+connects to it.
 
 Stock clients rarely have more than a few directory streams open on one
 circuit. While bootstrapping, a tor client launches about one
@@ -35,15 +37,15 @@ existing options and counters unchanged.
 Part of #41339.
 ---
  changes/ticket41339_begindir_max_streams |   7 +
- doc/man/tor.1.txt                        |  17 +++
+ doc/man/tor.1.txt                        |  18 +++
  src/core/or/connection_edge.c            |  10 +-
  src/core/or/dos.c                        |  37 +++++
  src/core/or/dos.h                        |   8 +-
- src/core/or/dos_options.inc              |   8 ++
+ src/core/or/dos_options.inc              |   8 +
  src/feature/relay/relay_metrics.c        |   1 +
- src/test/test_dos.c                      | 172 +++++++++++++++++++++++
+ src/test/test_dos.c                      | 183 +++++++++++++++++++++++
  src/test/test_status.c                   |   1 +
- 9 files changed, 258 insertions(+), 3 deletions(-)
+ 9 files changed, 270 insertions(+), 3 deletions(-)
  create mode 100644 changes/ticket41339_begindir_max_streams
 
 diff --git a/changes/ticket41339_begindir_max_streams b/changes/ticket41339_begindir_max_streams
@@ -60,22 +62,23 @@ index 0000000000..4ef9f4cc9a
 +      streams are counted as tor_relay_dos_total{type="begindir_over_max"}
 +      whether or not it is enabled. Part of ticket 41339.
 diff --git a/doc/man/tor.1.txt b/doc/man/tor.1.txt
-index 72f251dc4f..9122a8bddc 100644
+index 72f251dc4f..466465fecc 100644
 --- a/doc/man/tor.1.txt
 +++ b/doc/man/tor.1.txt
-@@ -3110,6 +3110,23 @@ Denial of Service mitigation subsystem described above.
+@@ -3110,6 +3110,24 @@ Denial of Service mitigation subsystem described above.
      consensus parameter. If not defined in the consensus, the value is 0.
      (Default: auto)
  
 +[[DoSBeginDirLimitEnabled]] **DoSBeginDirLimitEnabled** **0**|**1**|**auto**::
 +
 +    Refuse a BEGIN_DIR stream on a circuit that already has
-+    DoSBeginDirMaxStreams open directory streams. Tor clients treat a refused
-+    stream as a failed directory request and, except for onion service
-+    requests, consider this relay down until their next consensus. Whatever
-+    this value, such streams are counted on the MetricsPort. "auto" means use
-+    the consensus parameter. If not defined in the consensus, the value is 0.
-+    (Default: auto)
++    DoSBeginDirMaxStreams open directory streams. The client fails that
++    request. A client that is not using bridges or EntryNodes, and whose
++    request is not for an onion service, also marks this relay not running
++    until its next consensus or until it next connects to this relay.
++    Whatever this value, such streams are counted on the MetricsPort. "auto"
++    means use the consensus parameter. If not defined in the consensus, the
++    value is 0. (Default: auto)
 +
 +[[DoSBeginDirMaxStreams]] **DoSBeginDirMaxStreams** __NUM__::
 +
@@ -249,7 +252,7 @@ index 7e9d404770..8c7a421cff 100644
  
    for (size_t i = 0; i < ARRAY_LENGTH(entries); i++) {
 diff --git a/src/test/test_dos.c b/src/test/test_dos.c
-index 409b34df9b..23598a7e03 100644
+index 409b34df9b..51c0807ea9 100644
 --- a/src/test/test_dos.c
 +++ b/src/test/test_dos.c
 @@ -4,11 +4,16 @@
@@ -283,7 +286,7 @@ index 409b34df9b..23598a7e03 100644
  #include "core/or/or_connection_st.h"
  #include "feature/nodelist/routerstatus_st.h"
  
-@@ -599,6 +607,164 @@ test_dos_refuse_single_hop(void *arg)
+@@ -599,6 +607,175 @@ test_dos_refuse_single_hop(void *arg)
    tor_free(dummy_ns);
  }
  
@@ -361,6 +364,10 @@ index 409b34df9b..23598a7e03 100644
 +  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, 4);
 +
 + done:
++  get_options_mutable()->BridgeRelay = 0;
++  get_options_mutable()->ORPort_set = 0;
++  dos_opts->DoSBeginDirLimitEnabled = -1;
++  dos_opts->DoSBeginDirMaxStreams = 0;
 +  UNMOCK(networkstatus_get_latest_consensus);
 +  if (dummy_ns)
 +    smartlist_free(dummy_ns->net_params);
@@ -439,16 +446,23 @@ index 409b34df9b..23598a7e03 100644
 +  circ->n_streams = NULL;
 +  while (smartlist_len(get_connection_array())) {
 +    connection_t *c = smartlist_get(get_connection_array(), 0);
++    /* Take c off the active linked list before we free it. */
++    if (c->linked)
++      connection_stop_reading_from_linked_conn(c);
 +    connection_remove(c);
 +    connection_free_(c);
 +  }
 +  circuit_free_all();
++  get_options_mutable()->ORPort_set = 0;
++  get_options_mutable()->DirPort_set = 0;
++  dos_opts->DoSBeginDirLimitEnabled = -1;
++  dos_opts->DoSBeginDirMaxStreams = 0;
 +}
 +
  /** Test that the heartbeat shows the directory request counts of each
   * defense once it is enabled. */
  static void
-@@ -610,11 +776,14 @@ test_dos_dir_heartbeat(void *arg)
+@@ -610,11 +787,14 @@ test_dos_dir_heartbeat(void *arg)
    get_options_mutable()->ORPort_set = 1;
    dos_opts->HSDirOneRequestPerCircuit = 1;
    dos_opts->HSDirRefuseUnknownPrevHop = 1;
@@ -463,7 +477,7 @@ index 409b34df9b..23598a7e03 100644
    expect_single_log_msg_containing("1 circuits with repeated HSDir requests, "
                                     "2 HSDir requests from unknown relays");
  
-@@ -630,6 +799,9 @@ struct testcase_t dos_tests[] = {
+@@ -630,6 +810,9 @@ struct testcase_t dos_tests[] = {
      NULL, NULL },
    { "conn_rate", test_dos_conn_rate, TT_FORK, NULL, NULL },
    { "refuse_single_hop", test_dos_refuse_single_hop, TT_FORK, NULL, NULL },

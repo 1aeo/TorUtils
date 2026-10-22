@@ -1,7 +1,7 @@
-From e8dcea9a8969061abcfd44339d1698ce62bf52bd Mon Sep 17 00:00:00 2001
+From fca9a65e595b04eaa6099674d928b929a41c06ff Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 05/13] hs_cache: Only credit HSDir downloads once the response
+Subject: [PATCH 05/15] hs_cache: Only credit HSDir downloads once the response
  is written out
 
 b628ffeb6 (#40996) increments n_downloaded when the HSDir's directory

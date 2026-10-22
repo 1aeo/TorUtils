@@ -1,0 +1,37 @@
+Format: 1.8
+Date: Thu, 22 Oct 2026 10:02:55 +0000
+Source: tor
+Binary: tor tor-geoipdb
+Built-For-Profiles: derivative.ubuntu noudeb
+Architecture: amd64 all
+Version: 0.4.9.14-1~resolute+1+tor41339.6
+Distribution: resolute
+Urgency: medium
+Maintainer: Peter Palfrader <weasel@debian.org>
+Changed-By: 1aeo <github@1aeo.com>
+Description:
+ tor        - anonymizing overlay network for TCP
+ tor-geoipdb - GeoIP database for Tor
+Changes:
+ tor (0.4.9.14-1~resolute+1+tor41339.6) resolute; urgency=medium
+ .
+   * Apply the tor#41339 HSDir defensive series (patches 0001-0015): HTTP
+     and onion service descriptor hardening, MetricsPort counters for
+     HSDir fetches and uploads and tunneled directory requests, HSDir and
+     BEGIN_DIR defenses and pressure-gated shedding of descriptor fetches
+     over a byte budget, all off by default; restore doc/nofooter.conf.
+Checksums-Sha1:
+ 2a6447b9fc9e40b96aed5cb617ae9ad197808c04 7074404 tor-dbgsym_0.4.9.14-1~resolute+1+tor41339.6_amd64.ddeb
+ 2447d7a8d87a302baa27562f939ca48da5e11ddc 2751630 tor-geoipdb_0.4.9.14-1~resolute+1+tor41339.6_all.deb
+ e3c45cb7014cb13fb19f7ee9e91ff62f0d63be4b 8297 tor_0.4.9.14-1~resolute+1+tor41339.6_amd64.buildinfo
+ 87b959aa752bfdc0dc83f17bc034d6602d993c48 1782954 tor_0.4.9.14-1~resolute+1+tor41339.6_amd64.deb
+Checksums-Sha256:
+ 178d1573e2057f9506d3d3be28789d416582d9212aeceaeac6135c6b758f8412 7074404 tor-dbgsym_0.4.9.14-1~resolute+1+tor41339.6_amd64.ddeb
+ 6dbe914595ecbd924f0891f0078f8a7151d9023dc04fff8c038a4def5ade9c05 2751630 tor-geoipdb_0.4.9.14-1~resolute+1+tor41339.6_all.deb
+ 4c11e419b72e0e51df9bef9955d558390f4328e2014b414c5bd093ffc077e792 8297 tor_0.4.9.14-1~resolute+1+tor41339.6_amd64.buildinfo
+ 785e7f007ff956fc4dc5eb92a8ca0b95a8a234092ca0b872d79c16ce9253ad18 1782954 tor_0.4.9.14-1~resolute+1+tor41339.6_amd64.deb
+Files:
+ 33c483136064b589b68be211e9e736bd 7074404 debug optional tor-dbgsym_0.4.9.14-1~resolute+1+tor41339.6_amd64.ddeb
+ 678e1d110d8dfdbeadc02b8fef84782d 2751630 net optional tor-geoipdb_0.4.9.14-1~resolute+1+tor41339.6_all.deb
+ cec192483a3c47421f1ad69ec06063fd 8297 net optional tor_0.4.9.14-1~resolute+1+tor41339.6_amd64.buildinfo
+ 185399c52e95072c43c2e01c72b6e30a 1782954 net optional tor_0.4.9.14-1~resolute+1+tor41339.6_amd64.deb

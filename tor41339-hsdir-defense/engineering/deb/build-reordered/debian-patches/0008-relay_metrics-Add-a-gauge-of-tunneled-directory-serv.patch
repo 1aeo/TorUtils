@@ -1,7 +1,7 @@
-From 5c25e694ef7f908ddd5a42561f54303adc732704 Mon Sep 17 00:00:00 2001
+From cf10260b89c8c136a0edaa9f5fd624bd8c235b20 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:45:05 +0000
-Subject: [PATCH 08/13] relay_metrics: Add a gauge of tunneled directory server
+Subject: [PATCH 08/15] relay_metrics: Add a gauge of tunneled directory server
  connections
 
 Each BEGIN_DIR stream holds a linked exit and directory connection pair
@@ -21,10 +21,10 @@ gone and only the stream is left, draining onto the circuit
 Part of #41339.
 ---
  changes/ticket41339_dir_server_conns |  5 +++
- src/feature/relay/relay_metrics.c    | 45 ++++++++++++++++++++++
+ src/feature/relay/relay_metrics.c    | 45 +++++++++++++++++++++
  src/feature/relay/relay_metrics.h    |  2 +
- src/test/test_hs_cache.c             | 57 ++++++++++++++++++++++++++++
- 4 files changed, 109 insertions(+)
+ src/test/test_hs_cache.c             | 60 ++++++++++++++++++++++++++++
+ 4 files changed, 112 insertions(+)
  create mode 100644 changes/ticket41339_dir_server_conns
 
 diff --git a/changes/ticket41339_dir_server_conns b/changes/ticket41339_dir_server_conns
@@ -136,7 +136,7 @@ index f793c890e2..efa9413342 100644
  
  /** The metadata of a relay metric. */
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index f9e557a38d..b3b9843cda 100644
+index 96756a7c6f..b06163e5aa 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -20,6 +20,7 @@
@@ -147,7 +147,7 @@ index f9e557a38d..b3b9843cda 100644
  #include "core/proto/proto_http.h"
  #include "app/config/config.h"
  #include "core/or/circuitlist.h"
-@@ -1024,6 +1025,60 @@ test_dir_request_response_metrics(void *arg)
+@@ -1037,6 +1038,63 @@ test_dir_request_response_metrics(void *arg)
    tor_free(chan);
  }
  
@@ -192,15 +192,18 @@ index f9e557a38d..b3b9843cda 100644
 +
 +  for (size_t i = 0; i < ARRAY_LENGTH(states); i++)
 +    before[i] = DIR_CONN_GAUGE(states[i]);
-+  for (size_t i = 0; i < ARRAY_LENGTH(conns); i++)
++  for (size_t i = 0; i < ARRAY_LENGTH(conns); i++) {
++    conns[i]->conn_array_index = smartlist_len(get_connection_array());
 +    smartlist_add(get_connection_array(), conns[i]);
++  }
 +  for (size_t i = 0; i < ARRAY_LENGTH(states); i++)
 +    tt_i64_op(DIR_CONN_GAUGE(states[i]), OP_EQ, before[i] + added[i]);
 +
 + done:
 +  conns[6]->linked_conn = NULL;
 +  for (size_t i = 0; i < ARRAY_LENGTH(conns); i++) {
-+    smartlist_remove(get_connection_array(), conns[i]);
++    if (conns[i]->conn_array_index >= 0)
++      connection_remove(conns[i]);
 +    connection_free_minimal(conns[i]);
 +  }
 +}
@@ -208,7 +211,7 @@ index f9e557a38d..b3b9843cda 100644
  struct testcase_t hs_cache[] = {
    /* Encoding tests. */
    { "directory", test_directory, TT_FORK,
-@@ -1040,6 +1095,8 @@ struct testcase_t hs_cache[] = {
+@@ -1053,6 +1111,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "dir_request_response_metrics", test_dir_request_response_metrics,
      TT_FORK, NULL, NULL },

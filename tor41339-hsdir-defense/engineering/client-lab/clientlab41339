@@ -1,0 +1,35 @@
+# Closed-lab network for ticket 41339 client-reachability measurement.
+# Loopback-only private chutney net: own authorities/consensus, no real Tor.
+# Derived from the simulator's hsflood41339 network: it keeps every relay's
+# MetricsPort (19100 + nodenum) and a short HeartbeatPeriod, but widens the
+# relay set and adds more onion services and client nodes so that:
+#   - several relays can act as HSDirs for the same descriptor (failover),
+#   - a "spread" load can touch several onion services at once, and
+#   - the stock C tor probe can rotate over enough client nodes to respect
+#     tor's 10-second NEWNYM rate limit while still sampling every phase.
+#
+# Node numbering (chutney assigns ControlPort 8000+nodenum, SocksPort
+# 9000+nodenum): authorities 000a-003a, relays 004r-009r, clients 010c-015c,
+# onion services 016h-021h. Every onion service forwards its virtual port 5858
+# to 127.0.0.1:4747, where the harness runs one small HTTP server, so each
+# onion answers plain HTTP over the private net. The harness's load client
+# uses ControlPort 8090 / SocksPort 9090 and the Arti client SocksPort 9400,
+# all outside the node port range.
+def extra(i):
+    return ("HeartbeatPeriod 5 seconds\n"
+            f"MetricsPort 127.0.0.1:{19100 + i}\n"
+            "MetricsPortPolicy accept 127.0.0.1\n")
+
+Authority = Node(tag="a", authority=1, relay=1)
+Relay = Node(tag="r", relay=1, exit=1)
+Client = Node(tag="c", client=1, launch_phase=2)
+HS = Node(tag="h", hs=1, launch_phase=2)
+
+# 4 authorities (also relays/HSDirs), 6 plain relays (all HSDir), 6 C tor
+# client nodes (stock clients used for reachability probes, rotated so each
+# can respect NEWNYM rate limiting), 6 onion services.
+NODES = ([Authority.specialize(extra_raw_torrc=extra(i)) for i in range(4)] +
+         [Relay.specialize(extra_raw_torrc=extra(4 + i)) for i in range(6)] +
+         Client.getN(6) + HS.getN(6))
+
+ConfigureNodes(NODES)

@@ -1,7 +1,7 @@
-From 7e7ba3cdfa8f58940d71e4e62a4b24cc195d4f6c Mon Sep 17 00:00:00 2001
+From 1f9001eb4cf851afaf7ec9c24068704f5be10df2 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:46:22 +0000
-Subject: [PATCH 09/13] relay_metrics: Make fill_dos_values() table-driven
+Subject: [PATCH 09/15] relay_metrics: Make fill_dos_values() table-driven
 
 Each tor_relay_dos_total label took five nearly identical lines. Use a
 table of label and value instead, so that the following commits can add

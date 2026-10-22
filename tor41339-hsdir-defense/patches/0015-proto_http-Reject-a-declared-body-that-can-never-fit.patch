@@ -1,0 +1,140 @@
+From c09df5dccc6a02d3b07b10fbefe15a164b109fc7 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Thu, 22 Oct 2026 08:16:54 +0000
+Subject: [PATCH 15/15] proto_http: Reject a declared body that can never fit
+
+fetch_from_buf_http() rejects a buffered body once it reaches the
+caller's limit, but a Content-Length at or above that limit returns
+"not here yet" until those bytes arrive. A directory server connection
+then stays in COMMAND_WAIT, holding its stream until the stall timeout.
+
+Reject such a declaration as soon as the headers arrive, unless the
+caller sets force_complete and wants the bytes it already has. This
+applies to every caller that doesn't: the directory server and client,
+the MetricsPort, the HTTP CONNECT tunnel and HTTPS proxy replies. Each
+would have failed once the body reached the limit; they now fail
+earlier, and the directory client logs "response too large" instead of
+waiting.
+
+Part of #41339.
+---
+ changes/dirserv_declared_body_len |  6 ++++++
+ src/core/proto/proto_http.c       |  9 +++++++++
+ src/test/test_dir_handle_get.c    | 19 ++++++++++++++++++-
+ src/test/test_proto_http.c        | 21 +++++++++++++++++++++
+ 4 files changed, 54 insertions(+), 1 deletion(-)
+ create mode 100644 changes/dirserv_declared_body_len
+
+diff --git a/changes/dirserv_declared_body_len b/changes/dirserv_declared_body_len
+new file mode 100644
+index 0000000000..8ea01b4c76
+--- /dev/null
++++ b/changes/dirserv_declared_body_len
+@@ -0,0 +1,6 @@
++  o Minor features (directory server, denial of service):
++    - When parsing an HTTP request or response without accepting a partial
++      body, reject a declared Content-Length that is too large to accept as
++      soon as the headers arrive, instead of waiting for those bytes. This
++      applies to directory requests and responses, the MetricsPort, the
++      HTTP CONNECT tunnel and HTTPS proxy replies. Part of ticket 41339.
+diff --git a/src/core/proto/proto_http.c b/src/core/proto/proto_http.c
+index d5d1f60ca9..fb1524b0be 100644
+--- a/src/core/proto/proto_http.c
++++ b/src/core/proto/proto_http.c
+@@ -99,6 +99,15 @@ fetch_from_buf_http(buf_t *buf,
+     log_debug(LD_HTTP,"Got a contentlen of %d.",(int)contentlen);
+     if (bodylen < contentlen) {
+       if (!force_complete) {
++        /* The declared body can never be accepted: once that many bytes
++         * are buffered, the check above rejects them. Close now instead
++         * of holding the connection open until they arrive. Callers that
++         * set force_complete want the bytes they already have. */
++        if (max_bodylen <= contentlen) {
++          log_info(LD_HTTP, "Declared Content-Length %d larger than %d. "
++                   "Failing.", (int)contentlen, (int)max_bodylen - 1);
++          return -1;
++        }
+         log_debug(LD_HTTP,"body not all here yet.");
+         return 0; /* not all there yet */
+       }
+diff --git a/src/test/test_dir_handle_get.c b/src/test/test_dir_handle_get.c
+index 6c75b9d935..06a6312626 100644
+--- a/src/test/test_dir_handle_get.c
++++ b/src/test/test_dir_handle_get.c
+@@ -2764,6 +2764,19 @@ handle_hs_post(size_t len)
+   return r;
+ }
+ 
++/* As handle_hs_post(), but send only the headers, declaring Content-Length
++ * <b>declared</b> and no body bytes. */
++static int
++handle_hs_post_declared(size_t declared)
++{
++  dir_connection_t *conn = new_dir_conn();
++  buf_add_printf(TO_CONN(conn)->inbuf, "POST /tor/hs/3/publish HTTP/1.0\r\n"
++                 "Content-Length: %"TOR_PRIuSZ"\r\n\r\n", declared);
++  int r = directory_handle_command(conn);
++  connection_free_minimal(TO_CONN(conn));
++  return r;
++}
++
+ /* Non-authorities refuse a request body too large to be an HS descriptor. */
+ static void
+ test_dir_handle_get_hs_post_size_limit(void *data)
+@@ -2772,9 +2785,13 @@ test_dir_handle_get_hs_post_size_limit(void *data)
+   (void) data;
+ 
+   MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
+-  /* A body just under the limit is read; one that reaches it is refused. */
++  /* A body just under the limit is read; one that reaches it is refused.
++   * A declared Content-Length that reaches the limit is refused before any
++   * body byte arrives; one just under it is kept until the body does. */
+   tt_int_op(handle_hs_post(max_len - 1), OP_EQ, 0);
+   tt_int_op(handle_hs_post(max_len), OP_EQ, -1);
++  tt_int_op(handle_hs_post_declared(max_len), OP_EQ, -1);
++  tt_int_op(handle_hs_post_declared(max_len - 1), OP_EQ, 0);
+ #ifdef HAVE_MODULE_DIRAUTH
+   /* Authorities keep the 16 MB limit. */
+   get_options_mutable()->AuthoritativeDir = 1;
+diff --git a/src/test/test_proto_http.c b/src/test/test_proto_http.c
+index 198e70eefb..82f956bdd8 100644
+--- a/src/test/test_proto_http.c
++++ b/src/test/test_proto_http.c
+@@ -175,6 +175,11 @@ test_proto_http_invalid(void *arg)
+         "Content-Length: Cheese\r\n\r\n"
+         "foo"),
+       "Content-Length is bogus; maybe someone is trying to crash us." },
++    /* Declared Content-Length already over the limit; body not here yet. */
++    { S("GET /index.html HTTP/1.0\r\n"
++        "Content-Length: 99999\r\n\r\n"
++        "short"),
++      "Declared Content-Length 99999 larger than 127" },
+     };
+   unsigned i;
+   buf_t *buf = buf_new();
+@@ -200,6 +205,22 @@ test_proto_http_invalid(void *arg)
+     tor_free(b);
+     mock_clean_saved_logs();
+   }
++
++  /* A declared length under the limit, with the body not yet here, waits.
++   * force_complete still accepts the bytes it has when the declaration is
++   * over the limit. */
++  {
++    size_t bl = 0;
++    buf_add_string(buf, "GET / HTTP/1.0\r\nContent-Length: 10\r\n\r\nshort");
++    tt_int_op(0, OP_EQ, fetch_from_buf_http(buf, &h, 128, &b, &bl, 128, 0));
++    buf_clear(buf);
++    tor_free(h);
++    tor_free(b);
++    buf_add_string(buf,
++                   "GET / HTTP/1.0\r\nContent-Length: 99999\r\n\r\nshort");
++    tt_int_op(1, OP_EQ, fetch_from_buf_http(buf, &h, 128, &b, &bl, 128, 1));
++    tt_u64_op(bl, OP_EQ, 5);
++  }
+  done:
+   tor_free(h);
+   tor_free(b);
+-- 
+2.43.0
+

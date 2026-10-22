@@ -1,12 +1,12 @@
-tor (0.4.9.14-1~resolute+1+tor41339.5) resolute; urgency=medium
+tor (0.4.9.14-1~resolute+1+tor41339.6) resolute; urgency=medium
 
-  * Apply the tor#41339 HSDir defensive series (patches 0001-0013): HTTP
+  * Apply the tor#41339 HSDir defensive series (patches 0001-0015): HTTP
     and onion service descriptor hardening, MetricsPort counters for
-    HSDir fetches and uploads and tunneled directory requests, and HSDir
-    and BEGIN_DIR defenses, all off by default; restore
-    doc/nofooter.conf.
+    HSDir fetches and uploads and tunneled directory requests, HSDir and
+    BEGIN_DIR defenses and pressure-gated shedding of descriptor fetches
+    over a byte budget, all off by default; restore doc/nofooter.conf.
 
- -- 1aeo <github@1aeo.com>  Wed, 21 Oct 2026 11:11:46 +0000
+ -- 1aeo <github@1aeo.com>  Thu, 22 Oct 2026 10:02:55 +0000
 
 tor (0.4.9.14-1~resolute+1) resolute-backport; urgency=medium
 

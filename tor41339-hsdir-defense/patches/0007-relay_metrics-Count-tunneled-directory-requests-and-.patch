@@ -1,7 +1,7 @@
-From 0d762688a9722756f1aa49fbfb837fd88d8d9a3b Mon Sep 17 00:00:00 2001
+From 4de97043aad6b752a7aeae380c81ace6f6f07d33 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:43:08 +0000
-Subject: [PATCH 07/13] relay_metrics: Count tunneled directory requests and
+Subject: [PATCH 07/15] relay_metrics: Count tunneled directory requests and
  responses
 
 tor_relay_streams_total{type="BEGIN_DIR"} counts BEGIN_DIR streams, but
@@ -27,12 +27,12 @@ Part of #41339.
 ---
  changes/ticket41339_dir_requests  |  6 +++
  src/feature/dircache/dircache.c   |  8 ++++
- src/feature/dircommon/directory.c |  9 +++++
- src/feature/relay/relay_metrics.c | 56 ++++++++++++++++++++++++++
- src/feature/relay/relay_metrics.h | 31 +++++++++++++++
- src/feature/relay/relay_stub.c    | 12 ++++++
- src/test/test_hs_cache.c          | 65 +++++++++++++++++++++++++++++++
- 7 files changed, 187 insertions(+)
+ src/feature/dircommon/directory.c |  9 ++++
+ src/feature/relay/relay_metrics.c | 56 ++++++++++++++++++++++
+ src/feature/relay/relay_metrics.h | 31 ++++++++++++
+ src/feature/relay/relay_stub.c    | 12 +++++
+ src/test/test_hs_cache.c          | 78 +++++++++++++++++++++++++++++++
+ 7 files changed, 200 insertions(+)
  create mode 100644 changes/ticket41339_dir_requests
 
 diff --git a/changes/ticket41339_dir_requests b/changes/ticket41339_dir_requests
@@ -270,10 +270,10 @@ index 4531096316..3dd0e0b4a2 100644
 +  (void)type;
 +}
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 4cdd7f3189..f9e557a38d 100644
+index 4cdd7f3189..96756a7c6f 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
-@@ -961,6 +961,69 @@ test_downloaded_counter_non_hs(void *arg)
+@@ -961,6 +961,82 @@ test_downloaded_counter_non_hs(void *arg)
    connection_free_minimal(TO_CONN(conn));
  }
  
@@ -288,7 +288,7 @@ index 4cdd7f3189..f9e557a38d 100644
 +test_dir_request_response_metrics(void *arg)
 +{
 +  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
-+  dir_connection_t *conn = dir_connection_new(AF_INET);
++  dir_connection_t *conn = dir_connection_new(AF_INET), *dirport = NULL;
 +  ed25519_public_key_t pk;
 +  int64_t non_hs0, unparsed0, hs0, other0;
 +  (void) arg;
@@ -307,6 +307,17 @@ index 4cdd7f3189..f9e557a38d 100644
 +  hsdir_request_on_new_circ(chan, "POST /tor/ HTTP/1.0\r\n\r\n", "x");
 +  hsdir_request_on_new_circ(chan, "GET\r\n\r\n", NULL);
 +  hsdir_request_on_new_circ(chan, "POST\r\n\r\n", "x");
++  tt_i64_op(DIR_REQUEST_METRIC("non_hs"), OP_EQ, non_hs0 + 2);
++  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 2);
++
++  /* The same requests on a DirPort connection aren't counted. */
++  dirport = dir_connection_new(AF_INET);
++  tor_addr_from_ipv4h(&TO_CONN(dirport)->addr, 0x7f000001);
++  directory_handle_command_get(dirport, GET("/tor/robots.txt"), NULL, 0);
++  directory_handle_command_post(dirport, "POST /tor/ HTTP/1.0\r\n\r\n",
++                                "x", 1);
++  directory_handle_command_get(dirport, "GET\r\n\r\n", NULL, 0);
++  directory_handle_command_post(dirport, "POST\r\n\r\n", "x", 1);
 +  tt_i64_op(DIR_REQUEST_METRIC("non_hs"), OP_EQ, non_hs0 + 2);
 +  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 2);
 +
@@ -337,13 +348,15 @@ index 4cdd7f3189..f9e557a38d 100644
 +                    TO_OR_CIRCUIT(c)->p_chan = NULL);
 +  circuit_free_all();
 +  connection_free_minimal(TO_CONN(conn));
++  if (dirport)
++    connection_free_minimal(TO_CONN(dirport));
 +  tor_free(chan);
 +}
 +
  struct testcase_t hs_cache[] = {
    /* Encoding tests. */
    { "directory", test_directory, TT_FORK,
-@@ -975,6 +1038,8 @@ struct testcase_t hs_cache[] = {
+@@ -975,6 +1051,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "hsdir_get_post_metrics", test_hsdir_get_post_metrics, TT_FORK,
      NULL, NULL },

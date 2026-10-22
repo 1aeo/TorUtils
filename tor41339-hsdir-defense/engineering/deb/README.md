@@ -1,14 +1,14 @@
 # amd64 `.deb` for Ubuntu 24.04 and 26.04: build + install evidence
 
-> **Not yet upstream-reviewed.** `+tor41339.5` is built from all 13 patches in
-> `../../patches/`. Every defense (0011–0013) is off: the AUTOBOOL options
-> default to `auto` and no consensus sets their parameters, and 0013 is
-> torrc-only and off by default. The MetricsPort counters (0006–0010) are always on, and the
-> hardening patches 0001–0005 are always active, so the build is not
+> **Not yet upstream-reviewed.** `+tor41339.6` is built from all 15 patches in
+> `../../patches/`. Every defense (0011, 0012, 0014) is off: the AUTOBOOL
+> options default to `auto` and no consensus sets their parameters. The
+> MetricsPort counters (0006–0010, 0013, 0014's) are always on, and the
+> hardening patches 0001–0005 and 0015 are always active, so the build is not
 > equivalent to stock. The crash-at-scale review
 > (`../../operator/patch-crash-at-scale-critique.md`: 0 critical / 0 high)
 > covered the legacy 7-patch series behind `+tor41339.3`, not 0006–0008 or
-> 0012–0013. It is not a released package; do not enable enforcement
+> 0012–0015. It is not a released package; do not enable enforcement
 > fleet-wide before measuring with the counters.
 
 ## Packages (`../../packages/`)
@@ -18,8 +18,8 @@ configuration:
 
 | Host | Package |
 |---|---|
-| Ubuntu 24.04 (noble) | `tor_0.4.9.14-1~noble+1+tor41339.5_amd64.deb` |
-| Ubuntu 26.04 (resolute) | `tor_0.4.9.14-1~resolute+1+tor41339.5_amd64.deb` |
+| Ubuntu 24.04 (noble) | `tor_0.4.9.14-1~noble+1+tor41339.6_amd64.deb` |
+| Ubuntu 26.04 (resolute) | `tor_0.4.9.14-1~resolute+1+tor41339.6_amd64.deb` |
 
 - The `tor_…_amd64.deb` is the patched daemon (`/usr/bin/tor` + the systemd
   units); **it alone contains the patches.** The current plan unpacks it to
@@ -33,7 +33,7 @@ configuration:
   installable).
 
 **26.04 native artifact for the build handoff:** `resolute/DELIVERY.md` records
-the `+tor41339.3` handoff and has not been redone for `+tor41339.5`; it has the
+the `+tor41339.3` handoff and has not been redone for `+tor41339.6`; it has the
 package and extracted-binary SHA256s, source base, compiler and flags, linked
 libraries, the comparison with the stock 26.04 package, and the validation
 evidence requested by `../../operator/NATIVE-26.04-BUILD-HANDOFF.md`, including
@@ -79,16 +79,17 @@ on `tor_0.4.9.14-1~resolute+1`. The two source packages share the orig tarball
 (sha256 `182449ac…5e4a`, identical to dist.torproject.org), and their Debian
 packaging differs only in the changelog entry. The quilt series in
 `debian-patches/` is `0000` (restores `doc/nofooter.conf`, which the release
-tarball omits) followed by `0001`–`0013`, byte-identical to `../../patches/`
+tarball omits) followed by `0001`–`0015`, byte-identical to `../../patches/`
 and the same for both builds. `changelog` is the 24.04 build's
 `debian/changelog`; `resolute/changelog` is the 26.04 one.
 
-- `dh_auto_test` (`make test`, the full unit binary), both builds: **1614 tests
+- `dh_auto_test` (`make test`, the full unit binary), both builds: **1620 tests
   ok, 24 skipped (the same environment-conditional set), 0 failed.**
 - No compiler warning on any line the series adds (gcc 13 and gcc 15). The
   only warning in a file the series touches is in unchanged upstream test
   code (`BUILD-INFO.txt` lists it).
-- Each binary contains the 7 new option names and every new metric name.
+- Each binary contains the 8 new option names and every new metric name, and
+  its manual renders the new entries correctly.
 
 **24.04 / 26.04 parity.** Identical configure feature summary and configure
 line, 64-entry package file list, `Depends`/`Recommends`/`Suggests`, and
@@ -108,15 +109,15 @@ installs **only the `tor` package** (`tor-geoipdb` not installed) and runs an
 unpublished relay joined to that network. Results, the same for both builds:
 
 - `tor --verify-config` returns 0 for the default and the lab torrc, and the
-  installed version ends in `+tor41339.5`.
-- All 7 new options exist, with every defense off:
+  installed version ends in `+tor41339.6`.
+- All 8 new options exist, with every defense off:
   `HSDirOneRequestPerCircuit auto`, `HSDirRefuseUnknownPrevHop auto`,
   `DoSBeginDirLimitEnabled auto`, `DoSBeginDirMaxStreams 0`,
-  `HSDirDescriptorFetchLimit 0`, `HSDirDescriptorFetchRate 5`,
-  `HSDirDescriptorFetchBurst 20`.
+  `HSDirDescriptorFetchRate 5`, `HSDirDescriptorFetchBurst 20`,
+  `HSDirDescriptorFetchLimit auto`, `HSDirFetchBudget 0`.
 - Under `Sandbox 1`: `Seccomp_filters: 2` (Docker's own filter plus tor's),
   Bootstrapped 100%, 0 bad syscalls.
-- All 24 new MetricsPort series present (0, since an unpublished relay gets no
+- All 26 new MetricsPort series present (0, since an unpublished relay gets no
   HS traffic).
 
 `resolute/controls/` drives real HS-directory traffic through a private net
@@ -126,21 +127,28 @@ fetches per circuit), a one-hop load from an unlisted relay, and a stock
 client. Results for both packages (`controls-result.json` for 26.04,
 `controls-result-noble.json` for 24.04), the same on both:
 
-| Phase (40 s each) | Stock client | Reuse load | One-hop load |
+| Phase (40 s each) | Stock prober (target only) | Reuse load | One-hop load |
 |---|---|---|---|
 | Defaults, or every option off | 43/43 | 100/100 | 20/20 |
-| `HSDirOneRequestPerCircuit 1` | 43/43 | 0/100 (30 refused) | 10/20 |
-| `HSDirRefuseUnknownPrevHop 1` | 43/43 | 100/100 | 0/20 (20 refused) |
-| `DoSBeginDirLimitEnabled 1`, max 2 | 43/43 | 53–57/100 | 20/20 |
-| `HSDirDescriptorFetchLimit 1`, rate 1, burst 2 | 13/15 | 0/100 | 16/20 |
+| `HSDirOneRequestPerCircuit 1` | all (42–43) | 0/100 (30 refused) | 10/20 |
+| `HSDirRefuseUnknownPrevHop 1` | all (42–43) | 100/100 | 0/20 (20 refused) |
+| `DoSBeginDirLimitEnabled 1`, max 2 | all (42–43) | 57–58/100 | 20/20 |
+| 0013 rate 1, burst 2 (count only) | 43/43 | 100/100 | 20/20 |
+| `HSDirDescriptorFetchLimit 1`, `HSDirFetchBudget 28000` | 5/8 (26.04), 7/10 (24.04) | 5/100 | 20/20 |
 
 After each "on" phase, switching the option off live on the same process
 restored every load. In every phase, every tunneled BEGIN_DIR stream was
 counted in exactly one of `tor_relay_hsdir_get_total`,
 `tor_relay_hsdir_post_total`, `tor_relay_dir_requests_total` or
 `tor_relay_dir_server_conns{state="command_wait"}`; streams the BEGIN_DIR
-limit refuses never open. The fetch limit also refuses the stock client,
-because its bucket is shared (see the manual). No node logged a bad syscall.
+limit refuses never open. The 0013 phase counted 119 fetches over the rate
+and refused none. In the 0014 phase the target was asked for about twice its
+budget, so it shed 22 fetches (all counted as `refused`, equal to
+`hsdir_fetch_shed`); the stock prober here fetches only from the target
+HSDir (`HSFETCH … SERVER=`), so it shows the per-HSDir refusal rate, not
+what a client sees. Real clients retry another HSDir: see
+`../client-lab/`, where stock C tor and Arti clients reached the shed
+onion service on every request. No node logged a bad syscall.
 
 The install check exits nonzero if any of these fails.
 
@@ -162,6 +170,7 @@ happens to block TERM/INT varies by environment and by run:
 | Both `+tor41339.3` 24.04.5 install runs, `Sandbox 1` | — | exited |
 | `+tor41339.4` install runs, `Sandbox 1` | — | 24.04 exited; 26.04 stuck |
 | `+tor41339.5` install runs, `Sandbox 1` | — | exited |
+| `+tor41339.6` install runs, `Sandbox 1` | — | 24.04 stuck; 26.04 exited |
 | Ubuntu 26.04.1, glibc 2.43 (`resolute/sigterm-trials.txt`), `Sandbox 1` | stuck 6/15 | stuck 5/15 |
 | Ubuntu 26.04.1, `Sandbox 0` | exited 5/5 | exited 5/5 |
 

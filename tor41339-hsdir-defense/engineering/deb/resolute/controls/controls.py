@@ -16,7 +16,9 @@ unpublished relay identity) and a stock client fetching throughout:
   0011 reuse          HSDirOneRequestPerCircuit=1
   0011 prev hop       HSDirRefuseUnknownPrevHop=1
   0012                DoSBeginDirLimitEnabled=1 with DoSBeginDirMaxStreams=2
-  0013                HSDirDescriptorFetchLimit=1 with rate 1 and burst 2
+  0013                HSDirDescriptorFetchRate=1 and Burst=2 (count only)
+  0014                HSDirDescriptorFetchLimit=1 with HSDirFetchBudget=28000
+                      (about two lab descriptors a second)
 
 The HSDir hashring rotates quickly in a test network, so the target (an
 HSDir that serves the onion right now) is chosen again before P0 and before
@@ -48,21 +50,24 @@ SERIES = re.compile(r'^(tor_relay_(?:dos_total|hsdir_get_total|hsdir_post_total|
                     r'streams_total)\{[^}]*\}) (\d+)$', re.M)
 OPTS = ["HSDirOneRequestPerCircuit", "HSDirRefuseUnknownPrevHop",
         "DoSBeginDirLimitEnabled", "DoSBeginDirMaxStreams",
-        "HSDirDescriptorFetchLimit", "HSDirDescriptorFetchRate",
-        "HSDirDescriptorFetchBurst"]
+        "HSDirDescriptorFetchRate", "HSDirDescriptorFetchBurst",
+        "HSDirDescriptorFetchLimit", "HSDirFetchBudget"]
 OFF = ("HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0 "
        "DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 "
-       "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 "
-       "HSDirDescriptorFetchBurst=20")
+       "HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 "
+       "HSDirDescriptorFetchLimit=0 HSDirFetchBudget=0")
 DEFAULTS = OFF.replace("Circuit=0", "Circuit=auto").replace(
-    "PrevHop=0", "PrevHop=auto").replace("LimitEnabled=0", "LimitEnabled=auto")
+    "PrevHop=0", "PrevHop=auto").replace(
+    "LimitEnabled=0", "LimitEnabled=auto").replace(
+    "FetchLimit=0", "FetchLimit=auto")
 
 PAIRS = [
     ("0011 reuse", "HSDirOneRequestPerCircuit=1"),
     ("0011 prev-hop", "HSDirRefuseUnknownPrevHop=1"),
     ("0012 BEGIN_DIR limit", "DoSBeginDirLimitEnabled=1 DoSBeginDirMaxStreams=2"),
-    ("0013 fetch limit", "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 "
-                         "HSDirDescriptorFetchBurst=2"),
+    ("0013 over-rate count", "HSDirDescriptorFetchRate=1 "
+                             "HSDirDescriptorFetchBurst=2"),
+    ("0014 shedding", "HSDirDescriptorFetchLimit=1 HSDirFetchBudget=28000"),
 ]
 
 

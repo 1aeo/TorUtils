@@ -1,7 +1,7 @@
-From 3718dcf2eb27e1a955ddc0cb3bb4b1908759d804 Mon Sep 17 00:00:00 2001
+From ca9c2f364355128f822172526f9825ecd919baa2 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 02/13] dirserv: Don't buffer request bodies larger than an HS
+Subject: [PATCH 02/15] dirserv: Don't buffer request bodies larger than an HS
  descriptor
 
 A relay that is not a directory authority accepts only one kind of
