@@ -49,7 +49,7 @@ requests only:
 | line | metric | what it is |
 |---|---|---|
 | `single_hop` | `hsdir_get_total` + `hsdir_post_total`, `action="single_hop"` | answered 503: the request came over an unauthenticated channel (a one-hop circuit from a client or bridge), or its circuit was already closing |
-| relay in our consensus | `dos_total{type="hsdir_request_total"}` minus the next line | authenticated, and the previous hop is a relay we know: normally a client's multi-hop circuit |
+| relay we know | `dos_total{type="hsdir_request_total"}` minus the next line | authenticated, and the previous hop is a relay in our consensus or descriptors: normally a client's multi-hop circuit |
 | relay identity we do not know | `dos_total{type="hsdir_unknown_prev_hop"}` | authenticated with a relay identity that is in neither our consensus nor our descriptors: a relay newer than our consensus, or a host running an unpublished relay identity, which passes the single-hop check |
 
 Stock tor answers 503 to an onion service request on an unauthenticated
@@ -77,8 +77,15 @@ streams per circuit in general.
 stats") count only CREATE cells from **authenticated** previous hops: tor
 leaves clients out of those statistics on purpose (`command.c`,
 `cpuworker.c`). So their rate is the rate of circuits extended by relays,
-or opened by unpublished relay identities; nothing counts circuits opened
-by clients. The per-address circuit limit
+or opened by unpublished relay identities. (Tor files ntor_v3 drops under
+`type="ntor"`, so the script sums the drops over all types.) One stock
+counter does see clients: congestion-control circuits
+(`tor_relay_congestion_control_total{state="cc_circuits",action="circs_created"}`)
+are counted from every kind of previous hop, so the script prints them
+minus the authenticated ntor_v3 handshakes as a rough count of the circuits
+clients opened. It is only rough: it includes the relay's own circuits,
+misses senders that don't negotiate congestion control, and can go
+negative. The per-address circuit limit
 (`tor_relay_dos_total{type="circuit_rejected"}`) applies only to
 unauthenticated channels, and only marks an address that holds at least
 `DoSCircuitCreationMinConnections` open connections (2 in the consensus as
@@ -113,6 +120,9 @@ rate(tor_relay_dos_total{type="hsdir_req_reused"}[5m])
 rate(tor_relay_dos_total{type="begindir_over_max"}[5m])
 # Q3 (onionskins: authenticated previous hops only)
 sum(rate(tor_relay_load_onionskins_total{action="processed"}[5m]))
+# roughly the circuits clients opened
+sum(rate(tor_relay_congestion_control_total{state="cc_circuits",action="circs_created"}[5m]))
+  - sum(rate(tor_relay_load_onionskins_total{type="ntor_v3",action="processed"}[5m]))
 rate(tor_relay_dos_total{type="circuit_rejected"}[5m])
 ```
 
@@ -125,7 +135,7 @@ identity, one-hop fetches from a plain client (answered 503), and the
 network's ordinary directory traffic. Over 45 seconds the script reported
 98.1% descriptor fetches (served or not found) and 1.9% other requests, with
 nothing unaccounted; 0.49/s `single_hop` (the one-hop client), 2.44/s from
-relays in the consensus and 0.49/s from the unpublished identity. Over the
+relays we know and 0.49/s from the unpublished identity. Over the
 whole run, the unpublished identity's 35 fetches matched
 `hsdir_unknown_prev_hop` and the one-hop client's 35 matched `single_hop`
 exactly, 2 circuits carried 105 descriptor requests each, and the

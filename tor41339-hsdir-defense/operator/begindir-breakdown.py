@@ -6,7 +6,7 @@ or later), optionally twice to get rates over an interval, and prints what
 the BEGIN_DIR streams were: onion service descriptor fetches and uploads,
 other directory requests, or streams that never sent a request. With
 --control it also counts the relay's open OR connections by kind of peer
-(relay in our consensus, unlisted relay identity, or unauthenticated client)
+(relay we know, unlisted relay identity, or unauthenticated client)
 from GETINFO orconn-status.
 
 It only reads, and prints counts: never an address, a fingerprint or a
@@ -213,7 +213,7 @@ def main():
     else:
         print('    unauthenticated client, or circuit already closing (503, '
               'single_hop): %s' % fmt(sh, rate))
-    print('    authenticated, relay in our consensus: %s'
+    print('    authenticated, relay we know (consensus or descriptors): %s'
           % fmt(max(anon - unlisted, 0), rate))
     print('    authenticated, relay identity we do not know: %s'
           % fmt(unlisted, rate))
@@ -265,6 +265,17 @@ def main():
         v = d('tor_relay_load_onionskins_total', action=act)
         print('    CREATE handshakes %s, from authenticated previous hops '
               'only (stock leaves clients out): %s' % (act, fmt(v, rate)))
+    # Congestion-control circuits are counted from every kind of previous
+    # hop, onionskins only from authenticated ones; the difference roughly
+    # approximates the congestion-control circuits clients opened.
+    cc = d('tor_relay_congestion_control_total', state='cc_circuits',
+           action='circs_created')
+    v3 = d('tor_relay_load_onionskins_total', type='ntor_v3',
+           action='processed')
+    print('    congestion-control circuits created, from every kind of '
+          'previous hop: %s' % fmt(cc, rate))
+    print('      minus authenticated ntor_v3 handshakes, roughly the '
+          'circuits clients opened: %s' % fmt(cc - v3, rate))
     print('    rejected by the per-address circuit limit (client channels '
           'only): %s' % fmt(d('tor_relay_dos_total', type='circuit_rejected'),
                              rate))

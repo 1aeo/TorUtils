@@ -156,9 +156,9 @@ or restart oracle.
 | Signal | Metric and selection | Meaning and limitation |
 |---|---|---|
 | B | `tor_relay_streams_total{type="BEGIN_DIR"}` | BEGIN_DIR streams terminated here; includes directory work other than HS requests. |
-| C | `tor_relay_congestion_control_total{state="cc_circuits",action="circs_created"}` | Congestion-control circuits created, not all circuits or HS circuits. |
+| C | `tor_relay_congestion_control_total{state="cc_circuits",action="circs_created"}` | Congestion-control circuits created, not all circuits or HS circuits. Unlike OP and OD it counts circuits from every kind of previous hop, clients included (`cpuworker.c`), so C − OP roughly approximates congestion-control circuits from clients. |
 | BW, BR | `tor_relay_traffic_bytes{direction="written"}` and `{direction="read"}` | Whole-relay byte counters, not served HS-descriptor bytes or useful-service goodput. |
-| OP, OD | `tor_relay_load_onionskins_total{type="ntor_v3",action="processed"}` and `{type="ntor_v3",action="dropped"}` | ntor_v3 handshakes processed and dropped, from authenticated previous hops only: tor leaves client channels out of these statistics (`command.c`, `cpuworker.c`), so circuits opened by clients are not counted. Zero drops do not exclude other overload. |
+| OP, OD | `tor_relay_load_onionskins_total{type="ntor_v3",action="processed"}` and `{type="ntor",action="dropped"}` | ntor_v3 handshakes processed, and ntor plus ntor_v3 handshakes dropped, from authenticated previous hops only: tor leaves client channels out of these statistics (`command.c`, `cpuworker.c`), so circuits opened by clients are not counted. Tor files ntor_v3 drops under `type="ntor"` (`onion_queue.c`), so `{type="ntor_v3",action="dropped"}` is always 0. Zero drops do not exclude other overload. |
 | Queue pressure | `tor_relay_dos_total{type="circuit_killed_max_cell_outq"}` | Stock output-queue-related circuit kills; does not attribute a failed HS response to a rule. |
 | HSDir memory pressure | `tor_relay_load_oom_bytes_total{subsys="hsdir"}` | HSDir-cache bytes reclaimed during OOM handling; **not response-queue loss, failed responses, or delivered bytes**. |
 | Open circuits | `tor_relay_circuits_total{state="opened"}` | Instantaneous gauge; do not apply `increase()` or `rate()` as if it were a counter. |
@@ -422,7 +422,7 @@ U  = increase(tor_relay_dos_total{type="hsdir_unknown_prev_hop",<relay>}[Ws])
 BW = increase(tor_relay_traffic_bytes{direction="written",<relay>}[Ws])
 BR = increase(tor_relay_traffic_bytes{direction="read",<relay>}[Ws])
 OP = increase(tor_relay_load_onionskins_total{type="ntor_v3",action="processed",<relay>}[Ws])
-OD = increase(tor_relay_load_onionskins_total{type="ntor_v3",action="dropped",<relay>}[Ws])
+OD = increase(tor_relay_load_onionskins_total{type="ntor",action="dropped",<relay>}[Ws])
 ```
 
 These are notation assignments, not executable PromQL assignment syntax.
@@ -451,7 +451,7 @@ silently summing unrelated series.
 | `write_read_ratio` | BW / BR | Whole-relay byte ratio. |
 | `bytes_per_begin_dir` | BW / B | Whole-relay written bytes per BEGIN_DIR stream; not descriptor size. |
 | `onionskins_processed_per_s` | OP / W | ntor_v3 processed rate, authenticated previous hops only. |
-| `onionskins_dropped_per_s` | OD / W | ntor_v3 drop rate, authenticated previous hops only. |
+| `onionskins_dropped_per_s` | OD / W | ntor and ntor_v3 drop rate, authenticated previous hops only. |
 
 R/T and U/T have the matching request denominator by construction, but their
 reported estimates inherit scrape and window uncertainty. They are **not
@@ -1157,14 +1157,14 @@ State the phase and per-relay/matched coverage, without fleet counts; the
 main-thread efficiency effect, worker/process-total tradeoffs and controlled
 client outcomes with uncertainty; the effectiveness classification or why it
 is unresolved; the mean-rate increase above baseline or why unavailable; r_hs and phi;
-the qualified rho_hs/transition ratio and hs_share; observed ntor_v3 drops and
+the qualified rho_hs/transition ratio and hs_share; observed ntor handshake drops and
 resource/pressure evidence; which rule matches the observed pattern; and the
 main gaps, heterogeneous results or surprising observations. Distinguish the
 full-build comparison from the incremental enforcement comparison, and state
 stock custom-metric unavailability and shared-host/unequal-exposure limits.
 If a later trial was authorized, state
 its modes, controlled-probe scope and limits, and distinguish association from
-causal evidence. Zero drops means “no observed ntor_v3 handshake drops,” not
+causal evidence. Zero drops means “no observed ntor handshake drops,” not
 “the relay was not overloaded.” No data means unknown, not success.
 
 ## 8. Privacy and operational boundaries

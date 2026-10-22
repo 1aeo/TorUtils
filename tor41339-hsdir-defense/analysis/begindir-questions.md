@@ -37,14 +37,19 @@ tor 0.4.9.14 unless marked v6 (this series).
   On an authenticated channel from a relay we know, the cases are a
   client's multi-hop circuit to us (onion service requests, and a few
   anonymized directory fetches), **and** that relay's own one-hop
-  directory fetches: relays use BEGIN_DIR to directory caches too. On an
-  authenticated channel with an identity we don't know, the cases are a
-  relay newer than our consensus, or a host running an unpublished relay
-  identity, which passes the single-hop check (`directory.c:264`) and so
-  can make one-hop onion service requests.
+  directory fetches: relays use BEGIN_DIR to directory caches too. A relay
+  we know is one in our consensus or one whose descriptor we still hold,
+  which includes relays that left the consensus in about the last two days
+  (`connection_or.c:814`, `routerlist.c:1944`). On an authenticated channel
+  with an identity we don't know, the cases are a relay newer than our
+  consensus, or a host running an unpublished relay identity. The
+  single-hop check only asks whether the channel authenticated
+  (`directory.c:264`), so an unpublished identity, or a listed relay
+  running modified software, can make one-hop onion service requests.
 - So David's model is mostly right with two exceptions: authenticated does
-  not mean multi-hop (relays fetch for themselves over one hop, and an
-  unpublished relay identity can send one-hop onion service requests), and
+  not mean multi-hop (relays fetch for themselves over one hop, and any
+  relay identity, listed or not, can send one-hop onion service requests
+  with modified software), and
   unauthenticated is not always a client's own circuit (a bridge relays its
   users' circuits as an unauthenticated peer, though stock software sends
   no BEGIN_DIR to a second hop).
@@ -61,7 +66,16 @@ tor 0.4.9.14 unless marked v6 (this series).
   and the heartbeat's "Circuit handshake stats" count only CREATE cells
   from authenticated channels (`command.c:349`, `cpuworker.c:622`). Their
   rate is the rate of circuits extended by relays or opened by unpublished
-  relay identities; nothing counts circuits opened by clients.
+  relay identities. (Tor files ntor_v3 drops under `type="ntor"`,
+  `onion_queue.c:111`, so `{type="ntor_v3",action="dropped"}` is always 0.)
+  One stock counter does see clients:
+  `tor_relay_congestion_control_total{state="cc_circuits",action="circs_created"}`
+  counts congestion-control circuits from every kind of previous hop
+  (`cpuworker.c:446`), so it minus `onionskins{type="ntor_v3",action="processed"}`
+  roughly approximates the circuits clients opened. It is only rough: it
+  also counts the relay's own circuits, misses senders that don't negotiate
+  congestion control, and can go negative when authenticated circuits
+  don't negotiate it.
 
 ## What the posted table measured
 
@@ -99,7 +113,7 @@ the `.6` MetricsPort into these answers.
 | Q1 | **yes** | every BEGIN_DIR stream ends in exactly one of `hsdir_get_total`, `hsdir_post_total`, `dir_requests_total{non_hs}`, `{unparsed}`, or is still `dir_server_conns{command_wait}`; GET and POST are separate. It does not say which ordinary document (consensus or other). |
 | Q4 | **onion service requests only** | `single_hop` (unauthenticated, or the circuit was already closing), `hsdir_request_total` minus `hsdir_unknown_prev_hop` (relay we know), `hsdir_unknown_prev_hop` (identity we don't know). Ordinary requests and empty streams carry no previous hop. |
 | Q2 | **onion service requests only** | `hsdir_req_reused`, `hsdir_circ_reused`; and `begindir_over_max` for circuits holding 64 or more open directory streams. No BEGIN_DIR count per circuit in general. |
-| Q3 | **partly** | stock onionskins give circuits from authenticated channels only; a ControlPort snapshot (`GETINFO orconn-status`, which the script reads) counts open connections by kind of peer and distinct client addresses, but not circuits or streams. |
+| Q3 | **partly** | stock onionskins give circuits from authenticated channels only, and congestion-control circuits minus those roughly give the circuits clients opened; a ControlPort snapshot (`GETINFO orconn-status`, which the script reads) counts open connections by kind of peer and distinct client addresses, but not circuits or streams. Nothing counts addresses over time. |
 
 ## The metric change that answers the rest
 

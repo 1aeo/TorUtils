@@ -17,7 +17,9 @@ KEYS = {
     "circs_closed": r'tor_relay_congestion_control_total\{state="cc_circuits",action="circs_closed"\}\s+(\d+)',
     "circuits_opened_gauge": r'tor_relay_circuits_total\{state="opened"\}\s+(\d+)',
     "onionskins_ntor_v3": r'tor_relay_load_onionskins_total\{type="ntor_v3",action="processed"\}\s+(\d+)',
-    "onionskins_ntor_v3_dropped": r'tor_relay_load_onionskins_total\{type="ntor_v3",action="dropped"\}\s+(\d+)',
+    # tor files ntor_v3 drops under type="ntor" (onion_queue.c), so this is
+    # ntor plus ntor_v3; type="ntor_v3",action="dropped" is always 0.
+    "onionskins_ntor_dropped": r'tor_relay_load_onionskins_total\{type="ntor",action="dropped"\}\s+(\d+)',
 }
 
 
