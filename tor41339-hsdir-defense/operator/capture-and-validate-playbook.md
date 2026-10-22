@@ -158,7 +158,7 @@ or restart oracle.
 | B | `tor_relay_streams_total{type="BEGIN_DIR"}` | BEGIN_DIR streams terminated here; includes directory work other than HS requests. |
 | C | `tor_relay_congestion_control_total{state="cc_circuits",action="circs_created"}` | Congestion-control circuits created, not all circuits or HS circuits. |
 | BW, BR | `tor_relay_traffic_bytes{direction="written"}` and `{direction="read"}` | Whole-relay byte counters, not served HS-descriptor bytes or useful-service goodput. |
-| OP, OD | `tor_relay_load_onionskins_total{type="ntor_v3",action="processed"}` and `{type="ntor_v3",action="dropped"}` | Whole-relay ntor_v3 handshake processing and drops. Zero drops do not exclude other overload. |
+| OP, OD | `tor_relay_load_onionskins_total{type="ntor_v3",action="processed"}` and `{type="ntor_v3",action="dropped"}` | ntor_v3 handshakes processed and dropped, from authenticated previous hops only: tor leaves client channels out of these statistics (`command.c`, `cpuworker.c`), so circuits opened by clients are not counted. Zero drops do not exclude other overload. |
 | Queue pressure | `tor_relay_dos_total{type="circuit_killed_max_cell_outq"}` | Stock output-queue-related circuit kills; does not attribute a failed HS response to a rule. |
 | HSDir memory pressure | `tor_relay_load_oom_bytes_total{subsys="hsdir"}` | HSDir-cache bytes reclaimed during OOM handling; **not response-queue loss, failed responses, or delivered bytes**. |
 | Open circuits | `tor_relay_circuits_total{state="opened"}` | Instantaneous gauge; do not apply `increase()` or `rate()` as if it were a counter. |
@@ -450,8 +450,8 @@ silently summing unrelated series.
 | `rho` | B / C | Whole-relay BEGIN_DIR streams per congestion-control circuit; proxy only. |
 | `write_read_ratio` | BW / BR | Whole-relay byte ratio. |
 | `bytes_per_begin_dir` | BW / B | Whole-relay written bytes per BEGIN_DIR stream; not descriptor size. |
-| `onionskins_processed_per_s` | OP / W | Whole-relay ntor_v3 processed rate. |
-| `onionskins_dropped_per_s` | OD / W | Whole-relay ntor_v3 drop rate. |
+| `onionskins_processed_per_s` | OP / W | ntor_v3 processed rate, authenticated previous hops only. |
+| `onionskins_dropped_per_s` | OD / W | ntor_v3 drop rate, authenticated previous hops only. |
 
 R/T and U/T have the matching request denominator by construction, but their
 reported estimates inherit scrape and window uncertainty. They are **not

@@ -60,9 +60,9 @@ param-spec and rend-spec text for the six new consensus parameters.
 The metrics (0006–0010, 0013) only count, and count only tunneled (linked)
 connections, so DirPort traffic stays out. Each defense (0011, 0012, 0014)
 counts what it would refuse whether or not it is enabled, so operators can
-measure before enabling it; they apply only on public relays, and the DoS
-heartbeat shows their counts. Enabling one takes `SETCONF` or a reload, with no
-restart.
+measure before enabling it on the MetricsPort; they apply only on public
+relays, and the DoS heartbeat shows their counts while they are enabled.
+Enabling one takes `SETCONF` or a reload, with no restart.
 
 **Why 0014 sheds only over a budget.** An earlier 0013 refused every fetch
 over a descriptor's own rate. That protected the relay from a flood of a few
@@ -164,10 +164,14 @@ now 0011.
 2,416 legitimate HS fetches, **0 false refusals** (`hsdir_unknown_prev_hop`
 delta 0). This sample and the model do not establish the live canary's
 legitimate-client failure rate; report controlled-client evidence separately.
-A live pilot without a flood (reported by another agent, not re-measured here)
-counted `hsdir_unknown_prev_hop` on about 0.06–0.14% of HS requests, above
-this lab bound; with `HSDirRefuseUnknownPrevHop` on, those requests would be
-refused and retried at another HSDir.
+A live pilot's counters (posted to tor-relays on 22 October 2026, legacy
+`+tor41339.3` counters, 44–57 hours, ten relays) put `hsdir_unknown_prev_hop`
+at 0.06% to 7.6% of HS requests per relay (0.54% pooled over the nine relays
+not under attack, 1.8% on the attacked one), far above this lab bound. Those
+requests came over authenticated channels with relay identities the HSDir
+didn't know; why so many on some quiet relays is not yet explained. With
+`HSDirRefuseUnknownPrevHop` on, they would be refused and retried at another
+HSDir, so this needs an answer before anyone enables it.
 
 **amd64 build + seccomp (`engineering/`, `simulator/results/seccomp-*`).**
 Native amd64 build, full unit suite, upstream CI matrix, and installable
@@ -215,6 +219,14 @@ set across patched members and modes. Rollout is one pilot, then small
 approved batches toward half of the pilot host's relays; retain stock references and
 patched-off controls. No handoff counters or extra C telemetry are planned.
 
+To see what a relay's BEGIN_DIR traffic is during a flood, run
+[`operator/begindir-breakdown.py`](operator/BEGIN_DIR-BREAKDOWN.md) against
+its MetricsPort (and, optionally, its ControlPort). It answers the questions
+the Tor network team asked operators on tor-relays in October 2026, as far as
+the `.6` metrics allow; [`analysis/begindir-questions.md`](analysis/begindir-questions.md)
+explains what they can and cannot tell, and a proposed metric change,
+`patches/proposed/0016`, which is **not** in the `.6` packages.
+
 ## Live capture (`data/`)
 
 `realflood-capture.json` — a **de-identified** capture from live relays during
@@ -226,14 +238,18 @@ quantities the stock (unpatched) counters can and cannot establish.
 ## Layout
 
 ```
-patches/       the 15-patch series (git am) + torspec patch
+patches/       the 15-patch series (git am) + torspec patch; proposed/ holds
+               changes not in the packages (0016: BEGIN_DIR metrics by previous hop)
 simulator/     closed-lab benchmark: design, harness (scripts/), results/
-operator/      count-only canary + capture playbook + crash-at-scale review
+operator/      count-only canary + capture playbook + crash-at-scale review,
+               BEGIN_DIR breakdown tool
 analysis/      claim ledger, previous-hop FP measurement, live-capture interpretation,
-               flood cost on an HSDir and constrained hosts
+               flood cost on an HSDir and constrained hosts, the network team's
+               BEGIN_DIR questions
 data/          de-identified live-relay flood capture (JSON)
 engineering/   amd64 build-check, CI matrix, seccomp audit, .deb build + install,
-               client-lab/ (C tor and Arti clients under shedding)
+               client-lab/ (C tor and Arti clients under shedding),
+               breakdown-lab/ (checks the BEGIN_DIR breakdown tool)
 packages/      the built .debs for Ubuntu 24.04 and 26.04 (+ geoipdb), SHA256SUMS, buildinfo/changes
 ```
 
