@@ -83,9 +83,9 @@ counter does see clients: congestion-control circuits
 (`tor_relay_congestion_control_total{state="cc_circuits",action="circs_created"}`)
 are counted from every kind of previous hop, so the script prints them
 minus the authenticated ntor_v3 handshakes as a rough count of the circuits
-clients opened. It is only rough: it includes the relay's own circuits,
-misses senders that don't negotiate congestion control, and can go
-negative. The per-address circuit limit
+clients opened. It is only rough: it includes the relay's own circuits
+(in our quiet lab it read 73 while clients opened 1), misses senders that
+don't negotiate congestion control, and can go negative. The per-address circuit limit
 (`tor_relay_dos_total{type="circuit_rejected"}`) applies only to
 unauthenticated channels, and only marks an address that holds at least
 `DoSCircuitCreationMinConnections` open connections (2 in the consensus as
@@ -97,6 +97,39 @@ a relay we know, `$FP` an authenticated relay identity we don't know, and
 many of each, how many distinct client addresses, and the most connections
 from one address. It is a snapshot of connections, not a count of circuits
 or streams.
+
+## With the proposed 0016 and 0017
+
+`patches/proposed/0016` and `0017` (not in the `.6` packages) classify every
+circuit's previous hop when its CREATE cell arrives: `client` (the channel
+never authenticated: a tor client or a bridge), `known_relay` (a relay in our
+consensus or descriptors) or `unknown_relay` (an identity we don't know). It
+is how the previous hop identified itself, not a hop count. With them the
+script also prints a table of every BEGIN_DIR cell, accepted stream and
+request by previous hop, which answers Q1 and Q4 together:
+
+| metric | what it is |
+|---|---|
+| `tor_relay_begindir_cell_total{prev_hop,nth}` | every BEGIN_DIR cell, before stock tor or `DoSBeginDirLimitEnabled` refuses it; `nth` is its place among its circuit's BEGIN_DIR cells (`1`, `2_9`, `10_49`, `50_plus`), so `nth="1"` counts circuits |
+| `tor_relay_begindir_streams_total{prev_hop}` | BEGIN_DIR streams accepted; cells minus streams were refused |
+| `tor_relay_begindir_requests_total{type,prev_hop}` | each request once, by what it asked for: `hs_get`, `hs_post`, `consensus`, `microdesc`, `descriptor`, `other` (404s included), `unparsed`, or `no_request` (the stream closed without sending anything) |
+| `tor_relay_create_cell_total{prev_hop}` | every CREATE cell, clients' included |
+| `tor_relay_dos_total{type="circuit_over_rate"}` | (0017) client CREATE cells that find their address over `DoSCircuitCreationRate`, whether or not the address is marked |
+
+The `single_hop` action then means only a client channel; a request that
+reached a circuit already closing is `circuit_dead`. `tor_relay_dir_requests_total`
+keeps its `.6` meaning.
+
+Reading them: one-hop directory circuits are shared by design (a
+bootstrapping client sends a consensus, certificate and microdescriptor
+requests over one; relays share theirs), so `2_9` and even `10_49` have a
+legitimate baseline for `client` and `known_relay`. Onion service requests
+are different: stock clients use a new circuit for each. With `--cc-rate R`
+(the consensus `DoSCircuitCreationRate`, 2 as of October 2026) the script
+also prints (client CREATE cells − over-rate cells) ÷ R: each address
+sends at most R cells a second within its rate, so at least that many
+client addresses sent CREATE cells. Nothing counts the sources behind
+authenticated channels.
 
 ## Prometheus
 
@@ -124,6 +157,13 @@ sum(rate(tor_relay_load_onionskins_total{action="processed"}[5m]))
 sum(rate(tor_relay_congestion_control_total{state="cc_circuits",action="circs_created"}[5m]))
   - sum(rate(tor_relay_load_onionskins_total{type="ntor_v3",action="processed"}[5m]))
 rate(tor_relay_dos_total{type="circuit_rejected"}[5m])
+# With 0016 and 0017: Q1 x Q4, BEGIN_DIR per circuit, and at least how many
+# client addresses (with DoSCircuitCreationRate = 2)
+sum by (type, prev_hop) (rate(tor_relay_begindir_requests_total[5m]))
+sum by (prev_hop) (rate(tor_relay_begindir_cell_total[5m]))
+  / sum by (prev_hop) (rate(tor_relay_begindir_cell_total{nth="1"}[5m]))
+(sum(rate(tor_relay_create_cell_total{prev_hop="client"}[5m]))
+  - sum(rate(tor_relay_dos_total{type="circuit_over_rate"}[5m]))) / 2
 ```
 
 ## Checked in a private lab
@@ -142,4 +182,9 @@ exactly, 2 circuits carried 105 descriptor requests each, and the
 ControlPort showed 12 relay connections, 1 unlisted relay identity and 2
 client connections (`engineering/breakdown-lab/results/v6-lab24v6.txt`).
 Counts are requests, not clients: in another run the same client sent two
-requests per fetch.
+requests per fetch. With the proposed 0016 and 0017 bound over the
+package's tor, the same lab showed every class's requests adding up exactly
+to its accepted streams (client 70, known relay 180, unknown relay 37,
+including the unpublished identity's 2 consensus fetches of its own), and
+CREATE cells by class next to the stock onionskin count of the
+authenticated ones (`engineering/breakdown-lab/results/p2-0016-0017-lab24v6.txt`).

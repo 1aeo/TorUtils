@@ -1,0 +1,205 @@
+From 8eb9e7f8154db51d796180a947869b5c62543784 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Thu, 22 Oct 2026 19:24:21 +0000
+Subject: [PATCH 17/17] dos: Count client CREATE cells over the circuit
+ creation rate
+
+The network team asks whether a circuit flood comes from many addresses
+or from a few. DoSCircuitCreation answers only for addresses it marks,
+and it marks an address only once its bucket is empty and it holds at
+least DoSCircuitCreationMinConnections connections, so addresses that
+each keep one connection are never counted, however fast they create
+circuits.
+
+Count, as tor_relay_dos_total{type="circuit_over_rate"}, every CREATE
+cell from a client channel that finds its address's circuit bucket
+empty, whether or not the address is marked. Over an interval, (client
+CREATE cells - these) / DoSCircuitCreationRate is a lower bound on how
+many client addresses sent CREATE cells, since each address can only
+send that many per second within its rate. It counts only while
+DoSCircuitCreationEnabled is set, as the bucket does.
+
+Part of #41339.
+---
+ changes/ticket41339_circuit_over_rate |  7 ++++
+ doc/man/tor.1.txt                     |  5 ++-
+ src/core/or/dos.c                     | 12 +++++++
+ src/core/or/dos.h                     |  1 +
+ src/feature/relay/relay_metrics.c     |  1 +
+ src/test/test_dos.c                   | 47 +++++++++++++++++++++++++++
+ src/test/test_hs_cache.c              |  3 ++
+ 7 files changed, 75 insertions(+), 1 deletion(-)
+ create mode 100644 changes/ticket41339_circuit_over_rate
+
+diff --git a/changes/ticket41339_circuit_over_rate b/changes/ticket41339_circuit_over_rate
+new file mode 100644
+index 0000000000..57553baf77
+--- /dev/null
++++ b/changes/ticket41339_circuit_over_rate
+@@ -0,0 +1,7 @@
++  o Minor features (metrics port, relay):
++    - Count the CREATE cells from client channels that find their address's
++      circuit creation bucket empty, as
++      tor_relay_dos_total{type="circuit_over_rate"}, whether or not the
++      address holds enough connections to be marked. With the rate of
++      CREATE cells from clients, it gives a lower bound on how many
++      addresses send them. Part of ticket 41339.
+diff --git a/doc/man/tor.1.txt b/doc/man/tor.1.txt
+index c48ce68878..83684b6e52 100644
+--- a/doc/man/tor.1.txt
++++ b/doc/man/tor.1.txt
+@@ -3046,7 +3046,10 @@ Denial of Service mitigation subsystem described above.
+ 
+     The allowed circuit creation rate per second applied per client IP
+     address. If this option is 0, it obeys a consensus parameter. If not
+-    defined in the consensus, the value is 3.
++    defined in the consensus, the value is 3. On the MetricsPort,
++    tor_relay_dos_total{type="circuit_over_rate"} counts the CREATE cells
++    that find their address over this rate and burst, whether or not the
++    address is marked.
+     (Default: 0)
+ 
+ //out of order because it logically belongs before the other DoSConnection options.
+diff --git a/src/core/or/dos.c b/src/core/or/dos.c
+index ce19c01a5b..643b5bd1d4 100644
+--- a/src/core/or/dos.c
++++ b/src/core/or/dos.c
+@@ -52,6 +52,7 @@ static int32_t dos_cc_defense_time_period;
+ 
+ /* Keep some stats for the heartbeat so we can report out. */
+ static uint64_t cc_num_rejected_cells;
++static uint64_t cc_num_over_rate_cells;
+ static uint32_t cc_num_marked_addrs;
+ static uint32_t cc_num_marked_addrs_max_queue;
+ 
+@@ -673,6 +674,14 @@ dos_get_num_cc_rejected(void)
+   return cc_num_rejected_cells;
+ }
+ 
++/** Return the number of CREATE cells that found their address's circuit
++ * bucket empty, whether or not the address was marked. */
++uint64_t
++dos_get_num_cc_over_rate(void)
++{
++  return cc_num_over_rate_cells;
++}
++
+ /** Return the number of marked addresses. */
+ uint32_t
+ dos_get_num_cc_marked_addr(void)
+@@ -953,6 +962,9 @@ dos_cc_new_create_cell(channel_t *chan)
+    * underflow the bucket. */
+   if (entry->dos_stats.cc_stats.circuit_bucket > 0) {
+     entry->dos_stats.cc_stats.circuit_bucket--;
++  } else {
++    /* Over the rate, but only marked with enough concurrent connections. */
++    cc_num_over_rate_cells++;
+   }
+ 
+   /* This is the detection. Assess at every CREATE cell if the client should
+diff --git a/src/core/or/dos.h b/src/core/or/dos.h
+index 27839e21be..8e318b4e9a 100644
+--- a/src/core/or/dos.h
++++ b/src/core/or/dos.h
+@@ -119,6 +119,7 @@ void dos_note_circ_max_outq(const channel_t *chan);
+ uint32_t dos_get_num_cc_marked_addr(void);
+ uint32_t dos_get_num_cc_marked_addr_maxq(void);
+ uint64_t dos_get_num_cc_rejected(void);
++uint64_t dos_get_num_cc_over_rate(void);
+ uint64_t dos_get_num_conn_addr_rejected(void);
+ uint64_t dos_get_num_conn_addr_connect_rejected(void);
+ uint64_t dos_get_num_single_hop_refused(void);
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index bdd75bb536..05e204928f 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -484,6 +484,7 @@ fill_dos_values(void)
+     uint64_t value;
+   } entries[] = {
+     { "circuit_rejected", dos_get_num_cc_rejected() },
++    { "circuit_over_rate", dos_get_num_cc_over_rate() },
+     { "circuit_killed_max_cell", stats_n_circ_max_cell_reached },
+     { "circuit_killed_max_cell_outq", stats_n_circ_max_cell_outq_reached },
+     { "marked_address", dos_get_num_cc_marked_addr() },
+diff --git a/src/test/test_dos.c b/src/test/test_dos.c
+index 8fa41e339f..fca21f58a0 100644
+--- a/src/test/test_dos.c
++++ b/src/test/test_dos.c
+@@ -154,6 +154,52 @@ mock_channel_get_addr_if_possible(const channel_t *chan, tor_addr_t *addr_out)
+   return 0;
+ }
+ 
++/** Test that a client CREATE cell that finds its address's circuit bucket
++ * empty is counted as over the rate, even if the address has too few
++ * connections to be marked, and that cells on authenticated channels are
++ * not. */
++static void
++test_dos_cc_over_rate(void *arg)
++{
++  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
++  or_connection_t or_conn;
++  const time_t now = 1281533250; /* 2010-08-11 13:27:30 UTC */
++  uint32_t burst;
++  (void) arg;
++
++  MOCK(get_param_cc_enabled, mock_enable_dos_protection);
++  MOCK(get_param_conn_enabled, mock_enable_dos_protection);
++  MOCK(channel_get_addr_if_possible, mock_channel_get_addr_if_possible);
++  channel_init(chan);
++  chan->is_client = 1;
++  memset(&or_conn, 0, sizeof or_conn);
++  tt_int_op(AF_INET, OP_EQ,
++            tor_addr_parse(&TO_CONN(&or_conn)->addr, "18.0.0.1"));
++  update_approx_time(now); /* So the bucket doesn't refill. */
++  dos_init();
++  burst = get_param_cc_circuit_burst(NULL);
++  /* One connection, fewer than DoSCircuitCreationMinConnections. */
++  geoip_note_client_seen(GEOIP_CLIENT_CONNECT, &TO_CONN(&or_conn)->addr,
++                         NULL, now);
++  dos_new_client_conn(&or_conn, NULL);
++
++  for (uint32_t i = 0; i < burst + 3; i++)
++    dos_cc_new_create_cell(chan);
++  tt_u64_op(dos_get_num_cc_over_rate(), OP_EQ, 3);
++  tt_uint_op(dos_get_num_cc_marked_addr(), OP_EQ, 0);
++  tt_int_op(DOS_CC_DEFENSE_NONE, OP_EQ, dos_cc_get_defense_type(chan));
++  chan->is_client = 0;
++  dos_cc_new_create_cell(chan);
++  tt_u64_op(dos_get_num_cc_over_rate(), OP_EQ, 3);
++
++ done:
++  UNMOCK(get_param_cc_enabled);
++  UNMOCK(get_param_conn_enabled);
++  UNMOCK(channel_get_addr_if_possible);
++  tor_free(chan);
++  dos_free_all();
++}
++
+ /** Test that the circuit tracker of the DoS subsystem will block clients who
+  *  try to establish too many circuits. */
+ static void
+@@ -1259,6 +1305,7 @@ test_dos_hsdir_fetch_shedding_edges(void *arg)
+ struct testcase_t dos_tests[] = {
+   { "conn_creation", test_dos_conn_creation, TT_FORK, NULL, NULL },
+   { "circuit_creation", test_dos_circuit_creation, TT_FORK, NULL, NULL },
++  { "cc_over_rate", test_dos_cc_over_rate, TT_FORK, NULL, NULL },
+   { "bucket_refill", test_dos_bucket_refill, TT_FORK, NULL, NULL },
+   { "known_relay" , test_known_relay, TT_FORK,
+     NULL, NULL },
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index fe83baedd7..9b36fca289 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -1256,6 +1256,9 @@ test_prev_hop_metric_series(void *arg)
+                         "client", "nth", "2_9"), OP_EQ, later0 + 8);
+   tt_i64_op(get_metric2(METRICS_NAME(relay_begindir_cell_total), "prev_hop",
+                         "client", "nth", "10_49"), OP_EQ, tenth0 + 1);
++  tt_i64_op(get_metric(METRICS_NAME(relay_dos_total), "type",
++                       "circuit_over_rate"), OP_EQ,
++            dos_get_num_cc_over_rate());
+   for (size_t i = 0; i < ARRAY_LENGTH(families); i++) {
+     const smartlist_t *entries = metrics_store_get_all(
+                smartlist_get(relay_metrics_get_stores(), 0), families[i].name);
+-- 
+2.43.0
+

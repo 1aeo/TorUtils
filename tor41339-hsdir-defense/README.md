@@ -224,8 +224,8 @@ To see what a relay's BEGIN_DIR traffic is during a flood, run
 its MetricsPort (and, optionally, its ControlPort). It answers the questions
 the Tor network team asked operators on tor-relays in October 2026, as far as
 the `.6` metrics allow; [`analysis/begindir-questions.md`](analysis/begindir-questions.md)
-explains what they can and cannot tell, and a proposed metric change,
-`patches/proposed/0016`, which is **not** in the `.6` packages.
+explains what they can and cannot tell, and the proposed metric changes
+`patches/proposed/0016` and `0017`, which are **not** in the `.6` packages.
 
 ## Live capture (`data/`)
 
@@ -239,7 +239,8 @@ quantities the stock (unpatched) counters can and cannot establish.
 
 ```
 patches/       the 15-patch series (git am) + torspec patch; proposed/ holds
-               changes not in the packages (0016: BEGIN_DIR metrics by previous hop)
+               changes not in the packages (0016: circuits and BEGIN_DIR traffic
+               by previous hop; 0017: client CREATE cells over the rate)
 simulator/     closed-lab benchmark: design, harness (scripts/), results/
 operator/      count-only canary + capture playbook + crash-at-scale review,
                BEGIN_DIR breakdown tool

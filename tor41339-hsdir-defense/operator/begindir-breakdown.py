@@ -142,6 +142,9 @@ def main():
     ap.add_argument('--control-socket', help='ControlSocket path')
     ap.add_argument('--cookie', help='control_auth_cookie path')
     ap.add_argument('--password', help='HashedControlPassword password')
+    ap.add_argument('--cc-rate', type=float, default=0,
+                    help='DoSCircuitCreationRate in effect (from the '
+                    'consensus), to bound the number of client addresses')
     args = ap.parse_args()
 
     a = scrape(args.metrics)
@@ -199,17 +202,17 @@ def main():
           % fmt(streams - classified - wait_delta, rate))
 
     print('  Q4: onion service requests by previous hop')
-    split = has(b, 'tor_relay_hsdir_get_total', action='closing')
+    split = has(b, 'tor_relay_hsdir_get_total', action='circuit_dead')
     sh = get_a['single_hop'] + post_a['single_hop']
-    closing = (d('tor_relay_hsdir_get_total', action='closing') +
-               d('tor_relay_hsdir_post_total', action='closing'))
-    anon = hs_get + hs_post - sh - closing
+    dead = (d('tor_relay_hsdir_get_total', action='circuit_dead') +
+            d('tor_relay_hsdir_post_total', action='circuit_dead'))
+    anon = hs_get + hs_post - sh - dead
     unlisted = d('tor_relay_dos_total', type='hsdir_unknown_prev_hop')
     if split:
         print('    unauthenticated client or bridge, one hop (503, '
               'single_hop): %s' % fmt(sh, rate))
-        print('    circuit already closing (503, closing): %s'
-              % fmt(closing, rate))
+        print('    circuit already closing (503, circuit_dead): %s'
+              % fmt(dead, rate))
     else:
         print('    unauthenticated client, or circuit already closing (503, '
               'single_hop): %s' % fmt(sh, rate))
@@ -217,32 +220,41 @@ def main():
           % fmt(max(anon - unlisted, 0), rate))
     print('    authenticated, relay identity we do not know: %s'
           % fmt(unlisted, rate))
-    hops = ('client', 'relay', 'unknown_relay')
-    if has(b, 'tor_relay_begindir_cells_total'):
-        print('  all BEGIN_DIR by previous hop: client (unauthenticated, one '
-              'hop) / relay we know / relay identity we do not know')
-        row = '    %-34s' + ' %14s' * 3
+    hops = ('client', 'known_relay', 'unknown_relay')
+    if has(b, 'tor_relay_begindir_cell_total'):
+        print('  Q1 x Q4: all BEGIN_DIR by previous hop: client (never '
+              'authenticated: one hop from a client or bridge), relay we '
+              'know, relay identity we do not know')
+        row = '    %-38s' + ' %14s' * 3
         print(row % (('',) + hops))
-        print(row % (('BEGIN_DIR cells',) + tuple(
-            fmt(d('tor_relay_begindir_cells_total', prev_hop=h), rate)
-            for h in hops)))
-        print(row % (('circuits that sent BEGIN_DIR',) + tuple(
-            fmt(d('tor_relay_begindir_circuits_total', prev_hop=h), rate)
-            for h in hops)))
-        per = []
-        for h in hops:
-            c = d('tor_relay_begindir_circuits_total', prev_hop=h)
-            per.append(('%.1f' % (d('tor_relay_begindir_cells_total',
-                                    prev_hop=h) / c)) if c else '-')
-        print(row % (('BEGIN_DIR cells per circuit',) + tuple(per)))
-        for t, what in (('non_hs', 'other directory requests'),
-                        ('unparsed', 'no request, or unparsable')):
+
+        def line(what, name, **labels):
             print(row % ((what,) + tuple(
-                fmt(d('tor_relay_dir_requests_total', type=t, prev_hop=h),
-                    rate) for h in hops)))
-        print(row % (('CREATE cells',) + tuple(
-            fmt(d('tor_relay_create_cells_total', prev_hop=h), rate)
-            for h in hops)))
+                fmt(d(name, prev_hop=h, **labels), rate) for h in hops)))
+        line('BEGIN_DIR cells', 'tor_relay_begindir_cell_total')
+        line('  accepted as streams', 'tor_relay_begindir_streams_total')
+        for t, what in (('hs_get', 'onion service descriptor fetches'),
+                        ('hs_post', 'onion service descriptor uploads'),
+                        ('consensus', 'consensus'),
+                        ('microdesc', 'microdescriptors'),
+                        ('descriptor', 'relay descriptors'),
+                        ('other', 'other directory requests'),
+                        ('unparsed', 'unparsable or incomplete'),
+                        ('no_request', 'nothing sent')):
+            line('    ' + what, 'tor_relay_begindir_requests_total', type=t)
+        line('circuits that sent BEGIN_DIR',
+             'tor_relay_begindir_cell_total', nth='1')
+        per, late = [], []
+        for h in hops:
+            c = d('tor_relay_begindir_cell_total', prev_hop=h, nth='1')
+            cells = d('tor_relay_begindir_cell_total', prev_hop=h)
+            per.append(('%.1f' % (cells / c)) if c else '-')
+            late.append(('%.1f%%' % (100.0 * d(
+                'tor_relay_begindir_cell_total', prev_hop=h, nth='50_plus')
+                / cells)) if cells else '-')
+        print(row % (('BEGIN_DIR cells per circuit',) + tuple(per)))
+        print(row % (('cells that were 50th or later',) + tuple(late)))
+        line('CREATE cells (all circuits)', 'tor_relay_create_cell_total')
     else:
         print('    (other directory requests and empty streams are not split '
               'by previous hop by these metrics)')
@@ -254,8 +266,8 @@ def main():
     print('    onion service requests on a circuit that already made one: '
           '%s of %s' % (fmt(reused, rate), fmt(req, rate)))
     if circs:
-        print('    circuits that made more than one: %s, %.1f requests each'
-              % (fmt(circs, rate), (reused + circs) / circs))
+        print('    circuits that made more than one: %s, %.1f requests each '
+              'on average' % (fmt(circs, rate), (reused + circs) / circs))
     print('    BEGIN_DIR cells on a circuit already holding '
           'DoSBeginDirMaxStreams open directory streams: %s'
           % fmt(d('tor_relay_dos_total', type='begindir_over_max'), rate))
@@ -266,19 +278,29 @@ def main():
         print('    CREATE handshakes %s, from authenticated previous hops '
               'only (stock leaves clients out): %s' % (act, fmt(v, rate)))
     # Congestion-control circuits are counted from every kind of previous
-    # hop, onionskins only from authenticated ones; the difference roughly
-    # approximates the congestion-control circuits clients opened.
+    # hop (and for the relay's own circuits), onionskins only from
+    # authenticated ones; the difference is clients' congestion-control
+    # circuits plus the relay's own, roughly.
     cc = d('tor_relay_congestion_control_total', state='cc_circuits',
            action='circs_created')
     v3 = d('tor_relay_load_onionskins_total', type='ntor_v3',
            action='processed')
     print('    congestion-control circuits created, from every kind of '
           'previous hop: %s' % fmt(cc, rate))
-    print('      minus authenticated ntor_v3 handshakes, roughly the '
-          'circuits clients opened: %s' % fmt(cc - v3, rate))
+    print('      minus authenticated ntor_v3 handshakes (clients\' '
+          'circuits plus the relay\'s own, roughly): %s' % fmt(cc - v3, rate))
     print('    rejected by the per-address circuit limit (client channels '
           'only): %s' % fmt(d('tor_relay_dos_total', type='circuit_rejected'),
                              rate))
+    if has(b, 'tor_relay_dos_total', type='circuit_over_rate'):
+        over = d('tor_relay_dos_total', type='circuit_over_rate')
+        client = d('tor_relay_create_cell_total', prev_hop='client')
+        print('    client CREATE cells over their address\'s '
+              'DoSCircuitCreationRate (marked or not): %s of %s'
+              % (fmt(over, rate), fmt(client, rate)))
+        if rate and args.cc_rate:
+            print('      so at least %.0f client addresses sent CREATE cells'
+                  % ((client - over) / args.cc_rate))
     print('    open circuits now: %d'
           % get(b, 'tor_relay_circuits_total', state='opened'))
 

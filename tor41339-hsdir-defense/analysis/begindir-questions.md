@@ -16,7 +16,7 @@ four questions, because "in both cases, we will apply different fixes":
 
 This note says what tor's channels and counters actually mean, what the
 counters posted to the thread measured, what `+tor41339.6` answers, and the
-metric change that would answer the rest. File and line references are to
+metric changes that would answer the rest. File and line references are to
 tor 0.4.9.14 unless marked v6 (this series).
 
 ## How tor sees a previous hop
@@ -113,49 +113,80 @@ the `.6` MetricsPort into these answers.
 | Q1 | **yes** | every BEGIN_DIR stream ends in exactly one of `hsdir_get_total`, `hsdir_post_total`, `dir_requests_total{non_hs}`, `{unparsed}`, or is still `dir_server_conns{command_wait}`; GET and POST are separate. It does not say which ordinary document (consensus or other). |
 | Q4 | **onion service requests only** | `single_hop` (unauthenticated, or the circuit was already closing), `hsdir_request_total` minus `hsdir_unknown_prev_hop` (relay we know), `hsdir_unknown_prev_hop` (identity we don't know). Ordinary requests and empty streams carry no previous hop. |
 | Q2 | **onion service requests only** | `hsdir_req_reused`, `hsdir_circ_reused`; and `begindir_over_max` for circuits holding 64 or more open directory streams. No BEGIN_DIR count per circuit in general. |
-| Q3 | **partly** | stock onionskins give circuits from authenticated channels only, and congestion-control circuits minus those roughly give the circuits clients opened; a ControlPort snapshot (`GETINFO orconn-status`, which the script reads) counts open connections by kind of peer and distinct client addresses, but not circuits or streams. Nothing counts addresses over time. |
+| Q3 | **partly** | stock onionskins give circuits from authenticated channels only, and congestion-control circuits minus those roughly give the circuits clients opened plus the relay's own; a ControlPort snapshot (`GETINFO orconn-status`, which the script reads) counts open connections by kind of peer and distinct client addresses, but not circuits or streams. Nothing counts addresses over time. |
 
-## The metric change that answers the rest
+## The metric changes that answer the rest
 
-`patches/proposed/0016-relay_metrics-Count-BEGIN_DIR-traffic-by-kind-of-pre.patch`
-(on top of 0001–0015; not in the `.6` packages):
+`patches/proposed/0016-*.patch` and `0017-*.patch` (on top of 0001–0015;
+not in the `.6` packages). Three independent designs, two judges and three
+adversarial verifiers shaped them; a first 0016 that classified a circuit
+at its first BEGIN_DIR is superseded.
 
-- classifies a circuit's previous hop as `client` (never authenticated),
-  `relay` (authenticated, in our consensus or descriptors) or
-  `unknown_relay` (authenticated, an identity we don't know), once per
-  circuit at its first BEGIN_DIR, and copies it to each directory stream,
-  so a stream that closes before its request is still attributed;
-- adds label `prev_hop` to `tor_relay_dir_requests_total`, and families
-  `tor_relay_begindir_cells_total{prev_hop}`,
-  `tor_relay_begindir_circuits_total{prev_hop}` and
-  `tor_relay_create_cells_total{prev_hop}` (CREATE cells from every kind of
-  channel, unlike the stock onionskin counters);
-- counts an onion service request whose circuit was already closing as the
-  new action `closing`, so `single_hop` means exactly "unauthenticated".
+- **The previous hop, set once per circuit.** When a CREATE cell arrives,
+  `channel_get_prev_hop()` classifies its channel as `client` (never
+  authenticated: a tor client or a bridge), `known_relay` (a relay in our
+  consensus or descriptors) or `unknown_relay` (an identity we don't know).
+  The circuit keeps the class in two bits and its directory connections
+  copy it, so a request is attributed even after its circuit is gone. It is
+  how the previous hop identified itself, not a hop count.
+- **0016 counts, by that class:** every CREATE cell
+  (`tor_relay_create_cell_total`, clients' included, unlike the stock
+  onionskin counters); every BEGIN_DIR cell before stock tor or 0012 can
+  refuse it, with its place on its circuit
+  (`tor_relay_begindir_cell_total{nth="1"|"2_9"|"10_49"|"50_plus"}`, so
+  `nth="1"` counts circuits); the BEGIN_DIR streams accepted
+  (`tor_relay_begindir_streams_total`); and each request once, by what it
+  asked for (`tor_relay_begindir_requests_total{type}`: `hs_get`,
+  `hs_post`, `consensus`, `microdesc`, `descriptor`, `other`, `unparsed`,
+  `no_request`). An onion service request that reaches a circuit already
+  closing becomes `circuit_dead`, as stock tor names that case in its other
+  onion service families, so `single_hop` means only a client channel.
+  `tor_relay_dir_requests_total` keeps its `.6` meaning.
+- **0017 counts** client CREATE cells that find their address over
+  `DoSCircuitCreationRate`, whether or not the address is marked
+  (`tor_relay_dos_total{type="circuit_over_rate"}`). Each address can send
+  only that rate within its limit, so (client CREATE cells − these) ÷ the
+  rate is a lower bound on how many client addresses sent CREATE cells.
 
-With it, Q4 is answered for every BEGIN_DIR stream, Q2 by BEGIN_DIR cells
-per circuit for each kind of previous hop, and Q3 by circuits per kind.
-Cost: one known-relay lookup per CREATE cell and per circuit's first
-BEGIN_DIR, three bits per circuit and two per directory connection; no
-address or identity is recorded.
+| | with 0016 and 0017 |
+|---|---|
+| Q1 | every accepted BEGIN_DIR stream by what it asked for, down to consensus, microdescriptors and relay descriptors, and streams that sent nothing |
+| Q4 | every BEGIN_DIR cell, accepted stream and request by previous hop; refusals by class are cells minus streams |
+| Q2 | BEGIN_DIR cells per circuit for each class, and the share that were a circuit's 50th or later |
+| Q3 | CREATE cells by class, and for clients a lower bound on distinct addresses; nothing for the sources behind authenticated channels |
 
-It builds with `--enable-fatal-warnings`, passes the full unit suite (1615
-tests; new tests kill all six mutants tried), `check-spaces` and
-`check-changes`. In the private lab (one HSDir receiving multiplexed
-fetches through relays, one-hop fetches from an unpublished relay identity,
-one-hop fetches from a plain client, and ordinary traffic) it reported
-BEGIN_DIR cells by previous hop as client 42, relay 182 and unknown relay
-43, each equal to that kind's classified requests (client: the 35 refused
-one-hop fetches and 7 ordinary requests; unknown relay: 35 fetches and 8
-ordinary requests), and CREATE cells as client 68, relay 136 and unknown
-relay 5, while the stock onionskin counter showed 140 handshakes and none of
-the clients' 68
-(`engineering/breakdown-lab/results/prevhop-prototype-lab24v6.txt`). In an
-earlier run the one-hop client sent all 70 of its requests on one circuit:
-one-hop clients reuse their directory circuit, so a high count per circuit
-alone is not abuse.
+Cost: one known-relay lookup per CREATE cell from an authenticated channel
+(a consensus binary search, about 1 µs warm and up to 9 µs cold; under
+1.5% of a core at 1,500/s),
+eight bits per circuit and three per directory connection (neither struct
+grows), and 45 more series. `hsdir_unknown_prev_hop` keeps its lookup per
+request, so it still matches what `HSDirRefuseUnknownPrevHop` refuses.
 
-Still not answered: which ordinary document a request was for, whether an
-empty stream sent nothing or part of a request, and how many distinct
-addresses send circuits (the ControlPort snapshot gives distinct client
-addresses for open connections).
+Both build with `--enable-fatal-warnings`, with and without the relay
+module, and pass the full unit suite (1618 tests), `check-spaces` and
+`check-changes`; practracker shows no new problem kinds; the new tests kill
+all 22 mutants tried; and the patches apply with `git am` to tor-0.4.9.14
+after 0001–0015, to the exact tree tested.
+
+In the private lab (one HSDir receiving, at once, descriptor fetches
+multiplexed on shared circuits through relays, one-hop fetches from an
+unpublished relay identity, one-hop fetches from a plain client, and
+ordinary traffic), nothing was unaccounted and each class's requests added
+up exactly to its accepted streams: client 70 BEGIN_DIR cells (the plain
+client's one-hop fetches, all refused, all on one circuit), known relay 180
+(176 fetches and 4 uploads on 6 circuits, one of them carrying the
+multiplexed load), unknown relay 37 (the unpublished identity's 35 fetches
+and 2 consensus fetches of its own). CREATE cells were client 1, known
+relay 26 and unknown relay 2, and the stock onionskin counter showed exactly
+the authenticated 28. The `.6` rough count of clients' circuits read 73 in
+this quiet network, almost all of it the relay's own circuits; on a busy
+relay they are a small share, but the exact count needs 0016
+(`engineering/breakdown-lab/results/p2-0016-0017-lab24v6.txt`). One-hop
+directory circuits are shared by design, so many BEGIN_DIR cells on one
+circuit are not abuse in themselves; many onion service requests on one
+circuit are, since stock clients use a new circuit for each.
+
+Still not answered: the hop count behind a previous hop (a known relay can
+be a client's middle or an attacker's own relay sending one-hop requests);
+how many sources stand behind authenticated channels; what a refused
+BEGIN_DIR would have asked for; and peaks between scrapes.
