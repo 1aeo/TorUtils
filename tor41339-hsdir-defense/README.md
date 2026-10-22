@@ -50,6 +50,17 @@ param-spec and rend-spec text for the four new consensus parameters.
 | 0012 | Enforcement | `DoSBeginDirLimitEnabled` and `DoSBeginDirMaxStreams` (64): refuse a BEGIN_DIR on a circuit that already has that many open directory streams. Counted as `begindir_over_max`. | **off** |
 | 0013 | Enforcement | `HSDirDescriptorFetchLimit` with `HSDirDescriptorFetchRate` (5/s) and `HSDirDescriptorFetchBurst` (20): per-descriptor fetch limit. Torrc only: while it is enabled, anyone can use up a descriptor's shared bucket, and learn how often others fetch it from this HSDir. Counted as `hsdir_fetch_over_rate`. | **off** |
 
+Review fixes on top of that series, each its own commit:
+
+| # | What it fixes |
+|---|---|
+| 0014 | Reject a declared `Content-Length` that can never fit, before the body arrives. `force_complete` callers are unchanged. |
+| 0015 | Count a `BEGIN_DIR` stream only after its directory connection is registered, so a failed `connection_add()` is not left in `tor_relay_streams_total` alone. |
+| 0016 | The `DoSBeginDirLimitEnabled` manual now says which clients mark the relay not running. Bridges, `EntryNodes`, and onion-service requests do not. |
+| 0017 | The unit test locks the 2-bit per-circuit HSDir counter at 2, so a fourth request cannot wrap it. |
+
+`packages/` is still the `+tor41339.5` build of 0000 plus 0001–0013. It does not contain 0014–0017.
+
 The metrics (0006–0010) only count, and count only tunneled (linked)
 connections, so DirPort traffic stays out. Each defense (0011–0013) counts what
 it would refuse whether or not it is enabled, so operators can measure before
