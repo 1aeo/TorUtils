@@ -1,0 +1,13 @@
+=== run the EPERM/strace seccomp validation ===
+TARGET=004r fpr=FE199CF68F34C917070AE4A74934C8F6842BCE88 onion=zl6ljkquhyg3dn3asvb777wscyvqifbtunluydpcncyemvnolwxf2dyd
+=== reuse-22: enforce ON, start load, strace 60s ===
+004r: Sandbox 1 pid=12171 Seccomp: 2 Seccomp_filters: 1  bad_syscall=0 tor_relay_dos_total{type="hsdir_circ_reused"} 2 tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0 
+  EPERM syscalls over 60s:
+load result: {'load_issued': 418, 'load_recv': 1, 'load_fail': 0, 'load_groups': 19}
+=== one-hop: enforce ON, start load, strace 60s ===
+004r: Sandbox 1 pid=12171 Seccomp: 2 Seccomp_filters: 1  bad_syscall=0 tor_relay_dos_total{type="hsdir_circ_reused"} 19 tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 5 
+  EPERM syscalls over 60s:
+load result: {'load_issued': 40, 'load_recv': 1, 'load_fail': 0}
+=== final plain check (no strace) ===
+004r: Sandbox 1 pid=12171 Seccomp: 2 Seccomp_filters: 1  bad_syscall=0 tor_relay_dos_total{type="hsdir_circ_reused"} 19 tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 40 
+  EPERM syscalls over 60s:
