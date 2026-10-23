@@ -1,0 +1,10 @@
+b299950773 dos: Name the heartbeat's HSDir shed count for what it counts | build ok, 0 warnings | 1613 tests ok.  (31 skipped) | spaces-ok
+aecda298c4 relay_metrics: Count circuits and directory streams by previous hop | build ok, 0 warnings | 1620 tests ok.  (31 skipped) | spaces-ok
+9139b84192 dos: Count client CREATE cells over the circuit creation rate | build ok, 0 warnings | 1621 tests ok.  (31 skipped) | spaces-ok
+ceb87f8a53 relay_metrics: Count tunneled directory response bytes by request type | build ok, 0 warnings | 1623 tests ok.  (31 skipped) | spaces-ok
+8680ce15c9 dos: Count what BEGIN_DIR streams over DoSBeginDirMaxStreams ask for | build ok, 0 warnings | 1624 tests ok.  (31 skipped) | spaces-ok
+583614fd70 rephist: Count CREATE and BEGIN_DIR cells per source and minute | build ok, 0 warnings | 1628 tests ok.  (31 skipped) | spaces-ok
+1326b7df4f relay_metrics: Count HSDir fetches per descriptor and minute | build ok, 0 warnings | 1632 tests ok.  (31 skipped) | spaces-ok
+03cc250e85 dos: Count HSDir requests from relays known only by descriptor | build ok, 0 warnings | 1632 tests ok.  (31 skipped) | spaces-ok
+16f482c50e dos: Count BEGIN_DIR cells over the stream creation rate | build ok, 0 warnings | 1633 tests ok.  (31 skipped) | spaces-ok
+DONE

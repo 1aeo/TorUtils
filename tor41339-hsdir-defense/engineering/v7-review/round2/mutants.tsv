@@ -1,0 +1,344 @@
+id	file:line	patch	mutant	result	killing test or equivalence reason
+R2-RS-01	src/feature/stats/rephist.c:1731	0020	source cells: drop the MetricsPort condition	killed	hs_cache/source_cell_metrics
+R2-RS-02	src/feature/stats/rephist.c:1731	0020	source cells: negate the MetricsPort condition	killed	dos/create_cell_source,hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+R2-RS-03	src/feature/stats/rephist.c:1731	0020	source cells: BridgeRelay && !MetricsPort_set (|| -> &&)	killed	hs_cache/source_cell_metrics
+R2-RS-04	src/feature/stats/rephist.c:1731	0020	source cells: drop the BridgeRelay condition	killed	hs_cache/source_cell_metrics
+R2-RS-05	src/feature/stats/rephist.c:1731	0020	source cells: gate on ControlPort_set instead of MetricsPort_set	killed	dos/create_cell_source,hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+R2-RS-06	src/feature/stats/rephist.c:1731	0020	source cells: MetricsPort gate after the source lookup	equivalent	source_minute_of() only reads (channel_get_addr_if_possible() and geoip_lookup_client() change no state), so doing it before the MetricsPort gate changes no count; it only spends the lookup the gate exists to save, which no unit test can see.
+R2-RS-07	src/feature/stats/rephist.c:1731	0020	source cells: MetricsPort gate after the minute reset	equivalent	Without a MetricsPort the mutant resets a source's minute and counts when a new minute starts but counts nothing. The next counted cell is either in that same minute (the original resets there instead, from an older minute: n=1 either way) or in a later one (both reset): every exported count is the same. Only white-box reads of channel_t.source_minute could tell.
+R2-RS-08	src/feature/stats/rephist.c:1731	0020	source cells: MetricsPort gates only the exported count (the source's count still advances)	survived; killed by new test	hs_cache/source_cell_metrics_port (test-metricsport-gates.patch). Gap: without a MetricsPort the mutant still looks up and advances each source's count, so once a MetricsPort is added (SIGHUP) a source's next cell lands in a later band; no test sent cells before and after adding one.
+R2-RS-09	src/feature/stats/rephist.c:1731	0020	source cells: drop the NULL chan condition	survived; killed by new test	hs_cache/source_cell_metrics_port (test-metricsport-gates.patch). Gap made by round 2: the tests that pass a NULL channel (prev_hop_metric_series, begindir_nth, begindir_cell_bands) run without a MetricsPort, so the gate now returns before the "!chan" check matters, and none of the MetricsPort tests passes one (round 1's RH-29 was killed by those NULL-channel tests). Stock connection_exit_begin_conn() treats or_circ->p_chan as possibly NULL, so the guard is needed: the new test passes a NULL channel and a circuit without one with a MetricsPort, which crashes the mutant.
+R2-FT-01	src/feature/relay/relay_metrics.c:1607	0021	fetch targets: drop the MetricsPort condition	killed	hs_cache/hsdir_fetch_target_metrics
+R2-FT-02	src/feature/relay/relay_metrics.c:1607	0021	fetch targets: negate the MetricsPort condition	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key,hs_cache/hsdir_fetch_target_long_keys
+R2-FT-03	src/feature/relay/relay_metrics.c:1607	0021	fetch targets: BridgeRelay && !MetricsPort_set (|| -> &&)	killed	hs_cache/hsdir_fetch_target_metrics
+R2-FT-04	src/feature/relay/relay_metrics.c:1607	0021	fetch targets: drop the BridgeRelay condition	killed	hs_cache/hsdir_fetch_target_metrics
+R2-FT-05	src/feature/relay/relay_metrics.c:1607	0021	fetch targets: gate on ControlPort_set instead of MetricsPort_set	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key,hs_cache/hsdir_fetch_target_long_keys
+R2-FT-06	src/feature/relay/relay_metrics.c:1607	0021	fetch targets: MetricsPort gate after the minute reset	equivalent	Without a MetricsPort the mutant clears the table and moves fetch_targets_minute at a new minute but counts nothing. The next counted fetch is either in that minute (the original clears there instead, from an older minute: the table is empty either way) or in a later one (both clear): every exported count is the same.
+R2-FT-07	src/feature/relay/relay_metrics.c:1607	0021	fetch targets: MetricsPort gates only the exported count (hash and table kept)	survived; killed by new test	hs_cache/hsdir_fetch_target_metrics_port (test-metricsport-gates.patch). Gap: without a MetricsPort the mutant still hashes keys and fills the table, so once a MetricsPort is added a descriptor's next fetch counts as a repeat.
+R2-SR-01	src/core/or/dos.c:1109	0023	BEGIN_DIR stream rate: delete the MetricsPort gate	killed	dos/begindir_over_stream_rate
+R2-SR-02	src/core/or/dos.c:1109	0023	BEGIN_DIR stream rate: negate the MetricsPort gate	killed	dos/begindir_over_stream_rate
+R2-SR-03	src/core/or/dos.c:1109	0023	BEGIN_DIR stream rate: gate on ControlPort_set	killed	dos/begindir_over_stream_rate
+R2-SR-04	src/core/or/dos.c:1109	0023	BEGIN_DIR stream rate: MetricsPort gate after the refill	equivalent	token_bucket_ctr_refill() is path-independent: refills over [t0,t1] and [t1,t2] give min(burst, b + rate*(t2-t0)), as one refill over [t0,t2] does (the bucket only saturates; the rollover branch needs a clock jump of 2^30 s). No token is taken without a MetricsPort, so the bucket's tokens stay the same; only last_refilled_at_timestamp moves, which nothing else reads.
+R2-SR-05	src/core/or/dos.c:1109	0023	BEGIN_DIR stream rate: MetricsPort gates only the count (bucket still drained)	killed	dos/begindir_over_stream_rate
+R2-SH-01	src/core/or/dos.c:780	0014	shedding: consensus parameter under the .6 name HSDirDescriptorFetchLimit	killed	dos/hsdir_fetch_shedding
+R2-SH-02	src/core/or/dos.c:780	0014	shedding: misspelt consensus parameter name	killed	dos/hsdir_fetch_shedding
+R2-SH-03	src/core/or/dos.c:779	0014	shedding: reads the HSDirOneRequestPerCircuit option	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-SH-04	src/core/or/dos.c:779	0014	shedding: reads the HSDirRefuseUnknownPrevHop option	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-SH-05	src/core/or/dos.c:779	0014	shedding: negate dos_should_shed_hsdir_fetches()	killed	dos/dir_heartbeat,dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding,status/hb_not_in_consensus
+R2-SH-06	src/core/or/dos.c:779	0014	shedding: always enabled	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,status/hb_not_in_consensus
+R2-SH-07	src/core/or/dos.c:779	0014	shedding: never enabled	killed	dos/dir_heartbeat,dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-SH-08	src/core/or/dos.c:780	0014	shedding: consensus parameter of the other HSDir option (HSDirFetchBudgetPercent)	killed	dos/hsdir_fetch_shedding
+R2-OPT-01	src/core/or/dos_options.inc:101	0014	HSDirFetchShedding default auto -> 0	killed	dos/hsdir_fetch_shedding_edges
+R2-OPT-02	src/core/or/dos_options.inc:101	0014	HSDirFetchShedding default auto -> 1	killed	dos/hsdir_fetch_shedding_edges,status/hb_not_in_consensus
+R2-OPT-03	src/core/or/dos_options.inc:101	0014	HSDirFetchShedding a BOOL defaulting to 0	killed	dos/hsdir_fetch_shedding_edges
+R2-HB-01	src/core/or/dos.c:1384	0014	heartbeat: '[HSDirDescriptorFetchLimit disabled]' (.6 name)	killed	status/hb_not_in_consensus
+R2-HB-02	src/core/or/dos.c:1380	0014	heartbeat: 'fetches shed' (.6 wording)	killed	dos/dir_heartbeat
+R2-HB-03	src/core/or/dos.c:1378	0014	heartbeat: negate the shedding condition	killed	dos/dir_heartbeat,status/hb_not_in_consensus
+R2-HB-04	src/core/or/dos.c:1382	0014	heartbeat: shows the pressure count instead of the shed count	killed	dos/dir_heartbeat
+R2-NS-01	src/core/or/dos.c:842	0014	new second: decide and set odds with the new second's budget	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-02	src/core/or/dos.c:846	0014	new second: decide whether to shed with the new budget (odds from the old)	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-03	src/core/or/dos.c:851	0014	new second: lottery odds from the new budget (decision from the old)	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-04	src/core/or/dos.c:843	0014	new second: half of the new budget caps the light bytes in the odds	survived; killed by new test	dos/hsdir_fetch_shedding_edges (test-budget-light-cap.patch). Gap in round 2's budget-change test: there only 100 bytes were asked within their rate, below both half-budgets, so the cap on the light share in the odds could come from the new budget. The new block asks 700 light bytes of 2000 at budget 1000, then raises the budget to 2000: odds (1000-500)/(2000-500) = 333333 ppm, against 230769 with the new cap.
+R2-NS-05	src/core/or/dos.c:842	0014	new second: update the stored budget before computing (same as using the new one)	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-06	src/core/or/dos.c:839	0014	new second: drop '&& hsdir_fetch.budget' from the early return	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-07	src/core/or/dos.c:839	0014	new second: early return for now <= sec	equivalent	now is monotime_coarse_absolute_sec(), which never decreases, so now < hsdir_fetch.sec never happens: "<=" and "==" agree.
+R2-NS-08	src/core/or/dos.c:845	0014	new second: shed after any over-budget second, adjacent or not	killed	dos/hsdir_fetch_shedding
+R2-NS-09	src/core/or/dos.c:845	0014	new second: shed up to two seconds after an over-budget one	killed	dos/hsdir_fetch_shedding
+R2-NS-10	src/core/or/dos.c:846	0014	new second: over budget at asked >= budget	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-NS-11	src/core/or/dos.c:846	0014	new second: over budget only at asked > budget + 1	survived; killed by new test	dos/hsdir_fetch_shedding_edges (test-budget-boundaries.patch). Off-by-one the tests can't see: every test fetch is a multiple of 100 bytes, so no second asks for budget + 1. The new block asks for 1001 bytes against 1000 and checks that the next second sheds.
+R2-NS-12	src/core/or/dos.c:847	0014	new second: default odds 1000000 -> 0 (only read while shedding)	equivalent	lottery_ppm is read only after "if (!hsdir_fetch.shedding) goto answer;", and whenever shedding is set it is overwritten by the CLAMP: the default 1000000 is a dead store. (It is the other half of R2-FA-10's redundancy.)
+R2-NS-13	src/core/or/dos.c:850	0014	new second: no lower bound on the odds	build-fail	(compiler) error: comparison of unsigned expression in '< 0' is always false [-Werror=type-limits]. The compiling variant R2-NS-13v (MIN instead of CLAMP) is killed.
+R2-NS-14	src/core/or/dos.c:852	0014	new second: odds capped at 999999 instead of 1000000	equivalent	While shedding, asked > budget >= budget/2 >= first, so (budget - first) * 1000000 / (asked - first) < 1000000: the upper bound of the CLAMP never binds, at 1000000 or 999999.
+R2-NS-15	src/core/or/dos.c:851	0014	new second: odds ignore the bytes within their rate	build-fail	(compiler) error: unused variable 'first' [-Werror=unused-variable]. The variant R2-NS-15v, with first cast to void, is killed.
+R2-NS-16	src/core/or/dos.c:851	0014	new second: odds denominator one more	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-NS-17	src/core/or/dos.c:851	0014	new second: odds numerator one more	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-NS-18	src/core/or/dos.c:854	0014	new second: don't remember the second	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-NS-19	src/core/or/dos.c:855	0014	new second: never take the configured budget	build-fail	(compiler) error: 'hsdir_fetch_budget' defined but not used [-Werror=unused-function]. The variant R2-NS-19v, with the function cast to void, is killed.
+R2-NS-20	src/core/or/dos.c:856	0014	new second: don't reset the bytes asked	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-NS-21	src/core/or/dos.c:856	0014	new second: don't reset the light bytes asked	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-NS-22	src/core/or/dos.c:857	0014	new second: don't reset the light bytes answered	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-23	src/core/or/dos.c:857	0014	new second: don't reset the bytes answered	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-NS-24	src/core/or/dos.c:843	0014	new second: light bytes in the odds capped at the whole budget	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-25	src/core/or/dos.c:843	0014	new second: light bytes in the odds uncapped	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-26	src/core/or/dos.c:843	0014	new second: odds from the light bytes answered, not asked	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-27	src/core/or/dos.c:843	0014	new second: odds without the light share (first = 0)	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-FA-01	src/core/or/dos.c:903	0014	fetch allowed: don't count the bytes asked	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-02	src/core/or/dos.c:904	0014	fetch allowed: count every fetch as light in the odds	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-FA-03	src/core/or/dos.c:904	0014	fetch allowed: never count light bytes asked	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-FA-04	src/core/or/dos.c:906	0014	fetch allowed: within budget only below it (<= -> <)	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-05	src/core/or/dos.c:906	0014	fetch allowed: while shedding, answer everything within the budget	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-06	src/core/or/dos.c:910	0014	fetch allowed: ceiling applies to a second's first answer too	killed	dos/hsdir_fetch_shedding_edges
+R2-FA-07	src/core/or/dos.c:911	0014	fetch allowed: ceiling > -> >=	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-08	src/core/or/dos.c:911	0014	fetch allowed: ceiling twice the budget	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-09	src/core/or/dos.c:911	0014	fetch allowed: ceiling at the budget	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-10	src/core/or/dos.c:913	0014	fetch allowed: first over-budget second goes to the lottery too	equivalent	In a second that isn't shedding, lottery_ppm is 1000000 and every draw (crypto_fast_rng_get_uint(rng, 1000000), or the mock) is below it, so a fetch that falls through to the answer-first check or the lottery is answered anyway; hsdir_fetch.light is reset at the next second and only read by that check. The explicit "if (!shedding) goto answer" and the default odds make each other redundant (see R2-NS-12).
+R2-FA-11	src/core/or/dos.c:915	0014	fetch allowed: answer-first share regardless of the descriptor's rate	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-FA-12	src/core/or/dos.c:915	0014	fetch allowed: answer-first share <= -> <	killed	dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-13	src/core/or/dos.c:915	0014	fetch allowed: answer-first share the whole budget	killed	dos/hsdir_fetch_shedding_edges
+R2-FA-14	src/core/or/dos.c:916	0014	fetch allowed: don't count light bytes answered	killed	dos/hsdir_fetch_shedding_edges
+R2-FA-15	src/core/or/dos.c:919	0014	fetch allowed: lottery < -> <=	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-FA-16	src/core/or/dos.c:919	0014	fetch allowed: lottery won above the odds	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-17	src/core/or/dos.c:924	0014	fetch allowed: shed fetches always refused	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-FA-18	src/core/or/dos.c:924	0014	fetch allowed: shed fetches never refused	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-19	src/core/or/dos.c:923	0014	fetch allowed: don't count shed fetches	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-20	src/core/or/dos.c:909	0014	fetch allowed: don't count fetches under pressure	killed	dos/hsdir_fetch_shedding,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-21	src/core/or/dos.c:926	0014	fetch allowed: don't count bytes answered	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-22	src/core/or/dos.c:900	0014	fetch allowed: start the second before taking the descriptor's token	equivalent	hsdir_desc_fetch_within_rate() reads only the descriptor's bucket and the options, and hsdir_fetch_new_second() only the hsdir_fetch state and the budget: neither reads what the other writes, so their order doesn't matter.
+R2-FA-23	src/core/or/dos.c:911	0014	fetch allowed: ceiling ignores this fetch's size	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-24	src/core/or/dos.c:924	0014	fetch allowed: shed fetches also count as answered when not enforcing	killed	dos/hsdir_fetch_shedding_edges
+R2-FB-01	src/core/or/dos.c:813	0014	budget: automatic budget when one is configured	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FB-02	src/core/or/dos.c:816	0014	budget: observed bandwidth 0 counts	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-FB-03	src/core/or/dos.c:817	0014	budget: higher of configured and observed	killed	dos/hsdir_fetch_shedding
+R2-FB-04	src/core/or/dos.c:819	0014	budget: default percent 50 -> 49	killed	dos/hsdir_fetch_shedding
+R2-FB-05	src/core/or/dos.c:819	0014	budget: percent min 1 -> 0	killed	dos/hsdir_fetch_shedding_edges
+R2-FB-06	src/core/or/dos.c:819	0014	budget: percent max 100 -> 99	killed	dos/hsdir_fetch_shedding_edges
+R2-FB-07	src/core/or/dos.c:820	0014	budget: no 512 KB floor	killed	dos/hsdir_fetch_shedding
+R2-FB-08	src/core/or/dos.c:822	0014	budget: no UINT32_MAX cap	killed	dos/hsdir_fetch_shedding_edges
+R2-FB-09	src/core/or/dos.c:818	0014	budget: wrong consensus parameter name for the percent	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-WR-01	src/core/or/dos.c:867	0013	within rate: rate 0 not raised to 1	killed	hs_cache/hsdir_desc_fetch_over_rate
+R2-WR-02	src/core/or/dos.c:872	0013	within rate: cached bucket not adjusted to a new rate alone	killed	dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_over_rate
+R2-WR-03	src/core/or/dos.c:872	0013	within rate: cached bucket not adjusted to a new burst alone	killed	hs_cache/hsdir_desc_fetch_over_rate
+R2-WR-04	src/core/or/dos.c:877	0014	within rate: token check > 0 -> > 1	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_over_rate,hs_cache/hsdir_desc_fetch_shedding
+R2-WR-05	src/core/or/dos.c:868	0013	within rate: burst 0 not raised to 1	killed	hs_cache/hsdir_desc_fetch_over_rate
+R2-NM-01	src/feature/relay/relay_metrics.c:266	0006	name: relay_hsdir_fetch_total -> .6 relay_hsdir_get_total	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_reuse_and_prev_hop_defenses,hs_cache/hsdir_desc_fetch_over_rate,hs_cache/hsdir_desc_fetch_shedding,hs_cache/hsdir_not_anonymous_actions,hs_cache/metric_single_labels
+R2-NM-02	src/feature/relay/relay_metrics.c:273	0006	name: relay_hsdir_upload_total -> .6 relay_hsdir_post_total	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_reuse_and_prev_hop_defenses,hs_cache/hsdir_not_anonymous_actions,hs_cache/metric_single_labels
+R2-NM-03	src/feature/relay/relay_metrics.c:280	0007	name: relay_begindir_response_total -> .6 relay_dir_responses_total	killed	hs_cache/dir_request_response_metrics,hs_cache/metric_single_labels
+R2-NM-04	src/feature/relay/relay_metrics.c:287	0008	name: relay_begindir_connections -> .6 relay_dir_server_conns	killed	hs_cache/dir_server_conns_gauge,hs_cache/metric_single_labels
+R2-NM-05	src/feature/relay/relay_metrics.c:308	0016	name: relay_begindir_request_total -> first .7 relay_begindir_requests_total	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric,hs_cache/dir_request_url_table_types
+R2-NM-06	src/feature/relay/relay_metrics.c:323	0019	name: relay_begindir_request_over_max_total -> first .7 relay_begindir_over_max_requests_total	killed	hs_cache/prev_hop_metric_series,hs_cache/dir_over_max_request_metric,hs_cache/metric_single_labels
+R2-NM-07	src/feature/relay/relay_metrics.c:347	0021	name: relay_hsdir_fetch_descriptor_total -> first .7 relay_hsdir_fetch_target_total	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key,hs_cache/hsdir_fetch_target_long_keys
+R2-NM-08	src/feature/relay/relay_metrics.c:266	0006	name: swap the fetch and upload family names	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_reuse_and_prev_hop_defenses,hs_cache/hsdir_desc_fetch_over_rate,hs_cache/hsdir_desc_fetch_shedding,hs_cache/hsdir_not_anonymous_actions
+R2-NM-09	src/feature/relay/relay_metrics.c:308	0016	name: swap the begindir request and over-max family names	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric,hs_cache/dir_request_url_table_types
+R2-TY-01	src/feature/relay/relay_metrics.c:265	0006	type: relay_hsdir_fetch_total exported as a gauge	survived; killed by new test	hs_cache/metric_types (test-metric-types.patch). Gap: round 1 added type checks (metric_is_counter) only for .7's families; the four renamed .6 families' # TYPE lines were never checked.
+R2-TY-02	src/feature/relay/relay_metrics.c:272	0006	type: relay_hsdir_upload_total exported as a gauge	survived; killed by new test	hs_cache/metric_types (test-metric-types.patch). As R2-TY-01.
+R2-TY-03	src/feature/relay/relay_metrics.c:279	0007	type: relay_begindir_response_total exported as a gauge	survived; killed by new test	hs_cache/metric_types (test-metric-types.patch). As R2-TY-01.
+R2-TY-04	src/feature/relay/relay_metrics.c:286	0008	type: relay_begindir_connections exported as a counter	survived; killed by new test	hs_cache/metric_types (test-metric-types.patch). As R2-TY-01, for the gauge.
+R2-DT-01	src/feature/relay/relay_metrics.c:531	0010	dos type: hsdir_request -> .6 hsdir_request_total	survived; killed by new test	hs_cache/hsdir_reuse_and_prev_hop_counters (test-dos-type-labels.patch). Gap: the renamed label tor_relay_dos_total{type="hsdir_request"} is read by no test (only dos_get_dir_stat() is), so the .6 name "hsdir_request_total" passes.
+R2-DT-02	src/feature/relay/relay_metrics.c:531	0010	dos type: hsdir_request exports the reused-request count	survived; killed by new test	hs_cache/hsdir_reuse_and_prev_hop_counters (test-dos-type-labels.patch). As R2-DT-01: the exported value is never read either.
+R2-DT-03	src/feature/relay/relay_metrics.c:532	0010	dos type: misspell hsdir_req_reused	survived; killed by new test	hs_cache/hsdir_reuse_and_prev_hop_counters (test-dos-type-labels.patch). Gap (0010, not renamed): type="hsdir_req_reused" is never read from the store.
+R2-DT-04	src/feature/relay/relay_metrics.c:532	0010	dos type: hsdir_req_reused exports the request count	survived; killed by new test	hs_cache/hsdir_reuse_and_prev_hop_counters (test-dos-type-labels.patch). As R2-DT-03.
+R2-DT-05	src/feature/relay/relay_metrics.c:533	0010	dos type: misspell hsdir_circ_reused	killed	hs_cache/hsdir_reuse_and_prev_hop_counters
+R2-DT-06	src/feature/relay/relay_metrics.c:534	0010	dos type: misspell hsdir_unknown_prev_hop	survived; killed by new test	hs_cache/hsdir_reuse_and_prev_hop_counters (test-dos-type-labels.patch). Gap (0010): type="hsdir_unknown_prev_hop" is never read from the store.
+R2-DT-07	src/feature/relay/relay_metrics.c:535	0010	dos type: hsdir_unknown_prev_hop exports the descriptor-only count	survived; killed by new test	hs_cache/hsdir_reuse_and_prev_hop_counters (test-dos-type-labels.patch). As R2-DT-06.
+R2-DT-08	src/feature/relay/relay_metrics.c:538	0012	dos type: misspell begindir_over_max	survived; killed by new test	dos/begindir_max_streams (test-dos-type-labels.patch). Gap (0012): type="begindir_over_max" is never read from the store.
+R2-DT-09	src/feature/relay/relay_metrics.c:538	0012	dos type: begindir_over_max exports the over-stream-rate count	survived; killed by new test	dos/begindir_max_streams (test-dos-type-labels.patch). As R2-DT-08.
+R2-DT-10	src/feature/relay/relay_metrics.c:541	0013	dos type: misspell hsdir_fetch_over_rate	killed	hs_cache/hsdir_desc_fetch_over_rate
+R2-DT-11	src/feature/relay/relay_metrics.c:543	0014	dos type: misspell hsdir_fetch_pressure	killed	hs_cache/hsdir_desc_fetch_shedding
+R2-DT-12	src/feature/relay/relay_metrics.c:545	0014	dos type: misspell hsdir_fetch_shed	killed	hs_cache/hsdir_desc_fetch_shedding
+R2-DT-13	src/feature/relay/relay_metrics.c:545	0014	dos type: hsdir_fetch_shed exports the pressure count	killed	hs_cache/hsdir_desc_fetch_shedding
+R2-DT-14	src/feature/relay/relay_metrics.c:533	0010	dos type: hsdir_circ_reused exports the reused-request count	killed	hs_cache/hsdir_reuse_and_prev_hop_counters
+R2-FA-25	src/core/or/dos.c:906	0014	fetch allowed: within budget up to budget + 1	survived; killed by new test	dos/hsdir_fetch_shedding_edges (test-budget-boundaries.patch). Same 100-byte blind spot: asked = budget + 1 must count as pressure.
+R2-FA-26	src/core/or/dos.c:911	0014	fetch allowed: ceiling one byte higher	survived; killed by new test	dos/hsdir_fetch_shedding_edges (test-budget-boundaries.patch). Same blind spot: the ceiling is exactly half again the budget (1500 answered, a 1501st byte shed).
+R2-FA-27	src/core/or/dos.c:915	0014	fetch allowed: answer-first share one byte larger	survived; killed by new test	dos/hsdir_fetch_shedding_edges (test-budget-boundaries.patch). Same blind spot: fetches within their rate are answered first up to exactly half the budget (500 bytes, not 501).
+R2-FA-28	src/core/or/dos.c:915	0014	fetch allowed: answer-first share one byte smaller	killed	dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-29	src/core/or/dos.c:911	0014	fetch allowed: ceiling one byte lower	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-NS-28	src/core/or/dos.c:846	0014	new second: over budget at asked > budget - 1 (>=)	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-NS-29	src/core/or/dos.c:843	0014	new second: light bytes in the odds capped at budget / 2 + 1	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-13v	src/core/or/dos.c:850	0014	new second: no lower bound on the odds (compiles: MIN instead of CLAMP)	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-15v	src/core/or/dos.c:851	0014	new second: odds ignore the bytes within their rate (compiles)	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges
+R2-FA-30	src/core/or/dos.c:906	0014	fetch allowed: within-budget check against the live (next second's) budget	survived; killed by new test	dos/hsdir_fetch_shedding_edges (test-budget-boundaries.patch). Gap: no test changed HSDirFetchBudget in the middle of a second, so reading the live budget instead of the one the second started with went unseen ("a new HSDirFetchBudget applies from the next second" was checked only from the next second's side).
+R2-FA-31	src/core/or/dos.c:911	0014	fetch allowed: ceiling from the live (next second's) budget	survived; killed by new test	dos/hsdir_fetch_shedding_edges (test-budget-boundaries.patch). As R2-FA-30, for the ceiling.
+R2-FA-32	src/core/or/dos.c:915	0014	fetch allowed: answer-first share from the live (next second's) budget	survived; killed by new test	dos/hsdir_fetch_shedding_edges (test-budget-boundaries.patch). As R2-FA-30, for the share answered first.
+R2-NS-19v	src/core/or/dos.c:855	0014	new second: never take the configured budget (compiles)	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+S2-DOS-04	src/core/or/dos.c:1111	0023	never refill the BEGIN_DIR bucket	killed	dos/begindir_over_stream_rate
+S2-DOS-05v	src/core/or/dos.c:1113	0023	bucket check always passes (> 0 -> >= 0, compiles)	killed	dos/begindir_over_stream_rate
+S2-DOS-06	src/core/or/dos.c:1113	0023	bucket check > 0 -> > 1	killed	dos/begindir_over_stream_rate
+S2-DOS-07	src/core/or/dos.c:1114	0023	never take a token	killed	dos/begindir_over_stream_rate
+S2-DOS-08	src/core/or/dos.c:1114	0023	take two tokens per cell	killed	dos/begindir_over_stream_rate
+S2-DOS-09	src/core/or/dos.c:1116	0023	delete the over-stream-rate count	killed	dos/begindir_over_stream_rate
+S2-DOS-10	src/core/or/dos.c:1116	0023	count over-rate cells as over-max	killed	dos/begindir_over_stream_rate
+S2-DOS-11	src/core/or/dos.c:1111	0023	refill the RELAY_BEGIN bucket instead	killed	dos/begindir_over_stream_rate
+S2-DOS-12	src/core/or/dos.c:1113	0023	read the RELAY_BEGIN bucket instead	killed	dos/begindir_over_stream_rate
+S2-DOS-13	src/core/or/dos.c:1114	0023	take tokens from the RELAY_BEGIN bucket instead	killed	dos/begindir_over_stream_rate
+S2-DOS-14v	src/core/or/dos.c:1130	0023	delete the BEGIN_DIR rate check (function kept referenced)	killed	dos/begindir_over_stream_rate
+S2-DOS-16	src/core/or/dos.c:1130	0023	count only while DoSStreamCreationEnabled is set	killed	dos/begindir_over_stream_rate
+S2-DOS-20	src/core/or/dos.c:1158	0023	don't initialize the BEGIN_DIR bucket	killed	dos/begindir_over_stream_rate
+S2-DOS-21	src/core/or/dos.c:1159	0023	BEGIN_DIR bucket burst = rate	killed	dos/begindir_over_stream_rate
+S2-DOS-22	src/core/or/dos.c:1158	0023	swap the BEGIN_DIR bucket rate and burst	killed	dos/begindir_over_stream_rate
+S2-DOS-23	src/core/or/dos.c:1160	0023	initialize the BEGIN_DIR bucket at time 0	equivalent	(round 1's verdict holds) token_bucket_ctr_init() leaves the bucket full whatever its timestamp, and every use refills first: a refill from timestamp 0 sees elapsed = now, which monotime_coarse_absolute_sec() keeps far below the 2^30 s rollover, so it can only top up a full bucket to its burst. With round 2's gate the first use may come long after, once a MetricsPort is added: full either way.
+S2-DOS-24	src/core/or/dos.c:1158	0023	initialize the RELAY_BEGIN bucket twice instead	killed	dos/begindir_over_stream_rate
+S2-DOSH-02	src/core/or/dos.h:108	0023	alias over_stream_rate to begindir_over_max	killed	dos/begindir_over_stream_rate
+S2-RM-DOS-4	src/feature/relay/relay_metrics.c:540	0023	begindir_over_stream_rate exports over_max	killed	dos/begindir_over_stream_rate
+S2-RM-DOS-5	src/feature/relay/relay_metrics.c:539	0023	misspell begindir_over_stream_rate	killed	dos/begindir_over_stream_rate
+S2-DOS-15	src/core/or/dos.c:1130	0023	check the rate only for cells over DoSBeginDirMaxStreams	killed	dos/begindir_over_stream_rate
+S2-RH-21	src/feature/stats/rephist.c:1709	0020	key relays by address, clients by channel	killed	hs_cache/source_cell_metrics
+S2-RH-22v	src/feature/stats/rephist.c:1709	0020	key relays by address too (compiles)	killed	hs_cache/source_cell_metrics
+S2-RH-23	src/feature/stats/rephist.c:1710	0020	negate the address lookup	killed	hs_cache/source_cell_metrics
+S2-RH-24	src/feature/stats/rephist.c:1711	0020	look up the wrong geoip action	killed	hs_cache/source_cell_metrics
+S2-RH-25	src/feature/stats/rephist.c:1709	0020	never key clients by address	killed	hs_cache/source_cell_metrics
+S2-RH-26	src/feature/stats/rephist.c:1727	0020	61-second minutes	killed	hs_cache/source_cell_minutes
+S2-RH-27	src/feature/stats/rephist.c:1727	0020	59-second minutes	killed	hs_cache/source_cell_minutes
+S2-RH-30	src/feature/stats/rephist.c:1734	0020	negate the new-minute check	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_minutes
+S2-RH-31	src/feature/stats/rephist.c:1735	0020	don't remember the minute	killed	dos/create_cell_source,hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-RH-32	src/feature/stats/rephist.c:1736	0020	don't reset the counts at a new minute	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_minutes
+S2-RH-33	src/feature/stats/rephist.c:1736	0020	reset only n_create at a new minute	killed	hs_cache/source_cell_minutes
+S2-RH-34	src/feature/stats/rephist.c:1736	0020	reset only n_begindir at a new minute	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_minutes
+S2-RH-35	src/feature/stats/rephist.c:1738	0020	swap the two counters	equivalent	(round 1's verdict holds) n_create and n_begindir are zeroed together at a new minute and each is read only through n for its own kind: swapping which field holds which kind changes no count.
+S2-RH-36	src/feature/stats/rephist.c:1738	0020	one counter for both kinds	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_minutes
+S2-RH-38	src/feature/stats/rephist.c:1741	0020	never count the source's cells	killed	dos/create_cell_source,hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-N-RH-01	src/feature/stats/rephist.c:1739	0020	remove the per-source saturation (uint16 wraps)	killed	hs_cache/source_cell_saturation
+S2-N-RH-02	src/feature/stats/rephist.c:1739	0020	per-source saturation one later	equivalent	(round 1's verdict holds) The count stops at 1002 instead of 1001, which fits the uint16_t, and nth_band_of(1002) is NTH_BAND_1001_PLUS like nth_band_of(1001).
+S2-N-RH-03	src/feature/stats/rephist.c:1739	0020	per-source saturation one earlier	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_saturation
+S2-N-RH-04	src/feature/stats/rephist.c:1741	0020	every source cell in the first band	killed	dos/create_cell_source,hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-N-RH-05	src/feature/stats/rephist.c:1741	0020	count CREATE and BEGIN_DIR cells in each other's family	killed	dos/create_cell_source,hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-N-RH-06	src/feature/stats/rephist.c:1741	0020	every source cell as known_relay	killed	dos/create_cell_source,hs_cache/source_cell_metrics,hs_cache/source_cell_saturation
+S2-N-RH-12	src/feature/stats/rephist.c:1750	0020	delete the CREATE source count	build-fail	(compiler) error: unused parameter 'chan' [-Werror=unused-parameter]. The variant S2-N-RH-12v, with chan cast to void, is killed.
+S2-N-RH-13	src/feature/stats/rephist.c:1750	0020	CREATE source count as BEGIN_DIR	killed	dos/create_cell_source,hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-N-RH-14	src/feature/stats/rephist.c:1750	0020	CREATE source count with a constant previous hop	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_minutes
+S2-N-RH-27	src/feature/stats/rephist.c:1763	0020	delete the BEGIN_DIR source count	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_minutes
+S2-N-RH-28	src/feature/stats/rephist.c:1763	0020	BEGIN_DIR source count as CREATE	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_minutes
+S2-N-RH-32	src/feature/stats/rephist.c:1788	0020	source getter ignores begindir	killed	dos/create_cell_source,hs_cache/source_cell_minutes
+S2-N-RH-33	src/feature/stats/rephist.c:1788	0020	source getter ignores prev_hop	killed	dos/create_cell_source,hs_cache/source_cell_metrics,hs_cache/source_cell_saturation
+S2-N-CMD-01	src/core/or/command.c:248	0020	CREATE count without its channel (no per-source count)	killed	dos/create_cell_source
+S2-RM-SC-6	src/feature/relay/relay_metrics.c:1562	0020	CREATE source family exports BEGIN_DIR values	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-RM-SC-7	src/feature/relay/relay_metrics.c:1569	0020	BEGIN_DIR source family exports CREATE values	killed	hs_cache/source_cell_minutes
+S2-N-FC-19	src/feature/relay/relay_metrics.c:1552	0020	source families: every prev_hop labeled known_relay	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-N-FC-20	src/feature/relay/relay_metrics.c:1554	0020	source families export each other's values	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-N-FC-21	src/feature/relay/relay_metrics.c:1554	0020	source families: client values everywhere	killed	hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-N-FC-22	src/feature/relay/relay_metrics.c:1555	0020	source families drop 1001_plus	killed	hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/source_cell_saturation
+S2-N-SM-01	src/core/or/source_minute_st.h:18	0020	16-bit stored minute (breaks the minute reset)	killed	dos/create_cell_source,hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-RM-TYPE-6	src/feature/relay/relay_metrics.c:330	0020	export relay_create_cell_source_total as a gauge	killed	hs_cache/prev_hop_metric_series
+S2-RM-NAME-7	src/feature/relay/relay_metrics.c:339	0020	misspell relay_begindir_cell_source_total	killed	hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/source_cell_minutes
+S2-RM-FT-01	src/feature/relay/relay_metrics.c:1584	0021	4095 slots	killed	hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-02	src/feature/relay/relay_metrics.c:1585	0021	no probing (1 probe)	killed	hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-03	src/feature/relay/relay_metrics.c:1585	0021	15 probes	killed	hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-04	src/feature/relay/relay_metrics.c:1585	0021	17 probes	killed	hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-05	src/feature/relay/relay_metrics.c:1603	0021	61-second minutes	killed	hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-06	src/feature/relay/relay_metrics.c:1603	0021	59-second minutes	killed	hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-09	src/feature/relay/relay_metrics.c:1609	0021	negate the new-minute check	killed	hs_cache/hsdir_fetch_target_metrics
+S2-RM-FT-10	src/feature/relay/relay_metrics.c:1610	0021	don't clear the table at a new minute	killed	hs_cache/hsdir_fetch_target_metrics
+S2-RM-FT-11	src/feature/relay/relay_metrics.c:1611	0021	don't remember the minute	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-13	src/feature/relay/relay_metrics.c:1615	0021	no probing (always the home slot)	killed	hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-14	src/feature/relay/relay_metrics.c:1615	0021	probe from the next slot	equivalent	(round 1's verdict holds) Starting every probe one slot later relabels all 4096 slots alike: which keys share a probe window, and in what order they are probed, is unchanged, and nothing reads slot positions.
+S2-RM-FT-15	src/feature/relay/relay_metrics.c:1616	0021	negate the empty-slot check	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-16	src/feature/relay/relay_metrics.c:1617	0021	don't store the key hash	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-17	src/feature/relay/relay_metrics.c:1618	0021	don't mark the slot used	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-18	src/feature/relay/relay_metrics.c:1619	0021	no break after insert	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key
+S2-RM-FT-19	src/feature/relay/relay_metrics.c:1621	0021	negate the key comparison	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-20	src/feature/relay/relay_metrics.c:1622	0021	remove the n saturation	equivalent	(round 1's verdict holds) t->n wraps only after 2^32 fetches of one descriptor in one minute (72 million a second): unreachable.
+S2-RM-FT-21	src/feature/relay/relay_metrics.c:1622	0021	don't count repeats	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-22	src/feature/relay/relay_metrics.c:1624	0021	don't use the slot's count	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-23	src/feature/relay/relay_metrics.c:1625	0021	no break after match	killed	hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-26	src/feature/relay/relay_metrics.c:1635	0021	swap the lookup labels	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key,hs_cache/hsdir_fetch_target_long_keys
+S2-RM-FT-30	src/feature/relay/relay_metrics.c:1605	0021	a key that doesn't fit is the 0th	equivalent	(round 1's verdict holds) A key that finds no slot (or a NULL key) counts as n=0 instead of 1; nth_band_of(0) is NTH_BAND_1 too.
+S2-RM-FT-31	src/feature/relay/relay_metrics.c:1605	0021	a key that doesn't fit is a repeat	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key,hs_cache/hsdir_fetch_target_long_keys
+S2-RM-FT-32	src/feature/relay/relay_metrics.c:1576	0021	32-bit stored key hash	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing
+S2-RM-FT-33v	src/feature/relay/relay_metrics.c:1578	0021	16-bit per-key count, saturating at UINT16_MAX (compiles)	build-fail	(compiler) error: comparison is always true due to limited range of data type [-Werror=type-limits]. The variant that also saturates at UINT16_MAX, S2-RM-FT-33w, is equivalent.
+S2-N-FT-01	src/feature/relay/relay_metrics.c:1613	0021	hash only the first half of the key	killed	hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key
+S2-N-FT-02	src/feature/relay/relay_metrics.c:1613	0021	hash the key struct rather than its bytes	equivalent	(round 1's verdict holds) ed25519_public_key_t holds only uint8_t pubkey[32]: the same 32 bytes at the same address.
+S2-N-FT-03	src/feature/relay/relay_metrics.c:1613	0021	a NULL key hashes as 1	equivalent	(round 1's verdict holds) A NULL key's hash is never read: the probe loop runs only when key is set.
+S2-N-FT-04	src/feature/relay/relay_metrics.c:1614	0021	probe for a NULL key too	killed	hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_long_keys
+S2-N-FT-05	src/feature/relay/relay_metrics.c:1614	0021	probe loop one too many	killed	hs_cache/hsdir_fetch_target_probing
+S2-N-FT-06	src/feature/relay/relay_metrics.c:1628	0021	swap found and missing	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key,hs_cache/hsdir_fetch_target_long_keys
+S2-N-FT-07	src/feature/relay/relay_metrics.c:1628	0021	every fetch in the first band	build-fail	(compiler) error: variable 'n' set but not used [-Werror=unused-but-set-variable]. The variant S2-N-FT-07v, with n cast to void, is killed.
+S2-N-DC-01	src/feature/dircache/dircache.c:1466	0021	negate key_ok	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_long_keys
+S2-N-DC-02	src/feature/dircache/dircache.c:1466	0021	key_ok always true (count undecoded keys by their partial decode)	killed	hs_cache/hsdir_fetch_target_long_keys
+S2-N-DC-03v	src/feature/dircache/dircache.c:1467	0021	pass the key whether or not it decoded (compiles)	killed	hs_cache/hsdir_fetch_target_long_keys
+S2-N-DC-04v	src/feature/dircache/dircache.c:1467	0021	never pass the key (compiles)	killed	hs_cache/hsdir_get_post_metrics
+S2-N-DC-05	src/feature/dircache/dircache.c:1467	0021	pass the key only if it didn't decode	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_long_keys
+S2-N-DC-06v	src/feature/dircache/dircache.c:1467	0021	delete the fetch-target hook (compiles)	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_long_keys
+S2-N-DC-07	src/feature/dircache/dircache.c:1468	0021	swap found and missing	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_long_keys
+S2-N-DC-08	src/feature/dircache/dircache.c:1468	0021	found: retval > 0 -> >= 0	equivalent	(round 1's verdict holds) cache_lookup_v3_as_dir() sets desc_str only when it returns 1, and desc_str starts NULL: "retval >= 0 && desc_str" is "retval > 0 && desc_str".
+S2-N-DC-09	src/feature/dircache/dircache.c:1468	0021	always found	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_long_keys
+S2-N-DC-10	src/feature/dircache/dircache.c:1468	0021	found: drop the desc_str check	equivalent	(round 1's verdict holds) Whenever hs_cache_lookup_as_dir() returns 1 it has set desc_str to the cached entry's encoded descriptor, which is never NULL: the desc_str check never decides.
+S2-N-FC-23	src/feature/relay/relay_metrics.c:1637	0021	fetch-target family drops found	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_whole_key
+S2-N-FC-24	src/feature/relay/relay_metrics.c:1639	0021	fetch-target family: every lookup labeled missing	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key,hs_cache/hsdir_fetch_target_long_keys
+S2-N-FC-25	src/feature/relay/relay_metrics.c:1640	0021	fetch-target family: missing values everywhere	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_whole_key
+S2-N-FC-26	src/feature/relay/relay_metrics.c:1640	0021	fetch-target family drops 1001_plus	killed	hs_cache/prev_hop_metric_series,hs_cache/hsdir_fetch_target_metrics
+S2-RM-TYPE-8	src/feature/relay/relay_metrics.c:346	0021	export relay_hsdir_fetch_descriptor_total as a gauge	killed	hs_cache/prev_hop_metric_series
+S2-URL-12	src/feature/dircache/dircache.c:396	0018	mistype the NULL sentinel	equivalent	(round 1's verdict holds) The url_table loop stops at the sentinel's NULL string and never reads its type.
+S2-DIR-01	src/feature/dircommon/directory.c:542	0016	count closing client dirconns too	equivalent	(round 1's verdict holds) Only connection_exit_connect_dir() sets a dir connection's prev_hop and begindir_over_max, so a linked client-side (BEGIN_DIR) dir connection would be counted only in dir_requests[type][CHANNEL_PREV_HOP_UNSET], the column fill_begindir_request_values() never exports; response bytes are counted only for DIR_PURPOSE_SERVER.
+S2-DIR-02	src/feature/dircommon/directory.c:542	0016	drop the linked check	equivalent	(round 1's verdict holds) relay_note_dir_request() itself ignores a connection that isn't linked.
+S2-DIR-04	src/feature/dircommon/directory.c:544	0018	drop the COMMAND_WAIT state check	equivalent	(round 1's verdict holds) directory_handle_command_get() and _post() set SERVER_WRITING and type the request on every path before they return, and directory_handle_command() types it on its own error paths, so an untyped server connection is always in COMMAND_WAIT; for a typed one relay_note_dir_request() does nothing.
+S2-RMH-01	src/feature/relay/relay_metrics.h:218	0016	swap DIR_REQUEST_HS_GET and DIR_REQUEST_HS_POST in the enum	equivalent	(round 1's verdict holds) dir_request_type_t is used only by name: url_table, the designated initializers of dir_request_names[], request_type = type + 1 (4 bits, 9 types), arrays of DIR_REQUEST_TYPE_COUNT.
+S2-RM-KEY-0	src/feature/relay/relay_metrics.c:345	0021	wrong .key (field is unused)	equivalent	(round 1's verdict holds) relay_metrics_entry_t.key is never read: each fill function indexes base_metrics[] by its own key (so base_metrics[] must stay in relay_metrics_key_t order; .key documents that but doesn't enforce it).
+S2-RM-FILL-0	src/feature/relay/relay_metrics.c:334	0020	swap two .fill_fn	build-fail	(compiler) error: 'fill_create_cell_source_values' defined but not used [-Werror=unused-function]. Half of round 1's swap; S2-RM-FILL-0v, which compiles, is killed, and the swap itself (S2-RM-FILL-0s) is equivalent.
+S2-RM-FILL-0b	src/feature/relay/relay_metrics.c:342	0020	swap two .fill_fn (second half)	build-fail	(compiler) error: 'fill_begindir_cell_source_values' defined but not used [-Werror=unused-function]. The other half; see S2-RM-FILL-0.
+S2-RM-RB-2	src/feature/relay/relay_metrics.c:1501	0018	count bytes of untyped connections	equivalent	(round 1's verdict holds) Unreachable outside tests: every tunneled request is typed before anything is written to its outbuf (checked again in directory_handle_command*()). The series' own "Not typed yet" call does reach it, where the mutant writes dir_response_bytes[-1] out of bounds, which no exported series shows (a -fsanitize=bounds build would report it).
+S2-RM-INC	src/feature/relay/relay_metrics.c:34	0021	drop the siphash.h include	equivalent	(round 1's verdict holds) ext/siphash.h also arrives through other headers (lib/container/map.h); the explicit include is right but not needed to compile.
+S2-N-ORH-02	src/core/or/or.h:448	0016	swap the KNOWN_RELAY and UNKNOWN_RELAY values	killed	hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/begindir_cell_bands,hs_cache/source_cell_minutes
+S2-N-INC-04	src/feature/relay/relay_metrics.c:29	0021	drop relay_metrics.c's crypto_ed25519.h	equivalent	(round 1's verdict holds) lib/crypt_ops/crypto_ed25519.h also arrives through other headers; the explicit include is right but not needed to compile.
+S2-N-FL-08	src/feature/relay/relay_metrics.c:1350	0016	fill_labeled_values: label0 after label	equivalent	(round 1's verdict holds) Label order within a series: Prometheus label sets are unordered; the tests find labels with metrics_store_entry_has_label(), and the only exact-text checks (EXPORTS_SERIES) are of single-label families, where label0 is NULL.
+S2-N-CT-01	src/feature/relay/relay_metrics.c:1493	0018	drop the request_type CTASSERT	equivalent	(round 1's verdict holds) A CTASSERT has no run-time effect: DIR_REQUEST_TYPE_COUNT (9) < 16 holds.
+S2-N-RH-CT1	src/feature/stats/rephist.c:1684	0016	drop the prev_hop CTASSERT	equivalent	(round 1's verdict holds) A CTASSERT has no run-time effect: CHANNEL_PREV_HOP_COUNT (4) <= 4 holds.
+S2-N-RH-CT2	src/feature/stats/rephist.c:1685	0016	drop the n_begindir CTASSERT	equivalent	(round 1's verdict holds) A CTASSERT has no run-time effect: NTH_BAND_MAX (1001) < 1024 holds.
+S2-CHAN-01	src/core/or/channel.c:3005	0016	negate the client check	killed	dos/known_relay,dos/create_cell_prev_hop,dos/create_cell_source,hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics
+S2-CHAN-03	src/core/or/channel.c:3007	0016	negate the known-relay check	killed	dos/known_relay,dos/create_cell_prev_hop,dos/create_cell_source,hs_cache/dir_request_response_metrics
+S2-CHAN-04	src/core/or/channel.c:3008	0016	known_relay -> unknown_relay	killed	dos/known_relay
+S2-CMD-01	src/core/or/command.c:247	0016	constant previous hop	killed	dos/create_cell_prev_hop,dos/create_cell_source
+S2-CMD-06	src/core/or/command.c:325	0016	don't store the previous hop on the circuit	killed	dos/create_cell_prev_hop
+S2-EDGE-01	src/core/or/connection_edge.c:4240	0016	delete the BEGIN_DIR cell count	killed	dos/begindir_refused
+S2-EDGE-03	src/core/or/connection_edge.c:4330	0019	don't pass the stream	killed	dos/begindir_refused
+S2-EDGE-06	src/core/or/connection_edge.c:4716	0016	don't copy prev_hop to the dirconn	killed	dos/begindir_refused
+S2-EDGE-07	src/core/or/connection_edge.c:4717	0019	don't copy begindir_over_max to the dirconn	killed	dos/begindir_refused
+S2-DOS-17	src/core/or/dos.c:1145	0019	remove the NULL stream guard	killed	dos/begindir_max_streams
+S2-DOS-18	src/core/or/dos.c:1145	0019	never mark the stream	killed	dos/begindir_max_streams,dos/begindir_refused
+S2-DOS-01	src/core/or/dos.c:978	0017	delete the over-rate count	killed	dos/cc_over_rate
+S2-DOS-03	src/core/or/dos.c:683	0017	over-rate getter returns 0	killed	dos/cc_over_rate
+S2-N-DOS-01	src/core/or/dos.c:959	0017	delete the untracked count	killed	dos/cc_over_rate
+S2-N-DOS-02	src/core/or/dos.c:691	0017	untracked getter returns 0	killed	dos/cc_over_rate
+S2-DC-07	src/feature/dircache/dircache.c:1388	0022	negate the consensus lookup	killed	hs_cache/hsdir_reuse_and_prev_hop_counters
+S2-DC-08	src/feature/dircache/dircache.c:1390	0022	swap descriptor_only and unknown	killed	hs_cache/hsdir_reuse_and_prev_hop_counters
+S2-DIR-03	src/feature/dircommon/directory.c:543	0018	default type unparsed -> no_request	killed	hs_cache/dir_request_response_metrics
+S2-DIR-06	src/feature/dircommon/directory.c:545	0018	negate the empty-inbuf check	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric
+S2-DIR-08v	src/feature/dircommon/directory.c:547	0016	delete the close-time count (compiles)	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric
+S2-RM-REQ-1	src/feature/relay/relay_metrics.c:1468	0018	count DirPort requests	killed	hs_cache/dir_request_response_metrics
+S2-RM-REQ-2	src/feature/relay/relay_metrics.c:1468	0018	count a connection's request more than once	killed	hs_cache/dir_request_response_metrics
+S2-RM-REQ-3	src/feature/relay/relay_metrics.c:1470	0018	store type, not type+1	killed	hs_cache/dir_response_bytes_metric,hs_cache/dir_response_bytes_on_read
+S2-RM-REQ-7	src/feature/relay/relay_metrics.c:1472	0019	negate the over-max check	killed	hs_cache/dir_over_max_request_metric
+S2-RM-RB-1	src/feature/relay/relay_metrics.c:1501	0018	count DirPort response bytes	killed	hs_cache/dir_response_bytes_metric
+S2-RM-RB-5	src/feature/relay/relay_metrics.c:1503	0018	assign instead of add	killed	hs_cache/dir_response_bytes_metric,hs_cache/dir_response_bytes_on_read
+S2-RM-NA-1	src/feature/relay/relay_metrics.c:1414	0016	single_hop iff not a client	killed	hs_cache/hsdir_not_anonymous_actions
+S2-RM-NA-3	src/feature/relay/relay_metrics.c:1418	0016	swap GET and POST	killed	hs_cache/hsdir_not_anonymous_actions
+S2-CONN-01	src/core/mainloop/connection.c:3662	0018	delete the response-byte hook	killed	hs_cache/dir_response_bytes_on_read
+S2-CONN-02	src/core/mainloop/connection.c:3662	0018	count num_read instead of num_written	killed	hs_cache/dir_response_bytes_on_read
+S2-URL-02	src/feature/dircache/dircache.c:383	0018	mistype /tor/status-vote/current/	killed	hs_cache/dir_request_url_table_types
+S2-URL-07	src/feature/dircache/dircache.c:390	0016	mistype /tor/extra/	killed	hs_cache/dir_request_url_table_types
+S2-LBL-01	src/feature/relay/relay_metrics.c:1447	0016	misspell the label value hs_get	killed	hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_url_table_types,hs_cache/metric_single_labels
+S2-LBL-02	src/feature/relay/relay_metrics.c:1448	0016	misspell the label value hs_post	killed	hs_cache/hsdir_get_post_metrics
+S2-LBL-03	src/feature/relay/relay_metrics.c:1449	0016	misspell the label value consensus	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_response_bytes_metric,hs_cache/dir_request_url_table_types
+S2-LBL-04	src/feature/relay/relay_metrics.c:1450	0016	misspell the label value microdesc	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric,hs_cache/dir_request_url_table_types,hs_cache/dir_response_bytes_on_read
+S2-LBL-05	src/feature/relay/relay_metrics.c:1451	0016	misspell the label value descriptor	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_request_url_table_types
+S2-LBL-06	src/feature/relay/relay_metrics.c:1452	0018	misspell the label value other_get	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_request_url_table_types
+S2-LBL-07	src/feature/relay/relay_metrics.c:1453	0018	misspell the label value other_post	killed	hs_cache/dir_request_response_metrics
+S2-LBL-08	src/feature/relay/relay_metrics.c:1454	0007	misspell the label value unparsed	killed	hs_cache/dir_request_response_metrics
+S2-LBL-09	src/feature/relay/relay_metrics.c:1455	0016	misspell the label value no_request	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric
+S2-LBL-10	src/feature/relay/relay_metrics.c:1437	0016	misspell the label value client	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric,hs_cache/source_cell_metrics,hs_cache/metric_single_labels
+S2-LBL-11	src/feature/relay/relay_metrics.c:1438	0016	misspell the label value known_relay	killed	hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/begindir_cell_bands,hs_cache/source_cell_minutes
+S2-LBL-12	src/feature/relay/relay_metrics.c:1439	0016	misspell the label value unknown_relay	killed	hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics,hs_cache/source_cell_metrics,hs_cache/dir_request_url_table_types,hs_cache/source_cell_saturation
+S2-LBL-13	src/feature/relay/relay_metrics.c:1428	0016	misspell the label value 1	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/begindir_cell_bands,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key,hs_cache/hsdir_fetch_target_long_keys
+S2-LBL-14	src/feature/relay/relay_metrics.c:1429	0016	misspell the label value 2_10	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/begindir_cell_bands,hs_cache/source_cell_minutes,hs_cache/hsdir_fetch_target_probing
+S2-LBL-15	src/feature/relay/relay_metrics.c:1430	0016	misspell the label value 11_100	killed	hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/begindir_cell_bands
+S2-LBL-16	src/feature/relay/relay_metrics.c:1431	0016	misspell the label value 101_1000	killed	hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/begindir_cell_bands
+S2-LBL-17	src/feature/relay/relay_metrics.c:1432	0016	misspell the label value 1001_plus	killed	hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/begindir_cell_bands,hs_cache/source_cell_saturation
+S2-LBL-18	src/feature/relay/relay_metrics.c:1635	0021	misspell the label value missing	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_long_keys
+S2-LBL-19	src/feature/relay/relay_metrics.c:1645	0007	misspell the label value hs_descriptor	killed	hs_cache/dir_request_response_metrics
+S2-LBL-20	src/feature/relay/relay_metrics.c:1646	0007	misspell the label value other	killed	hs_cache/dir_request_response_metrics,hs_cache/metric_single_labels
+S2-LBL-21	src/feature/relay/relay_metrics.c:1361	0006	misspell the label value get success	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_desc_fetch_over_rate,hs_cache/hsdir_desc_fetch_shedding,hs_cache/metric_single_labels
+S2-LBL-22	src/feature/relay/relay_metrics.c:1362	0006	misspell the label value not_found	killed	hs_cache/hsdir_get_post_metrics
+S2-LBL-23	src/feature/relay/relay_metrics.c:1363	0006	misspell the label value get single_hop	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_not_anonymous_actions
+S2-LBL-24	src/feature/relay/relay_metrics.c:1364	0016	misspell the label value get circuit_dead	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_not_anonymous_actions
+S2-LBL-25	src/feature/relay/relay_metrics.c:1365	0011	misspell the label value get refused	killed	hs_cache/hsdir_reuse_and_prev_hop_defenses,hs_cache/hsdir_desc_fetch_shedding
+S2-LBL-26	src/feature/relay/relay_metrics.c:1384	0006	misspell the label value post success	killed	hs_cache/hsdir_get_post_metrics,hs_cache/metric_single_labels
+S2-LBL-27	src/feature/relay/relay_metrics.c:1385	0006	misspell the label value bad_url	killed	hs_cache/hsdir_get_post_metrics
+S2-LBL-28	src/feature/relay/relay_metrics.c:1386	0006	misspell the label value invalid	killed	hs_cache/hsdir_get_post_metrics
+S2-LBL-29	src/feature/relay/relay_metrics.c:1387	0006	misspell the label value not_newer	killed	hs_cache/hsdir_get_post_metrics
+S2-LBL-30	src/feature/relay/relay_metrics.c:1388	0006	misspell the label value post single_hop	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_not_anonymous_actions
+S2-LBL-31	src/feature/relay/relay_metrics.c:1389	0016	misspell the label value post circuit_dead	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_not_anonymous_actions
+S2-LBL-32	src/feature/relay/relay_metrics.c:1390	0011	misspell the label value post refused	killed	hs_cache/hsdir_reuse_and_prev_hop_defenses
+S2-LBL-33	src/feature/relay/relay_metrics.c:1672	0008	misspell the label value command_wait	killed	hs_cache/dir_server_conns_gauge,hs_cache/metric_single_labels
+S2-LBL-34	src/feature/relay/relay_metrics.c:1673	0008	misspell the label value writing_hs_descriptor	killed	hs_cache/dir_server_conns_gauge
+S2-LBL-35	src/feature/relay/relay_metrics.c:1674	0008	misspell the label value writing_other	killed	hs_cache/dir_server_conns_gauge
+S2-LBL-36	src/feature/relay/relay_metrics.c:1675	0008	misspell the label value draining	killed	hs_cache/dir_server_conns_gauge
+S2-N-FT-08	src/feature/relay/relay_metrics.c:1615	0021	probe window doesn't wrap at the end of the table	survived; killed by new test	hs_cache/hsdir_fetch_target_probing (test-probe-wrap.patch). Key-dependent: the series' tests kill it only through out-of-bounds writes when one of hsdir_fetch_target_metrics' 5000 keys probes past the table's end, under 14 of 20 siphash keys (it survived 6 of 20 runs); the probing test's home slot is random and never reached the end in 20 runs. The new test picks keys whose home slot is the table's last, so the probes always wrap: killed in 20 of 20 runs.
+R2-RS-10	src/feature/stats/rephist.c:1731	0020	source cells: swap the gate's operands (MetricsPort first, chan last)	equivalent	The gate's three operands are side-effect-free reads (chan is only dereferenced after the gate), so their order can't change the outcome.
+R2-FT-08	src/feature/relay/relay_metrics.c:1607	0021	fetch targets: swap the gate's operands	equivalent	Both operands are side-effect-free option reads: their order can't change the outcome.
+S2-RM-FILL-0s	src/feature/relay/relay_metrics.c:334	0020	swap the .fill_fn of the two per-source families	equivalent	(round 1's RM-FILL-0, as a real swap) Each fill function fills its own family through base_metrics[its own key], so swapping which entry calls which only changes the order the two families enter the store, which Prometheus doesn't see (the store keys families by name). Either half alone leaves a fill function unused: S2-RM-FILL-0 and -0b fail to build, and S2-RM-FILL-0v, which compiles, is killed.
+S2-RM-FILL-0v	src/feature/relay/relay_metrics.c:1562	0020	fill the BEGIN_DIR source family twice, CREATE never (compiles)	killed	hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-N-RH-12v	src/feature/stats/rephist.c:1750	0020	delete the CREATE source count (compiles)	killed	dos/create_cell_source,hs_cache/source_cell_metrics,hs_cache/source_cell_minutes,hs_cache/source_cell_saturation
+S2-RM-FT-33w	src/feature/relay/relay_metrics.c:1578	0021	16-bit per-key count, saturating at UINT16_MAX (compiles)	equivalent	A 16-bit count saturating at UINT16_MAX still puts every n >= 1001 in NTH_BAND_1001_PLUS, and 0 still marks a free slot; the slot stays 16 bytes (the uint64_t hash sets the alignment), so nothing is saved either.
+S2-N-FT-07v	src/feature/relay/relay_metrics.c:1628	0021	every fetch in the first band (compiles)	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing
+R2-FA-33	src/core/or/dos.c:903	0014	fetch allowed: budget counts bytes answered, not asked (the .6 description)	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-34	src/core/or/dos.c:904	0014	fetch allowed: light bytes counted when answered, not when asked	survived; killed by new test	dos/hsdir_fetch_shedding_edges (test-budget-light-asked.patch). Gap in round 2's "asked for, answered or not": no test sheds a fetch within its rate while the light share is under half the budget, so counting light bytes only when answered went unseen (the "700 bytes" test is capped at 500 either way). The new block sheds two light fetches at the ceiling: odds (1000-300)/(2000-300) = 411764 ppm, against 473684 when they aren't counted.
+R2-LD-01	src/core/or/dos.c:829	0014	lottery draws below 500000	killed	dos/hsdir_fetch_shedding_edges
+R2-LD-02	src/core/or/dos.c:829	0014	lottery draws below 2000000	killed	dos/hsdir_fetch_shedding_edges

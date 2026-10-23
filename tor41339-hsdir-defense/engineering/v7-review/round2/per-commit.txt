@@ -1,0 +1,23 @@
+82a1f9cbf3 dirserv: Stop unthrottled warnings on malformed HTTP requests | build ok, 0 warnings | 1596 tests ok.  (31 skipped) | spaces-ok
+dac50cd9ef dirserv: Don't buffer request bodies larger than an HS descriptor | build ok, 0 warnings | 1597 tests ok.  (31 skipped) | spaces-ok
+5141478850 dirserv: Discard client input received after the request | build ok, 0 warnings | 1598 tests ok.  (31 skipped) | spaces-ok
+f9e3efc577 hs_desc: Check signature length before verifying the signing cert | build ok, 0 warnings | 1598 tests ok.  (31 skipped) | spaces-ok
+b30263c767 hs_cache: Only credit HSDir downloads once the response is written out | build ok, 0 warnings | 1600 tests ok.  (31 skipped) | spaces-ok
+91990b220b relay_metrics: Count onion service descriptor fetches and uploads | build ok, 0 warnings | 1601 tests ok.  (31 skipped) | spaces-ok
+86a240d0e8 relay_metrics: Count tunneled directory requests and responses | build ok, 0 warnings | 1602 tests ok.  (31 skipped) | spaces-ok
+8ff075efb8 relay_metrics: Add a gauge of tunneled directory server connections | build ok, 0 warnings | 1603 tests ok.  (31 skipped) | spaces-ok
+84e81f0b9f relay_metrics: Make fill_dos_values() table-driven | build ok, 0 warnings | 1603 tests ok.  (31 skipped) | spaces-ok
+21f9c040f7 dos: Count repeated and unknown-previous-hop HSDir requests | build ok, 0 warnings | 1604 tests ok.  (31 skipped) | spaces-ok
+5727c57c01 dos: Add off-by-default HSDir circuit-reuse and previous-hop defenses | build ok, 0 warnings | 1607 tests ok.  (31 skipped) | spaces-ok
+e6290f9f86 dos: Add an off-by-default limit on open BEGIN_DIR streams per circuit | build ok, 0 warnings | 1609 tests ok.  (31 skipped) | spaces-ok
+40ccaa3b2e hs_cache: Count fetches of each descriptor over a per-descriptor rate | build ok, 0 warnings | 1610 tests ok.  (31 skipped) | spaces-ok
+a16499db52 dos: Shed onion service descriptor fetches over a byte budget | build ok, 0 warnings | 1613 tests ok.  (31 skipped) | spaces-ok
+09cb58a56a proto_http: Reject a declared body that can never fit | build ok, 0 warnings | 1613 tests ok.  (31 skipped) | spaces-ok
+45a5cada74 relay_metrics: Count circuits and directory streams by previous hop | build ok, 0 warnings | 1621 tests ok.  (31 skipped) | spaces-ok
+dcbeba0f46 dos: Count client CREATE cells over the circuit creation rate | build ok, 0 warnings | 1622 tests ok.  (31 skipped) | spaces-ok
+652063a20a relay_metrics: Count tunneled directory response bytes by request type | build ok, 0 warnings | 1624 tests ok.  (31 skipped) | spaces-ok
+5626225641 dos: Count what BEGIN_DIR streams over DoSBeginDirMaxStreams ask for | build ok, 0 warnings | 1625 tests ok.  (31 skipped) | spaces-ok
+7ca90d4c85 rephist: Count CREATE and BEGIN_DIR cells per source and minute | build ok, 0 warnings | 1630 tests ok.  (31 skipped) | spaces-ok
+b51a2e4d04 relay_metrics: Count HSDir fetches per descriptor and minute | build ok, 0 warnings | 1635 tests ok.  (31 skipped) | spaces-ok
+cbaddc6a6a dos: Count HSDir requests from relays known only by descriptor | build ok, 0 warnings | 1635 tests ok.  (31 skipped) | spaces-ok
+2e1f99fe6b dos: Count BEGIN_DIR cells over the stream creation rate | build ok, 0 warnings | 1636 tests ok.  (31 skipped) | spaces-ok

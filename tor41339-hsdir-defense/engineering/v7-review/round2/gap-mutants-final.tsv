@@ -1,0 +1,30 @@
+id	file:line	patch	mutant	result	killing tests
+R2-RS-08	src/feature/stats/rephist.c:1731	0020	source cells: MetricsPort gates only the exported count (the source's count still advances)	killed	hs_cache/source_cell_metrics_port
+R2-RS-09	src/feature/stats/rephist.c:1731	0020	source cells: drop the NULL chan condition	killed	hs_cache/source_cell_metrics_port
+R2-FT-07	src/feature/relay/relay_metrics.c:1612	0021	fetch targets: MetricsPort gates only the exported count (hash and table kept)	killed	hs_cache/hsdir_fetch_target_metrics_port
+R2-NS-04	src/core/or/dos.c:846	0014	new second: half of the new budget caps the light bytes in the odds	killed	dos/hsdir_fetch_shedding_edges
+R2-NS-11	src/core/or/dos.c:849	0014	new second: over budget only at asked > budget + 1	killed	dos/hsdir_fetch_shedding_edges
+R2-TY-01	src/feature/relay/relay_metrics.c:266	0006	type: relay_hsdir_fetch_total exported as a gauge	killed	hs_cache/metric_types
+R2-TY-02	src/feature/relay/relay_metrics.c:273	0006	type: relay_hsdir_upload_total exported as a gauge	killed	hs_cache/metric_types
+R2-TY-03	src/feature/relay/relay_metrics.c:287	0007	type: relay_begindir_response_total exported as a gauge	killed	hs_cache/metric_types
+R2-TY-04	src/feature/relay/relay_metrics.c:294	0008	type: relay_begindir_connections exported as a counter	killed	hs_cache/metric_types
+R2-DT-03	src/feature/relay/relay_metrics.c:532	0010	dos type: misspell hsdir_req_reused	killed	hs_cache/hsdir_reuse_and_prev_hop_counters
+R2-DT-04	src/feature/relay/relay_metrics.c:532	0010	dos type: hsdir_req_reused exports the reused-circuit count	killed	hs_cache/hsdir_reuse_and_prev_hop_counters
+R2-DT-06	src/feature/relay/relay_metrics.c:534	0010	dos type: misspell hsdir_unknown_prev_hop	killed	hs_cache/hsdir_reuse_and_prev_hop_counters
+R2-DT-07	src/feature/relay/relay_metrics.c:535	0010	dos type: hsdir_unknown_prev_hop exports the descriptor-only count	killed	hs_cache/hsdir_reuse_and_prev_hop_counters
+R2-DT-08	src/feature/relay/relay_metrics.c:538	0012	dos type: misspell begindir_over_max	killed	dos/begindir_max_streams
+R2-DT-09	src/feature/relay/relay_metrics.c:538	0012	dos type: begindir_over_max exports the over-stream-rate count	killed	dos/begindir_max_streams
+R2-FA-25	src/core/or/dos.c:908	0014	fetch allowed: within budget up to budget + 1	killed	dos/hsdir_fetch_shedding_edges
+R2-FA-26	src/core/or/dos.c:913	0014	fetch allowed: ceiling one byte higher	killed	dos/hsdir_fetch_shedding_edges
+R2-FA-27	src/core/or/dos.c:917	0014	fetch allowed: answer-first share one byte larger	killed	dos/hsdir_fetch_shedding_edges
+R2-FA-30	src/core/or/dos.c:908	0014	fetch allowed: within-budget check against the live (next second's) budget	killed	dos/hsdir_fetch_shedding_edges
+R2-FA-31	src/core/or/dos.c:913	0014	fetch allowed: ceiling from the live (next second's) budget	killed	dos/hsdir_fetch_shedding_edges
+R2-FA-32	src/core/or/dos.c:917	0014	fetch allowed: answer-first share from the live (next second's) budget	killed	dos/hsdir_fetch_shedding_edges
+R3-NF-01	src/feature/relay/relay_metrics.c:1642	0021	lookup label: not_found spelled as the old "missing"	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_long_keys,hs_cache/hsdir_fetch_target_metrics_port
+R3-NF-02	src/feature/relay/relay_metrics.c:1642	0021	lookup label: found and not_found swapped	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key,hs_cache/hsdir_fetch_target_long_keys,hs_cache/hsdir_fetch_target_metrics_port
+R2-FA-33	src/core/or/dos.c:905	0014	fetch allowed: budget counts bytes answered, not asked (the .6 description)	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding
+R2-FA-34	src/core/or/dos.c:906	0014	fetch allowed: light bytes counted when answered, not when asked	killed	dos/hsdir_fetch_shedding_edges
+R2-LD-01	src/core/or/dos.c:832	0014	lottery draws below 500000	killed	dos/hsdir_fetch_shedding_edges
+R2-LD-02	src/core/or/dos.c:832	0014	lottery draws below 2000000	killed	dos/hsdir_fetch_shedding_edges
+S2-N-FT-08	src/feature/relay/relay_metrics.c:1620	0021	probe window doesn't wrap at the end of the table	killed	hs_cache/hsdir_fetch_target_metrics,hs_cache/hsdir_fetch_target_probing
+R2-FA-10	src/core/or/dos.c:915	0014	fetch allowed: first over-budget second goes to the lottery too	killed	dos/hsdir_fetch_shedding,dos/hsdir_fetch_shedding_edges,hs_cache/hsdir_desc_fetch_shedding

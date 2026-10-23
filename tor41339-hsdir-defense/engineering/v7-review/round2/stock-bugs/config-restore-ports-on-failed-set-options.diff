@@ -1,0 +1,18 @@
+--- a/src/app/config/config.c
++++ b/src/app/config/config.c
+@@ -991,6 +991,15 @@
+   if (options_act_reversible(old_options, msg)<0) {
+     tor_assert(*msg);
+     global_options = old_options;
++    /* options_start_listener_transaction() replaced the port list with the
++     * one we just refused: put ours back, or retry_all_listeners() reopens
++     * the refused listeners. */
++    if (old_options) {
++      int n_ports;
++      char *ignored = NULL;
++      parse_ports(old_options, 0, &ignored, &n_ports, NULL);
++      tor_free(ignored);
++    }
+     return -1;
+   }
+   if (subsystems_set_options(get_options_mgr(), new_val) < 0 ||

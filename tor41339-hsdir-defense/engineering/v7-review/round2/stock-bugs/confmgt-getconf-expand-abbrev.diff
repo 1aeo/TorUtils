@@ -1,0 +1,10 @@
+--- a/src/lib/confmgt/confmgt.c
++++ b/src/lib/confmgt/confmgt.c
+@@ -850,6 +850,7 @@
+ 
+   CONFIG_CHECK(mgr, options);
+ 
++  key = config_expand_abbrev(mgr, key, 0, 0);
+   var = config_mgr_find_var(mgr, key, true, NULL);
+   if (!var) {
+     log_warn(LD_CONFIG, "Unknown option '%s'.  Failing.", key);

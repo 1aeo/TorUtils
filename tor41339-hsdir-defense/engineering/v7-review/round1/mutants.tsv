@@ -1,0 +1,341 @@
+file:line	commit	id	mutant	result	killing test	note
+src/core/mainloop/connection.c:3662	0019	CONN-01	delete the response-byte hook	survived; killed by new test	hs_cache/dir_response_bytes_on_read	
+src/core/mainloop/connection.c:3662	0019	CONN-02	count num_read instead of num_written	survived; killed by new test	hs_cache/dir_response_bytes_on_read	
+src/core/mainloop/connection.c:3660	0019	CONN-03	shift the written-bytes edge: > 0 -> > 1	survived; killed by new test	hs_cache/dir_response_bytes_on_read	
+src/core/mainloop/connection.c:3660	0019	CONN-04	shift the written-bytes edge: > 0 -> >= 0	build-fail	(compiler) error: comparison of unsigned expression in ‘>= 0’ is always true [-Werror=type-limits]	
+src/core/or/channel.c:3005	0017	CHAN-01	negate the client check	killed	dos/known_relay,dos/create_cell_prev_hop,hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics,hs_cache/hsdir_reuse_and_prev_hop_defenses,hs_cache/hsdir_desc_fetch_over_rate,hs_cache/hsdir_desc_fetch_shedding	
+src/core/or/channel.c:3006	0017	CHAN-02	client -> unknown_relay	killed	dos/known_relay,dos/create_cell_prev_hop,hs_cache/hsdir_get_post_metrics	
+src/core/or/channel.c:3007	0017	CHAN-03	negate the known-relay check	killed	dos/known_relay,dos/create_cell_prev_hop,hs_cache/dir_request_response_metrics	
+src/core/or/channel.c:3008	0017	CHAN-04	known_relay -> unknown_relay	killed	dos/known_relay	
+src/core/or/channel.c:3009	0017	CHAN-05	unknown_relay -> unset	killed	dos/known_relay,dos/create_cell_prev_hop,hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics	
+src/core/or/channel.c:3005	0017	CHAN-06	check known relay before client (swap the two tests)	killed	dos/known_relay	
+src/core/or/command.c:247	0017	CMD-01	constant previous hop	killed	dos/create_cell_prev_hop	
+src/core/or/command.c:325	0017	CMD-06	don't store the previous hop on the circuit	killed	dos/create_cell_prev_hop	
+src/core/or/connection_edge.c:4240	0017	EDGE-01	delete the BEGIN_DIR cell count	killed	dos/begindir_refused	
+src/core/or/connection_edge.c:4240	0017	EDGE-02	count BEGIN_DIR cells only after stock tor's refusals	killed	dos/begindir_refused	
+src/core/or/connection_edge.c:4330	0020	EDGE-03	don't pass the stream	killed	dos/begindir_refused	
+src/core/or/connection_edge.c:4716	0017	EDGE-06	don't copy prev_hop to the dirconn	killed	dos/begindir_refused	
+src/core/or/connection_edge.c:4717	0020	EDGE-07	don't copy begindir_over_max from the edge to the dirconn	killed	dos/begindir_refused	
+src/core/or/connection_edge.c:4717	0020	EDGE-08	always mark the dirconn over the limit	killed	dos/begindir_refused	
+src/core/or/dos.c:977	0018	DOS-01	delete the over-rate count	killed	dos/cc_over_rate	
+src/core/or/dos.c:975	0018	DOS-02	count every client CREATE cell as over the rate	killed	dos/cc_over_rate	
+src/core/or/dos.c:683	0018	DOS-03	getter returns 0	killed	dos/cc_over_rate	
+src/core/or/dos.c:1107	0024	DOS-04	never refill the BEGIN_DIR bucket	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1109	0024	DOS-05	bucket check > 0 -> >= 0	build-fail	(compiler) error: comparison of unsigned expression in ‘>= 0’ is always true [-Werror=type-limits]	
+src/core/or/dos.c:1109	0024	DOS-06	bucket check > 0 -> > 1	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1110	0024	DOS-07	never take a token	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1110	0024	DOS-08	take two tokens per cell	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1112	0024	DOS-09	delete the over-stream-rate count	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1112	0024	DOS-10	count over-rate cells as over-max	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1107	0024	DOS-11	refill the RELAY_BEGIN bucket instead	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1109	0024	DOS-12	read the RELAY_BEGIN bucket instead	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1110	0024	DOS-13	take tokens from the RELAY_BEGIN bucket instead	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1126	0024	DOS-14	delete the BEGIN_DIR rate check	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1126	0024	DOS-15	check the rate only for cells over DoSBeginDirMaxStreams	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1126	0024	DOS-16	count only while DoSStreamCreationEnabled is set	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1141	0020	DOS-17	remove the NULL guard	killed	dos/begindir_max_streams	
+src/core/or/dos.c:1142	0020	DOS-18	never mark the stream	killed	dos/begindir_max_streams,dos/begindir_refused	
+src/core/or/dos.c:1138	0020	DOS-19	mark the stream before the limit check	killed	dos/begindir_max_streams,dos/begindir_refused	
+src/core/or/dos.c:1154	0024	DOS-20	don't initialize the BEGIN_DIR bucket	killed	dos/begindir_max_streams,dos/begindir_refused,dos/begindir_over_stream_rate	
+src/core/or/dos.c:1155	0024	DOS-21	BEGIN_DIR bucket burst = rate	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1154	0024	DOS-22	swap the BEGIN_DIR bucket rate and burst	killed	dos/begindir_over_stream_rate	
+src/core/or/dos.c:1156	0024	DOS-23	initialize the BEGIN_DIR bucket at time 0	equivalent		The bucket starts full and a refill can't take it past the burst; every use refills first. A start time of 0 only lengthens the first refill.
+src/core/or/dos.c:1154	0024	DOS-24	initialize the RELAY_BEGIN bucket twice instead	killed	dos/begindir_max_streams,dos/begindir_refused,dos/begindir_over_stream_rate	
+src/core/or/dos.h:102	0023	DOSH-01	alias descriptor_only to unknown_prev_hop	killed	hs_cache/hsdir_reuse_and_prev_hop_counters	
+src/core/or/dos.h:108	0024	DOSH-02	alias over_stream_rate to begindir_over_max	survived; killed by new test	dos/begindir_over_stream_rate	
+src/core/or/dos.h:60	0021	DOSH-04	remove the client entry's source_minute	build-fail	(compiler) error: ‘dos_client_stats_t’ has no member named ‘source_minute’	
+src/core/or/channel.h:414	0021	CHH-03	remove the channel's source_minute	build-fail	(compiler) error: ‘channel_t’ has no member named ‘source_minute’	
+src/core/or/or_circuit_st.h:79	0017	ST-01	or_circuit_t.prev_hop one bit short	build-fail	(compiler) error: conversion from ‘channel_prev_hop_t’ to ‘unsigned char:1’ changes value from ‘2’ to ‘0’ [-Werror=overflow]	
+src/core/or/or_circuit_st.h:125	0024	ST-03	remove or_circuit_t.begindir_limiter	build-fail	(compiler) error: ‘or_circuit_t’ has no member named ‘begindir_limiter’	
+src/feature/dircommon/dir_connection_st.h:36	0017	ST-04	dir_connection_t.prev_hop one bit short	killed	dos/begindir_refused,hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics	
+src/feature/dircommon/dir_connection_st.h:39	0019	ST-05	dir_connection_t.request_type one bit short	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircommon/dir_connection_st.h:42	0020	ST-06	remove dir_connection_t.begindir_over_max	build-fail	(compiler) error: ‘dir_connection_t’ has no member named ‘begindir_over_max’	
+src/core/or/edge_connection_st.h:75	0020	ST-07	remove edge_connection_t.begindir_over_max	build-fail	(compiler) error: ‘edge_connection_t’ has no member named ‘begindir_over_max’	
+src/feature/dircache/dircache.c:379	0019	URL-00	mistype /tor/ (frontpage)	survived; killed by new test	hs_cache/dir_request_url_table_types	
+src/feature/dircache/dircache.c:381	0017	URL-01	mistype /tor/status-vote/current/consensus	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:383	0019	URL-02	mistype /tor/status-vote/current/	survived; killed by new test	hs_cache/dir_request_url_table_types	
+src/feature/dircache/dircache.c:385	0019	URL-03	mistype /tor/status-vote/next/bandwidth	survived; killed by new test	hs_cache/dir_request_url_table_types	
+src/feature/dircache/dircache.c:387	0019	URL-04	mistype /tor/status-vote/next/	survived; killed by new test	hs_cache/dir_request_url_table_types	
+src/feature/dircache/dircache.c:388	0017	URL-05	mistype /tor/micro/d/	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	
+src/feature/dircache/dircache.c:389	0017	URL-06	mistype /tor/server/	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:390	0017	URL-07	mistype /tor/extra/	survived; killed by new test	hs_cache/dir_request_url_table_types	
+src/feature/dircache/dircache.c:391	0019	URL-08	mistype /tor/keys/	survived; killed by new test	hs_cache/dir_request_url_table_types	
+src/feature/dircache/dircache.c:392	0017	URL-09	mistype /tor/hs/3/	killed	hs_cache/hsdir_get_post_metrics	
+src/feature/dircache/dircache.c:393	0019	URL-10	mistype /tor/robots.txt	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:395	0019	URL-11	mistype /tor/networkstatus-bridges	survived; killed by new test	hs_cache/dir_request_url_table_types	
+src/feature/dircache/dircache.c:396	0019	URL-12	mistype the NULL sentinel	equivalent		The lookup loop stops at the NULL sentinel: its type is never read.
+src/feature/dircache/dircache.c:423	0017	DC-01	GET parse failure: delete the count	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:423	0017	DC-02	GET parse failure: mistype	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:479	0017	DC-03	GET match: delete the count	killed	hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	
+src/feature/dircache/dircache.c:479	0017	DC-04	GET match: wrong table index	killed	hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	
+src/feature/dircache/dircache.c:486	0019	DC-05	GET 404: delete the count	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:486	0019	DC-06	GET 404: mistype	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:1388	0023	DC-07	negate the consensus lookup	killed	hs_cache/hsdir_reuse_and_prev_hop_counters	
+src/feature/dircache/dircache.c:1389	0023	DC-08	swap descriptor_only and unknown	killed	hs_cache/hsdir_reuse_and_prev_hop_counters	
+src/feature/dircache/dircache.c:1389	0023	DC-09	never descriptor_only	killed	hs_cache/hsdir_reuse_and_prev_hop_counters	
+src/feature/dircache/dircache.c:1389	0023	DC-10	always descriptor_only	killed	hs_cache/hsdir_reuse_and_prev_hop_counters	
+src/feature/dircache/dircache.c:1389	0023	DC-11	delete the unknown/descriptor_only count	killed	hs_cache/hsdir_reuse_and_prev_hop_counters	
+src/feature/dircache/dircache.c:1445	0017	DC-12	HS GET not anonymous: delete the count	killed	hs_cache/hsdir_get_post_metrics	
+src/feature/dircache/dircache.c:1445	0017	DC-13	HS GET not anonymous: counted as a POST	killed	hs_cache/hsdir_get_post_metrics	
+src/feature/dircache/dircache.c:1707	0019	DC-20	POST to a non-public relay: delete the count	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:1707	0019	DC-21	POST to a non-public relay: mistype	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:1713	0017	DC-22	POST parse failure: delete the count	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:1713	0017	DC-23	POST parse failure: mistype	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:1723	0017	DC-24	HS POST: delete the count	killed	hs_cache/hsdir_get_post_metrics	
+src/feature/dircache/dircache.c:1723	0017	DC-25	HS POST: mistype	killed	hs_cache/hsdir_get_post_metrics	
+src/feature/dircache/dircache.c:1725	0017	DC-26	HS POST not anonymous: delete the count	killed	hs_cache/hsdir_get_post_metrics	
+src/feature/dircache/dircache.c:1725	0017	DC-27	HS POST not anonymous: counted as a GET	killed	hs_cache/hsdir_get_post_metrics	
+src/feature/dircache/dircache.c:1745	0019	DC-28	other POST: delete the count	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:1745	0019	DC-29	other POST: mistype	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:1887	0017	DC-30	oversized request: delete the count	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:1887	0017	DC-31	oversized request: mistype	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:1909	0017	DC-32	unknown method: delete the count	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircache/dircache.c:1909	0017	DC-33	unknown method: mistype	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircommon/directory.c:542	0017	DIR-01	count closing client dirconns too	equivalent		Now unobservable: a client-side connection's prev_hop is always 0 (only connection_exit_connect_dir() sets it), and the unset column is no longer exported, since tor_relay_dir_requests_total is gone.
+src/feature/dircommon/directory.c:542	0017	DIR-02	drop the linked check	equivalent		relay_note_dir_request() itself ignores a connection that isn't linked.
+src/feature/dircommon/directory.c:543	0019	DIR-03	default type unparsed -> no_request	killed	hs_cache/dir_request_response_metrics	
+src/feature/dircommon/directory.c:544	0019	DIR-04	drop the COMMAND_WAIT state check	equivalent		Every path that takes a server connection out of COMMAND_WAIT types its request first, so an untyped one is always in COMMAND_WAIT: the state test is redundant.
+src/feature/dircommon/directory.c:544	0019	DIR-05	negate the state check	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	
+src/feature/dircommon/directory.c:545	0019	DIR-06	negate the empty-inbuf check	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	
+src/feature/dircommon/directory.c:546	0019	DIR-07	no_request -> unparsed	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	
+src/feature/dircommon/directory.c:547	0017	DIR-08	delete the close-time count	build-fail	(compiler) error: variable ‘type’ set but not used [-Werror=unused-but-set-variable]	
+src/feature/relay/relay_metrics.h:218	0017	RMH-01	swap DIR_REQUEST_HS_GET and DIR_REQUEST_HS_POST in the enum	equivalent		Enum order: every use is by name.
+src/feature/relay/relay_metrics.h:75	0017	RMH-02	swap two metric keys (CREATE_CELLS <-> BEGINDIR_CELLS)	killed	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.h:178	0017	RMH-03	alias circuit_dead to single_hop (GET)	build-fail	(compiler) error: initialized field overwritten [-Werror=override-init]	
+src/feature/relay/relay_metrics.c:293	0017	RM-TYPE-0	export relay_create_cell_total as a gauge	survived; killed by new test	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:294	0017	RM-NAME-0	misspell the family name relay_create_cell_total	killed	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:300	0017	RM-TYPE-1	export relay_begindir_cell_total as a gauge	survived; killed by new test	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:301	0017	RM-NAME-1	misspell the family name relay_begindir_cell_total	killed	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:307	0017	RM-TYPE-3	export relay_begindir_requests_total as a gauge	survived; killed by new test	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:308	0017	RM-NAME-3	misspell the family name relay_begindir_requests_total	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:314	0019	RM-TYPE-4	export relay_begindir_response_bytes_total as a gauge	survived; killed by new test	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:315	0019	RM-NAME-4	misspell the family name relay_begindir_response_bytes_total	killed	hs_cache/prev_hop_metric_series,hs_cache/dir_response_bytes_metric	
+src/feature/relay/relay_metrics.c:322	0020	RM-TYPE-5	export relay_begindir_over_max_requests_total as a gauge	survived; killed by new test	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:323	0020	RM-NAME-5	misspell the family name relay_begindir_over_max_requests_total	killed	hs_cache/prev_hop_metric_series,hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:330	0021	RM-TYPE-6	export relay_create_cell_source_total as a gauge	survived; killed by new test	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:331	0021	RM-NAME-6	misspell the family name relay_create_cell_source_total	killed	hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics	
+src/feature/relay/relay_metrics.c:338	0021	RM-TYPE-7	export relay_begindir_cell_source_total as a gauge	survived; killed by new test	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:339	0021	RM-NAME-7	misspell the family name relay_begindir_cell_source_total	killed	hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics	
+src/feature/relay/relay_metrics.c:346	0022	RM-TYPE-8	export relay_hsdir_fetch_target_total as a gauge	survived; killed by new test	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:347	0022	RM-NAME-8	misspell the family name relay_hsdir_fetch_target_total	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:292	0017	RM-KEY-0	wrong .key (field is unused)	equivalent		relay_metrics_entry_t.key is never read: fills index base_metrics[] by key themselves.
+src/feature/relay/relay_metrics.c:296	0017	RM-FILL-0	swap two .fill_fn	equivalent		Each fill function fills its own family through base_metrics[KEY]: which entry calls it doesn't matter.
+src/feature/relay/relay_metrics.c:296	0017	RM-FILL-1	fill the BEGIN_DIR family twice, CREATE never	build-fail	(compiler) error: ‘fill_create_cell_values’ defined but not used [-Werror=unused-function]	
+src/feature/relay/relay_metrics.c:520	0018	RM-DOS-0	circuit_over_rate exports the rejected count	survived; killed by new test	dos/cc_over_rate	
+src/feature/relay/relay_metrics.c:520	0018	RM-DOS-1	misspell circuit_over_rate	killed	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:537	0023	RM-DOS-2	descriptor_only exports unknown	killed	hs_cache/hsdir_reuse_and_prev_hop_counters	
+src/feature/relay/relay_metrics.c:536	0023	RM-DOS-3	misspell hsdir_descriptor_only_prev_hop	killed	hs_cache/hsdir_reuse_and_prev_hop_counters	
+src/feature/relay/relay_metrics.c:540	0024	RM-DOS-4	begindir_over_stream_rate exports over_max	survived; killed by new test	dos/begindir_over_stream_rate	
+src/feature/relay/relay_metrics.c:539	0024	RM-DOS-5	misspell begindir_over_stream_rate	survived; killed by new test	dos/begindir_over_stream_rate	
+src/feature/relay/relay_metrics.c:1364	0017	RM-ACT-0	misspell the GET circuit_dead action	killed	hs_cache/hsdir_get_post_metrics	
+src/feature/relay/relay_metrics.c:1389	0017	RM-ACT-1	misspell the POST circuit_dead action	killed	hs_cache/hsdir_get_post_metrics	
+src/feature/relay/relay_metrics.c:1414	0017	RM-NA-1	single_hop iff not a client	survived; killed by new test	hs_cache/hsdir_not_anonymous_actions	
+src/feature/relay/relay_metrics.c:1416	0017	RM-NA-2	count DirPort connections	killed	hs_cache/hsdir_get_post_metrics	
+src/feature/relay/relay_metrics.c:1418	0017	RM-NA-3	swap GET and POST	survived; killed by new test	hs_cache/hsdir_not_anonymous_actions	
+src/feature/relay/relay_metrics.c:1419	0017	RM-NA-4	POST: swap single_hop and circuit_dead	survived; killed by new test	hs_cache/hsdir_not_anonymous_actions	
+src/feature/relay/relay_metrics.c:1422	0017	RM-NA-5	GET: swap single_hop and circuit_dead	survived; killed by new test	hs_cache/hsdir_not_anonymous_actions	
+src/feature/relay/relay_metrics.c:1437	0017	RM-PH-1	swap the client and known_relay labels	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics,hs_cache/source_cell_metrics	
+src/feature/relay/relay_metrics.c:1439	0017	RM-PH-2	misspell unknown_relay	killed	hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics,hs_cache/source_cell_metrics	
+src/feature/relay/relay_metrics.c:1447	0017	RM-TN-1	swap the hs_get and hs_post labels	killed	hs_cache/hsdir_get_post_metrics	
+src/feature/relay/relay_metrics.c:1449	0017	RM-TN-2	swap consensus and microdesc labels	killed	hs_cache/dir_response_bytes_metric,hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:1451	0017	RM-TN-3	swap descriptor and other_get labels	killed	hs_cache/dir_request_response_metrics	
+src/feature/relay/relay_metrics.c:1453	0019	RM-TN-4	swap other_post and unparsed labels	killed	hs_cache/dir_request_response_metrics	
+src/feature/relay/relay_metrics.c:1455	0017	RM-TN-5	misspell no_request	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:1468	0019	RM-REQ-1	count DirPort requests	killed	hs_cache/dir_request_response_metrics	
+src/feature/relay/relay_metrics.c:1468	0019	RM-REQ-2	count a connection's request more than once	killed	hs_cache/dir_request_response_metrics	
+src/feature/relay/relay_metrics.c:1470	0019	RM-REQ-3	store type, not type+1	killed	hs_cache/dir_response_bytes_metric	
+src/feature/relay/relay_metrics.c:1470	0019	RM-REQ-4	never mark the request counted	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_response_bytes_metric	
+src/feature/relay/relay_metrics.c:1471	0017	RM-REQ-5	count every request as unset previous hop	killed	hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:1471	0017	RM-REQ-6	delete the request count	killed	hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:1472	0020	RM-REQ-7	negate the over-max check	killed	hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:1472	0020	RM-REQ-8	count every request as over max	killed	hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:1473	0020	RM-REQ-9	delete the over-max request count	killed	hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:1473	0020	RM-REQ-10	over-max request counted under one type	killed	hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:1484	0020	RM-OM-2	over-max family one type short	killed	hs_cache/prev_hop_metric_series,hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:1482	0020	RM-OM-3	over-max exported under the response-bytes family	killed	hs_cache/prev_hop_metric_series,hs_cache/dir_response_bytes_metric,hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:1501	0019	RM-RB-1	count DirPort response bytes	killed	hs_cache/dir_response_bytes_metric	
+src/feature/relay/relay_metrics.c:1501	0019	RM-RB-2	count bytes of untyped connections	equivalent		Unreachable outside tests: every request is typed before any response is written. The series' direct test does call it untyped, which then writes dir_response_bytes[-1] out of bounds, which no metric shows (a -fsanitize=bounds build reports it).
+src/feature/relay/relay_metrics.c:1503	0019	RM-RB-3	off-by-one type index	killed	hs_cache/dir_response_bytes_metric	
+src/feature/relay/relay_metrics.c:1503	0019	RM-RB-4	count calls, not bytes	build-fail	(compiler) error: unused parameter ‘n’ [-Werror=unused-parameter]	
+src/feature/relay/relay_metrics.c:1503	0019	RM-RB-5	assign instead of add	killed	hs_cache/dir_response_bytes_metric	
+src/feature/relay/relay_metrics.c:1513	0019	RM-RBF-2	response-bytes family one type short	killed	hs_cache/prev_hop_metric_series	
+src/feature/relay/relay_metrics.c:1511	0019	RM-RBF-3	response bytes exported under the over-max family	killed	hs_cache/prev_hop_metric_series,hs_cache/dir_response_bytes_metric	
+src/feature/relay/relay_metrics.c:1562	0021	RM-SC-6	CREATE source family exports BEGIN_DIR values	killed	hs_cache/source_cell_metrics	
+src/feature/relay/relay_metrics.c:1569	0021	RM-SC-7	BEGIN_DIR source family exports CREATE values	survived; killed by new test	hs_cache/source_cell_minutes	
+src/feature/relay/relay_metrics.c:1584	0022	RM-FT-01	4095 slots	survived; killed by new test	hs_cache/hsdir_fetch_target_probing	
+src/feature/relay/relay_metrics.c:1585	0022	RM-FT-02	no probing (1 probe)	survived; killed by new test	hs_cache/hsdir_fetch_target_probing	
+src/feature/relay/relay_metrics.c:1585	0022	RM-FT-03	15 probes	survived; killed by new test	hs_cache/hsdir_fetch_target_probing	
+src/feature/relay/relay_metrics.c:1585	0022	RM-FT-04	17 probes	survived; killed by new test	hs_cache/hsdir_fetch_target_probing	
+src/feature/relay/relay_metrics.c:1602	0022	RM-FT-05	61-second minutes	survived; killed by new test	hs_cache/hsdir_fetch_target_probing	
+src/feature/relay/relay_metrics.c:1602	0022	RM-FT-06	59-second minutes	survived; killed by new test	hs_cache/hsdir_fetch_target_probing	
+src/feature/relay/relay_metrics.c:1606	0022	RM-FT-08	bridges count fetch targets	killed	hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1608	0022	RM-FT-09	negate the new-minute check	killed	hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1609	0022	RM-FT-10	don't clear the table at a new minute	killed	hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1610	0022	RM-FT-11	don't remember the minute	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1614	0022	RM-FT-13	no probing (always the home slot)	survived; killed by new test	hs_cache/hsdir_fetch_target_probing	
+src/feature/relay/relay_metrics.c:1614	0022	RM-FT-14	probe from the next slot	equivalent		Starting every probe one slot later relabels all slots alike: which keys share a probe window is unchanged.
+src/feature/relay/relay_metrics.c:1615	0022	RM-FT-15	negate the empty-slot check	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1616	0022	RM-FT-16	don't store the key hash	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1617	0022	RM-FT-17	don't mark the slot used	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1618	0022	RM-FT-18	no break after insert	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1620	0022	RM-FT-19	negate the key comparison	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1621	0022	RM-FT-20	remove the n saturation	equivalent		Unreachable: needs 2^32 fetches of one descriptor in a minute (72 million a second).
+src/feature/relay/relay_metrics.c:1622	0022	RM-FT-21	don't count repeats	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1623	0022	RM-FT-22	don't use the slot's count	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1624	0022	RM-FT-23	no break after match	killed	hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1634	0022	RM-FT-26	swap the lookup labels	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1604	0022	RM-FT-30	a key that doesn't fit is the 0th	equivalent		A key that finds no slot counts as n=0 instead of 1; nth_band_of(0) is NTH_BAND_1 too.
+src/feature/relay/relay_metrics.c:1604	0022	RM-FT-31	a key that doesn't fit is a repeat	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/stats/rephist.c:1709	0021	RH-21	key relays by address, clients by channel	killed	hs_cache/dir_request_response_metrics,hs_cache/source_cell_metrics,hs_cache/hsdir_reuse_and_prev_hop_defenses,hs_cache/hsdir_desc_fetch_over_rate,hs_cache/hsdir_desc_fetch_shedding	
+src/feature/stats/rephist.c:1709	0021	RH-22	key relays by address too	build-fail	(compiler) error: unused parameter ‘prev_hop’ [-Werror=unused-parameter]	
+src/feature/stats/rephist.c:1710	0021	RH-23	negate the address lookup	killed	hs_cache/source_cell_metrics	
+src/feature/stats/rephist.c:1711	0021	RH-24	look up the wrong geoip action	killed	hs_cache/source_cell_metrics	
+src/feature/stats/rephist.c:1712	0021	RH-25	never key clients by address	killed	hs_cache/source_cell_metrics	
+src/feature/stats/rephist.c:1725	0021	RH-26	61-second minutes	survived; killed by new test	hs_cache/source_cell_minutes	
+src/feature/stats/rephist.c:1725	0021	RH-27	59-second minutes	survived; killed by new test	hs_cache/source_cell_minutes	
+src/feature/stats/rephist.c:1729	0021	RH-28	bridges count source cells	killed	hs_cache/source_cell_metrics	
+src/feature/stats/rephist.c:1729	0021	RH-29	remove the NULL chan guard	killed	dos/begindir_refused,dos/begindir_nth,hs_cache/prev_hop_metric_series	
+src/feature/stats/rephist.c:1732	0021	RH-30	negate the new-minute check	killed	hs_cache/source_cell_metrics	
+src/feature/stats/rephist.c:1733	0021	RH-31	don't remember the minute	killed	hs_cache/source_cell_metrics	
+src/feature/stats/rephist.c:1734	0021	RH-32	don't reset the counts at a new minute	killed	hs_cache/source_cell_metrics	
+src/feature/stats/rephist.c:1734	0021	RH-33	reset only n_create at a new minute	survived; killed by new test	hs_cache/source_cell_minutes	
+src/feature/stats/rephist.c:1734	0021	RH-34	reset only n_begindir at a new minute	killed	hs_cache/source_cell_metrics	
+src/feature/stats/rephist.c:1736	0021	RH-35	swap the two counters	equivalent		Swapping which field holds which kind's count is invisible: both are zeroed together and each kind keeps its own.
+src/feature/stats/rephist.c:1736	0021	RH-36	one counter for both kinds	killed	hs_cache/source_cell_metrics	
+src/feature/stats/rephist.c:1738	0021	RH-38	never count the source's cells	killed	hs_cache/source_cell_metrics	
+src/feature/stats/rephist.h:76	0017	RHH-01	band edge 1: <= -> <	killed	dos/begindir_refused,dos/begindir_nth,hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/stats/rephist.h:78	0017	RHH-02	band edge 10 -> 9	killed	dos/begindir_nth,hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/stats/rephist.h:78	0017	RHH-03	band edge 10 -> 11	killed	dos/begindir_nth,hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/stats/rephist.h:80	0017	RHH-04	band edge 100 -> 99	killed	dos/begindir_nth,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/stats/rephist.h:80	0017	RHH-05	band edge 100 -> 101	killed	dos/begindir_nth,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/dircommon/directory.c:547	0017	DIR-08v	delete the close-time count (compiles)	killed	hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	
+src/feature/relay/relay_metrics.c:1503	0019	RM-RB-4v	count calls, not bytes (compiles)	killed	hs_cache/dir_response_bytes_metric	
+src/feature/stats/rephist.c:1709	0021	RH-22v	key relays by address too (compiles)	killed	hs_cache/dir_request_response_metrics,hs_cache/source_cell_metrics,hs_cache/hsdir_reuse_and_prev_hop_defenses,hs_cache/hsdir_desc_fetch_over_rate,hs_cache/hsdir_desc_fetch_shedding	
+src/core/mainloop/connection.c:108	0019	CONN-05	drop the relay_metrics.h include	build-fail	(compiler) error: implicit declaration of function ‘relay_note_dir_response_bytes’ [-Werror=implicit-function-declaration]	
+src/feature/dircache/dircache.c:355	0017	DC-34	remove url_table_ent_t.type	build-fail	(compiler) error: excess elements in struct initializer [-Werror]	
+src/feature/relay/relay_metrics.c:34	0022	RM-INC	drop the siphash.h include	equivalent		ext/siphash.h also arrives through lib/container/map.h; the explicit include is right but not needed to compile.
+src/feature/stats/rephist.c:81	0021	RH-43	drop the geoip_stats.h include	build-fail	(compiler) error: unknown type name ‘clientmap_entry_t’	
+src/feature/relay/relay_metrics.h:205	0017	RMH-04	alias circuit_dead to single_hop (POST)	build-fail	(compiler) error: initialized field overwritten [-Werror=override-init]	
+src/feature/relay/relay_metrics.c:1576	0022	RM-FT-32	32-bit stored key hash	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	
+src/feature/relay/relay_metrics.c:1578	0022	RM-FT-33	16-bit per-key count	build-fail	(compiler) error: comparison is always true due to limited range of data type [-Werror=type-limits]	
+src/core/or/command.c:248	0021	N-CMD-01	CREATE count without its channel (no per-source count)	survived; killed by new test	dos/create_cell_source	new at v7d
+src/core/or/command.c:248	0021	N-CMD-02	delete the CREATE count	killed	dos/create_cell_prev_hop	new at v7d
+src/core/or/command.c:248	0021	N-CMD-03	CREATE count with a constant previous hop	killed	dos/create_cell_prev_hop	new at v7d
+src/core/or/command.c:248	0021	N-CMD-04	count CREATE cells only after the drop checks	killed	dos/create_cell_prev_hop	new at v7d
+src/core/or/dos.c:958	0018	N-DOS-01	delete the untracked count	killed	dos/cc_over_rate	new at v7d
+src/core/or/dos.c:691	0018	N-DOS-02	untracked getter returns 0	killed	dos/cc_over_rate	new at v7d
+src/core/or/dos.c:948	0018	N-DOS-03	count addressless channels instead of untracked addresses	killed	dos/cc_over_rate	new at v7d
+src/core/or/dos.c:1376	0016	N-DOS-04	change the heartbeat wording	killed	dos/dir_heartbeat	new at v7d
+src/core/or/or.h:451	0017	N-ORH-01	CHANNEL_PREV_HOP_COUNT one short	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics,hs_cache/source_cell_metrics	new at v7d
+src/core/or/or.h:448	0017	N-ORH-02	swap the KNOWN_RELAY and UNKNOWN_RELAY values	equivalent		new at v7d; Value swap in an enum used only by name.
+src/core/or/source_minute_st.h:18	0021	N-SM-01	16-bit stored minute (breaks the minute reset)	killed	hs_cache/source_cell_metrics	new at v7d
+src/core/or/source_minute_st.h:20	0021	N-SM-02	8-bit per-source counts	build-fail	(compiler) error: assignment to ‘uint16_t *’ {aka ‘short unsigned int *’} from incompatible pointer type ‘uint8_t *’ {aka ‘unsigned char *’} [-Werror=incompatible-pointer-types]	new at v7d
+src/core/or/or_circuit_st.h:114	0017	N-ST-01	or_circuit_t.n_begindir one bit short	killed	dos/begindir_nth	new at v7d
+src/core/or/channel.h:14	0021	N-INC-01	drop channel.h's source_minute_st.h include	build-fail	(compiler) error: unknown type name ‘source_minute_t’	new at v7d
+src/core/or/dos.h:14	0021	N-INC-02	drop dos.h's source_minute_st.h include	build-fail	(compiler) error: unknown type name ‘source_minute_t’	new at v7d
+src/feature/relay/relay_metrics.c:27	0019	N-INC-03	drop relay_metrics.c's ctassert.h	build-fail	(compiler) error: expected ‘)’ before ‘<’ token	new at v7d
+src/feature/relay/relay_metrics.c:29	0022	N-INC-04	drop relay_metrics.c's crypto_ed25519.h	equivalent		new at v7d; crypto_ed25519.h also arrives through other headers; the explicit include is right but not needed to compile.
+src/feature/stats/rephist.c:73	0021	N-INC-05	drop rephist.c's channel.h	build-fail	(compiler) error: implicit declaration of function ‘channel_get_addr_if_possible’ [-Werror=implicit-function-declaration]	new at v7d
+src/feature/stats/rephist.c:83	0017	N-INC-06	drop rephist.c's ctassert.h	build-fail	(compiler) error: expected declaration specifiers or ‘...’ before ‘(’ token	new at v7d
+src/feature/dircache/dircache.c:1466	0022	N-DC-01	negate key_ok	killed	hs_cache/hsdir_get_post_metrics	new at v7d
+src/feature/dircache/dircache.c:1466	0022	N-DC-02	key_ok always true (count undecoded keys by their partial decode)	killed	hs_cache/hsdir_revision_counter_check,hs_cache/upload_and_download_hs_desc,hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_desc_fetch_over_rate,hs_cache/hsdir_desc_fetch_shedding	new at v7d
+src/feature/dircache/dircache.c:1467	0022	N-DC-03	pass the key whether or not it decoded	build-fail	(compiler) error: variable ‘key_ok’ set but not used [-Werror=unused-but-set-variable]	new at v7d
+src/feature/dircache/dircache.c:1467	0022	N-DC-04	never pass the key	build-fail	(compiler) error: variable ‘key_ok’ set but not used [-Werror=unused-but-set-variable]	new at v7d
+src/feature/dircache/dircache.c:1467	0022	N-DC-05	pass the key only if it didn't decode	killed	hs_cache/hsdir_get_post_metrics	new at v7d
+src/feature/dircache/dircache.c:1467	0022	N-DC-06	delete the fetch-target hook	killed	hs_cache/hsdir_get_post_metrics	new at v7d
+src/feature/dircache/dircache.c:1468	0022	N-DC-07	swap found and missing	killed	hs_cache/hsdir_get_post_metrics	new at v7d
+src/feature/dircache/dircache.c:1468	0022	N-DC-08	found: retval > 0 -> >= 0	equivalent		new at v7d; hs_cache_lookup_as_dir() sets desc_str only when it returns 1, so the condition is unchanged.
+src/feature/dircache/dircache.c:1468	0022	N-DC-09	always found	killed	hs_cache/hsdir_get_post_metrics	new at v7d
+src/feature/dircache/dircache.c:1468	0022	N-DC-10	found: drop the desc_str check	equivalent		new at v7d; hs_cache_lookup_as_dir() sets desc_str (non-NULL) whenever it returns 1, so the condition is unchanged.
+src/feature/relay/relay_metrics.c:521	0018	N-RM-UT-1	circuit_untracked exports over_rate	survived; killed by new test	dos/cc_over_rate	new at v7d
+src/feature/relay/relay_metrics.c:521	0018	N-RM-UT-2	misspell circuit_untracked	survived; killed by new test	dos/cc_over_rate	new at v7d
+src/feature/relay/relay_metrics.c:1346	0017	N-FL-01	fill_labeled_values: export unnamed elements	killed	hs_cache/prev_hop_metric_series	new at v7d
+src/feature/relay/relay_metrics.c:1347	0017	N-FL-02	fill_labeled_values: stop at the first unnamed element	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	new at v7d
+src/feature/relay/relay_metrics.c:1350	0017	N-FL-03	fill_labeled_values: always add label0	survived; killed by new test	hs_cache/metric_single_labels	new at v7d
+src/feature/relay/relay_metrics.c:1350	0017	N-FL-04	fill_labeled_values: never add label0	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1352	0017	N-FL-05	label0's value under label	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1355	0017	N-FL-06	every value is the first	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics,hs_cache/dir_response_bytes_metric,hs_cache/dir_over_max_request_metric,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/dir_server_conns_gauge,hs_cache/hsdir_reuse_and_prev_hop_defenses,hs_cache/hsdir_desc_fetch_shedding	new at v7d
+src/feature/relay/relay_metrics.c:1345	0017	N-FL-07	fill_labeled_values drops the last element	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics,hs_cache/dir_server_conns_gauge,hs_cache/hsdir_reuse_and_prev_hop_defenses,hs_cache/hsdir_desc_fetch_shedding	new at v7d
+src/feature/relay/relay_metrics.c:1350	0017	N-FL-08	fill_labeled_values: label0 after label	equivalent		new at v7d; Label order within a series: Prometheus label sets are unordered.
+src/feature/relay/relay_metrics.c:1377	0017	N-FC-01	hsdir_get_total gets a spurious label0	survived; killed by new test	hs_cache/metric_single_labels	new at v7d
+src/feature/relay/relay_metrics.c:1379	0017	N-FC-02	hsdir_get_total drops its last action	killed	hs_cache/hsdir_reuse_and_prev_hop_defenses,hs_cache/hsdir_desc_fetch_shedding	new at v7d
+src/feature/relay/relay_metrics.c:1404	0017	N-FC-03	hsdir_post_total drops its last action	killed	hs_cache/hsdir_reuse_and_prev_hop_defenses	new at v7d
+src/feature/relay/relay_metrics.c:1483	0020	N-FC-04	over-max family gets a spurious label0	survived; killed by new test	hs_cache/metric_single_labels	new at v7d
+src/feature/relay/relay_metrics.c:1512	0019	N-FC-05	response-bytes family gets a spurious label0	survived; killed by new test	hs_cache/metric_single_labels	new at v7d
+src/feature/relay/relay_metrics.c:1520	0017	N-FC-06	begindir_requests skips hs_get	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series	new at v7d
+src/feature/relay/relay_metrics.c:1522	0017	N-FC-07	begindir_requests: every type labeled hs_get	killed	hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	new at v7d
+src/feature/relay/relay_metrics.c:1523	0017	N-FC-08	begindir_requests: every type's values are hs_get's	killed	hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	new at v7d
+src/feature/relay/relay_metrics.c:1524	0017	N-FC-09	begindir_requests drops unknown_relay	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/dir_request_response_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1522	0017	N-FC-10	begindir_requests: swap the label keys	killed	hs_cache/hsdir_get_post_metrics,hs_cache/dir_request_response_metrics,hs_cache/dir_over_max_request_metric	new at v7d
+src/feature/relay/relay_metrics.c:1533	0017	N-FC-11	create_cell_total drops unknown_relay	killed	hs_cache/prev_hop_metric_series	new at v7d
+src/feature/relay/relay_metrics.c:1532	0017	N-FC-12	create_cell_total labeled with request types	killed	hs_cache/prev_hop_metric_series	new at v7d
+src/feature/relay/relay_metrics.c:1531	0017	N-FC-13	create_cell_total gets a spurious label0	survived; killed by new test	hs_cache/metric_single_labels	new at v7d
+src/feature/relay/relay_metrics.c:1540	0017	N-FC-14	begindir_cell_total exports unset	killed	hs_cache/prev_hop_metric_series	new at v7d
+src/feature/relay/relay_metrics.c:1543	0017	N-FC-15	begindir_cell_total: client values everywhere	survived; killed by new test	hs_cache/begindir_cell_bands	new at v7d
+src/feature/relay/relay_metrics.c:1543	0017	N-FC-16	begindir_cell_total drops 1001_plus	killed	hs_cache/prev_hop_metric_series	new at v7d
+src/feature/relay/relay_metrics.c:1542	0017	N-FC-17	begindir_cell_total: every prev_hop labeled client	killed	hs_cache/prev_hop_metric_series	new at v7d
+src/feature/relay/relay_metrics.c:1551	0021	N-FC-18	source families export unset	killed	hs_cache/prev_hop_metric_series	new at v7d
+src/feature/relay/relay_metrics.c:1552	0021	N-FC-19	source families: every prev_hop labeled known_relay	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1554	0021	N-FC-20	source families export each other's values	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1554	0021	N-FC-21	source families: client values everywhere	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1555	0021	N-FC-22	source families drop 1001_plus	killed	hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1636	0022	N-FC-23	fetch-target family drops found	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1638	0022	N-FC-24	fetch-target family: every lookup labeled missing	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1639	0022	N-FC-25	fetch-target family: missing values everywhere	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1639	0022	N-FC-26	fetch-target family drops 1001_plus	killed	hs_cache/prev_hop_metric_series,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1659	0017	N-FC-27	dir_responses drops its last type	killed	hs_cache/dir_request_response_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1693	0017	N-FC-28	dir_server_conns drops its last state	killed	hs_cache/dir_server_conns_gauge	new at v7d
+src/feature/relay/relay_metrics.c:1658	0017	N-FC-29	dir_responses gets a spurious label0	survived; killed by new test	hs_cache/metric_single_labels	new at v7d
+src/feature/relay/relay_metrics.c:1428	0017	N-NB-01	swap the 1 and 2_10 band labels	killed	hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1430	0017	N-NB-02	swap the 11_100 and 101_1000 band labels	killed	hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1432	0017	N-NB-03	misspell 1001_plus	killed	hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1493	0019	N-CT-01	drop the request_type CTASSERT	equivalent		new at v7d; A CTASSERT has no run-time effect.
+src/feature/relay/relay_metrics.c:1493	0019	N-CT-02	tighten the request_type CTASSERT	build-fail	(compiler) error: static assertion failed: "DIR_REQUEST_TYPE_COUNT < 9"	new at v7d
+src/feature/relay/relay_metrics.c:1612	0022	N-FT-01	hash only the first half of the key	survived; killed by new test	hs_cache/hsdir_fetch_target_probing,hs_cache/hsdir_fetch_target_whole_key	new at v7d
+src/feature/relay/relay_metrics.c:1612	0022	N-FT-02	hash the key struct rather than its bytes	equivalent		new at v7d; pubkey is the struct's only member: the same 32 bytes.
+src/feature/relay/relay_metrics.c:1612	0022	N-FT-03	a NULL key hashes as 1	equivalent		new at v7d; A NULL key's hash is never used: the probe loop doesn't run.
+src/feature/relay/relay_metrics.c:1613	0022	N-FT-04	probe for a NULL key too	killed	hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1613	0022	N-FT-05	probe loop one too many	survived; killed by new test	hs_cache/hsdir_fetch_target_probing	new at v7d
+src/feature/relay/relay_metrics.c:1627	0022	N-FT-06	swap found and missing	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/relay/relay_metrics.c:1627	0022	N-FT-07	every fetch in the first band	killed	hs_cache/hsdir_get_post_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/stats/rephist.c:1684	0017	N-RH-CT1	drop the prev_hop CTASSERT	equivalent		new at v7d; A CTASSERT has no run-time effect.
+src/feature/stats/rephist.c:1685	0017	N-RH-CT2	drop the n_begindir CTASSERT	equivalent		new at v7d; A CTASSERT has no run-time effect.
+src/feature/stats/rephist.c:1685	0017	N-RH-CT3	tighten the n_begindir CTASSERT	build-fail	(compiler) error: static assertion failed: "NTH_BAND_MAX < 1001"	new at v7d
+src/feature/stats/rephist.c:1737	0021	N-RH-01	remove the per-source saturation (uint16 wraps)	survived; killed by new test	hs_cache/source_cell_saturation	new at v7d
+src/feature/stats/rephist.c:1737	0021	N-RH-02	per-source saturation one later	equivalent		new at v7d; The count stops at 1002 instead of 1001, which is the same last band.
+src/feature/stats/rephist.c:1737	0021	N-RH-03	per-source saturation one earlier	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/stats/rephist.c:1739	0021	N-RH-04	every source cell in the first band	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/stats/rephist.c:1739	0021	N-RH-05	count CREATE and BEGIN_DIR cells in each other's family	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/stats/rephist.c:1739	0021	N-RH-06	every source cell as known_relay	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/stats/rephist.c:1747	0017	N-RH-10	CREATE counted as client	killed	dos/create_cell_prev_hop,hs_cache/prev_hop_metric_series	new at v7d
+src/feature/stats/rephist.c:1747	0017	N-RH-11	delete the CREATE count	killed	dos/create_cell_prev_hop,hs_cache/prev_hop_metric_series	new at v7d
+src/feature/stats/rephist.c:1748	0021	N-RH-12	delete the CREATE source count	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/stats/rephist.c:1748	0021	N-RH-13	CREATE source count as BEGIN_DIR	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/stats/rephist.c:1748	0021	N-RH-14	CREATE source count with a constant previous hop	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/stats/rephist.c:1756	0017	N-RH-20	remove the NULL circ guard	killed	dos/begindir_nth	new at v7d
+src/feature/stats/rephist.c:1758	0017	N-RH-21	remove the n_begindir saturation (10 bits wrap)	killed	dos/begindir_nth	new at v7d
+src/feature/stats/rephist.c:1758	0017	N-RH-22	n_begindir saturation one later	killed	dos/begindir_nth	new at v7d
+src/feature/stats/rephist.c:1758	0017	N-RH-23	n_begindir saturation one earlier	killed	dos/begindir_nth	new at v7d
+src/feature/stats/rephist.c:1759	0017	N-RH-24	never count BEGIN_DIR cells on the circuit	killed	dos/begindir_refused,dos/begindir_nth,hs_cache/prev_hop_metric_series	new at v7d
+src/feature/stats/rephist.c:1760	0017	N-RH-25	per-circuit band off by one	killed	dos/begindir_refused,dos/begindir_nth,hs_cache/prev_hop_metric_series	new at v7d
+src/feature/stats/rephist.c:1760	0017	N-RH-26	every BEGIN_DIR cell as known_relay	killed	dos/begindir_refused,hs_cache/prev_hop_metric_series	new at v7d
+src/feature/stats/rephist.c:1761	0021	N-RH-27	delete the BEGIN_DIR source count	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/stats/rephist.c:1761	0021	N-RH-28	BEGIN_DIR source count as CREATE	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/stats/rephist.c:1769	0017	N-RH-30	CREATE getter returns another row	killed	dos/create_cell_prev_hop,hs_cache/prev_hop_metric_series	new at v7d
+src/feature/stats/rephist.c:1777	0017	N-RH-31	BEGIN_DIR getter ignores prev_hop	killed	dos/begindir_refused,dos/begindir_nth	new at v7d
+src/feature/stats/rephist.c:1786	0021	N-RH-32	source getter ignores begindir	survived; killed by new test	dos/create_cell_source,hs_cache/source_cell_minutes	new at v7d
+src/feature/stats/rephist.c:1786	0021	N-RH-33	source getter ignores prev_hop	killed	hs_cache/source_cell_metrics	new at v7d
+src/feature/stats/rephist.h:76	0017	N-RHH-01	band edge 1: <= -> <	killed	dos/begindir_refused,dos/begindir_nth,hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/stats/rephist.h:78	0017	N-RHH-02	band edge 10 -> 9	killed	dos/begindir_nth,hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/stats/rephist.h:78	0017	N-RHH-03	band edge 10 -> 11	killed	dos/begindir_nth,hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/stats/rephist.h:80	0017	N-RHH-04	band edge 100 -> 99	killed	dos/begindir_nth,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/stats/rephist.h:80	0017	N-RHH-05	band edge 100 -> 101	killed	dos/begindir_nth,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/stats/rephist.h:82	0017	N-RHH-06	band edge 1001: < -> <=	killed	dos/begindir_nth,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/stats/rephist.h:82	0017	N-RHH-07	band edge 1001 -> 1000	killed	dos/begindir_nth,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/stats/rephist.h:77	0017	N-RHH-08	first band returns 2_10	killed	dos/begindir_refused,dos/begindir_nth,hs_cache/hsdir_get_post_metrics,hs_cache/prev_hop_metric_series,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/stats/rephist.h:70	0017	N-RHH-09	NTH_BAND_MAX 1001 -> 1000	killed	dos/begindir_nth,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/stats/rephist.h:70	0017	N-RHH-10	NTH_BAND_MAX 1001 -> 1002	killed	dos/begindir_nth,hs_cache/source_cell_metrics,hs_cache/hsdir_fetch_target_metrics	new at v7d
+src/feature/stats/rephist.h:70	0017	N-RHH-11	NTH_BAND_MAX 1001 -> 1024	build-fail	(compiler) error: static assertion failed: "NTH_BAND_MAX < 1024"	new at v7d
+src/feature/stats/rephist.h:57	0017	N-RHH-12	swap NTH_BAND_1 and NTH_BAND_2_10 in the enum	killed	dos/begindir_nth	new at v7d
+src/feature/dircache/dircache.c:1467	0022	N-DC-03v	pass the key whether or not it decoded (compiles)	survived; killed by new test	hs_cache/hsdir_fetch_target_long_keys	new at v7d
+src/feature/dircache/dircache.c:1467	0022	N-DC-04v	never pass the key (compiles)	killed	hs_cache/hsdir_get_post_metrics	new at v7d
