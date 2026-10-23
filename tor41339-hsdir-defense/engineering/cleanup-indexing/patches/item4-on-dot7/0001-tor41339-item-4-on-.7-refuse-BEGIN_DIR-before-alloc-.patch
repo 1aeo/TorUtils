@@ -1,0 +1,232 @@
+From 78c2c4314be4f93c375d5b425b349c543017dd54 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Fri, 23 Oct 2026 08:21:23 -0700
+Subject: [PATCH] =?UTF-8?q?tor41339:=20item=204=20on=20.7=20=E2=80=94=20re?=
+ =?UTF-8?q?fuse=20BEGIN=5FDIR=20before=20alloc=20without=20losing=20counts?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Rework of the cleanup-indexing item 4 (refuse an over-limit BEGIN_DIR before
+edge_connection_new()) for the +tor41339.7 series, which instruments the
+BEGIN_DIR path. A mechanical move of the old post-allocation
+dos_should_refuse_begindir() block would silently drop two new counts; this
+keeps both, per the Directory-flood metrics agent's note:
+
+- dos_should_refuse_begindir() returns the over-max result through a
+  bool out-parameter instead of marking the stream (there is no stream yet
+  before allocation); connection_exit_begin_conn() applies it to n_stream
+  after allocation, so connection_exit_connect_dir() still copies
+  begindir_over_max onto the directory connection and the over-max requests
+  family still counts served-but-over-max streams.
+- dos_note_begindir_stream_rate() is pulled out of dos_should_refuse_begindir()
+  and called from connection_exit_begin_conn() after the hibernation check,
+  so begindir_over_stream_rate still counts only after the directory and
+  hibernation checks (its commit's contract), not before them.
+- The pre-allocation refuse is skipped while hibernating, so the hibernation
+  refusal keeps precedence (END_STREAM_REASON_HIBERNATING) and the counts are
+  byte-for-byte the .7 counts in that case.
+
+Enforcement is off in the deployment, so in production (count-only) the counts
+are identical to .7; the only divergence is that an over-limit-AND-enforced
+refused cell is no longer also counted toward begindir_over_stream_rate, which
+is more correct (it was refused for a different reason) and dormant while the
+limit is off. Updates the 0020/0024 unit tests for the new signature and the
+standalone rate-count call.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/core/or/connection_edge.c | 33 +++++++++++++++++++++++++++------
+ src/core/or/dos.c             | 19 +++++++++++--------
+ src/core/or/dos.h             |  4 ++--
+ src/test/test_dos.c           | 23 +++++++++++------------
+ 4 files changed, 51 insertions(+), 28 deletions(-)
+
+diff --git a/src/core/or/connection_edge.c b/src/core/or/connection_edge.c
+index 961fda07..66181f17 100644
+--- a/src/core/or/connection_edge.c
++++ b/src/core/or/connection_edge.c
+@@ -4178,6 +4178,9 @@ connection_exit_begin_conn(const relay_msg_t *msg, circuit_t *circ)
+   int rv;
+   uint8_t end_reason=0;
+   dos_stream_defense_type_t dos_defense_type;
++  /* For BEGIN_DIR: whether the circuit is over DoSBeginDirMaxStreams, decided
++   * before the stream is allocated and applied to it afterwards. */
++  bool begindir_over_max = false;
+ 
+   assert_circuit_ok(circ);
+   if (!CIRCUIT_IS_ORIGIN(circ)) {
+@@ -4246,6 +4249,25 @@ connection_exit_begin_conn(const relay_msg_t *msg, circuit_t *circ)
+                                     layer_hint);
+       return 0;
+     }
++    /* Refuse an over-limit BEGIN_DIR before allocating its exit and
++     * directory connections, so a flood of these over the limit costs us
++     * nothing to turn away. The over-max result is applied to the stream
++     * after it is allocated (below), and the stream-creation-rate count
++     * runs there too, after the hibernation check, where stock tor would
++     * check a RELAY_BEGIN cell.
++     *
++     * Skip this while hibernating so the hibernation refusal below keeps
++     * precedence (END_STREAM_REASON_HIBERNATING, a going-away signal, rather
++     * than our over-limit MISC); a hibernating relay is not the flood case
++     * this optimization targets, and then dos_should_refuse_begindir() is not
++     * called at all, exactly as before this change. */
++    tor_assert(or_circ);
++    if (!we_are_hibernating() &&
++        dos_should_refuse_begindir(or_circ, &begindir_over_max)) {
++      relay_send_end_cell_from_edge(msg->stream_id, circ,
++                                    END_STREAM_REASON_MISC, layer_hint);
++      return 0;
++    }
+     /* Make sure to get the 'real' address of the previous hop: the
+      * caller might want to know whether the remote IP address has changed,
+      * and we might already have corrected base_.addr[ess] for the relay's
+@@ -4327,12 +4349,11 @@ connection_exit_begin_conn(const relay_msg_t *msg, circuit_t *circ)
+   if (msg->command == RELAY_COMMAND_BEGIN_DIR) {
+     tor_addr_t tmp_addr;
+     tor_assert(or_circ);
+-    if (dos_should_refuse_begindir(or_circ, n_stream)) {
+-      relay_send_end_cell_from_edge(msg->stream_id, circ,
+-                                    END_STREAM_REASON_MISC, layer_hint);
+-      connection_free_(TO_CONN(n_stream));
+-      return 0;
+-    }
++    /* The over-limit refusal already happened, before we allocated
++     * n_stream. Apply its result to the stream now that it exists, and run
++     * the stream-creation-rate count here, after the hibernation check. */
++    n_stream->begindir_over_max = begindir_over_max;
++    dos_note_begindir_stream_rate(or_circ);
+     if (or_circ->p_chan &&
+         channel_get_addr_if_possible(or_circ->p_chan, &tmp_addr)) {
+       tor_addr_copy(&n_stream->base_.addr, &tmp_addr);
+diff --git a/src/core/or/dos.c b/src/core/or/dos.c
+index 7c210d4c..3bc104f3 100644
+--- a/src/core/or/dos.c
++++ b/src/core/or/dos.c
+@@ -1101,7 +1101,7 @@ dos_stream_new_begin_or_resolve_cell(or_circuit_t *circ)
+ /** Count a BEGIN_DIR cell on <b>circ</b> that DoSStreamCreationRate and
+  * Burst would refuse if they limited BEGIN_DIR cells as they do RELAY_BEGIN
+  * and RELAY_RESOLVE cells, whether or not DoSStreamCreationEnabled is set. */
+-static void
++void
+ dos_note_begindir_stream_rate(or_circuit_t *circ)
+ {
+   token_bucket_ctr_refill(&circ->begindir_limiter,
+@@ -1114,17 +1114,20 @@ dos_note_begindir_stream_rate(or_circuit_t *circ)
+ 
+ /** Return true iff we should refuse a BEGIN_DIR cell on <b>circ</b> because it
+  * already has DoSBeginDirMaxStreams open directory streams. We count such
+- * cells, and mark their <b>stream</b> if not NULL, even when
+- * DoSBeginDirLimitEnabled is off. */
++ * cells even when DoSBeginDirLimitEnabled is off, and set <b>over_max_out</b>
++ * (if not NULL) so the caller can mark the stream once it exists.
++ *
++ * This no longer calls dos_note_begindir_stream_rate() itself: the cleanup-
++ * indexing fix-up calls this before allocating the stream, whereas the rate
++ * count has to run after the directory and hibernation checks, so the caller
++ * does both in order (see connection_exit_begin_conn()). */
+ bool
+-dos_should_refuse_begindir(or_circuit_t *circ, edge_connection_t *stream)
++dos_should_refuse_begindir(or_circuit_t *circ, bool *over_max_out)
+ {
+   const dos_options_t *options = dos_get_options();
+   int max = options->DoSBeginDirMaxStreams;
+   int n = 0;
+ 
+-  dos_note_begindir_stream_rate(circ);
+-
+   if (!max) {
+     max = networkstatus_get_param(NULL, "DoSBeginDirMaxStreams",
+                                   DOS_BEGINDIR_MAX_STREAMS_DEFAULT,
+@@ -1138,8 +1141,8 @@ dos_should_refuse_begindir(or_circuit_t *circ, edge_connection_t *stream)
+   if (n < max)
+     return false;
+   dos_note_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX);
+-  if (stream)
+-    stream->begindir_over_max = 1;
++  if (over_max_out)
++    *over_max_out = true;
+   return dos_defense_enabled(options->DoSBeginDirLimitEnabled,
+                              "DoSBeginDirLimitEnabled");
+ }
+diff --git a/src/core/or/dos.h b/src/core/or/dos.h
+index 9f045943..9aa60eff 100644
+--- a/src/core/or/dos.h
++++ b/src/core/or/dos.h
+@@ -236,8 +236,8 @@ typedef enum dos_stream_defense_type_t {
+ dos_stream_defense_type_t dos_stream_new_begin_or_resolve_cell(
+                                                           or_circuit_t *circ);
+ void dos_stream_init_circ_tbf(or_circuit_t *circ);
+-bool dos_should_refuse_begindir(or_circuit_t *circ,
+-                                edge_connection_t *stream);
++bool dos_should_refuse_begindir(or_circuit_t *circ, bool *over_max_out);
++void dos_note_begindir_stream_rate(or_circuit_t *circ);
+ 
+ #ifdef DOS_PRIVATE
+ 
+diff --git a/src/test/test_dos.c b/src/test/test_dos.c
+index 46c68bd0..890d0055 100644
+--- a/src/test/test_dos.c
++++ b/src/test/test_dos.c
+@@ -732,7 +732,6 @@ test_dos_begindir_max_streams(void *arg)
+ {
+   or_circuit_t *circ = or_circuit_new(0, NULL);
+   dos_options_t *dos_opts = get_dos_options(get_options_mutable());
+-  edge_connection_t *stream = NULL;
+   (void) arg;
+ 
+   MOCK(networkstatus_get_latest_consensus,
+@@ -773,16 +772,18 @@ test_dos_begindir_max_streams(void *arg)
+   tt_assert(!dos_should_refuse_begindir(circ, NULL));
+   tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, 4);
+ 
+-  /* A stream is marked only when it is over the limit. */
++  /* The over-max result comes back through the out-parameter (the caller
++   * applies it to the stream once allocated). */
+   get_options_mutable()->BridgeRelay = 0;
+   dos_opts->DoSBeginDirLimitEnabled = 0;
+-  stream = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
++  bool over_max = false;
+   dos_opts->DoSBeginDirMaxStreams = 3;
+-  tt_assert(!dos_should_refuse_begindir(circ, stream));
+-  tt_assert(!stream->begindir_over_max);
++  tt_assert(!dos_should_refuse_begindir(circ, &over_max));
++  tt_assert(!over_max);
+   dos_opts->DoSBeginDirMaxStreams = 2;
+-  tt_assert(!dos_should_refuse_begindir(circ, stream));
+-  tt_assert(stream->begindir_over_max);
++  over_max = false;
++  tt_assert(!dos_should_refuse_begindir(circ, &over_max));
++  tt_assert(over_max);
+ 
+  done:
+   get_options_mutable()->BridgeRelay = 0;
+@@ -795,8 +796,6 @@ test_dos_begindir_max_streams(void *arg)
+   tor_free(dummy_ns);
+   free_streams(circ);
+   circuit_free_all();
+-  if (stream)
+-    connection_free_minimal(TO_CONN(stream));
+ }
+ 
+ /** Test that BEGIN_DIR cells over their circuit's stream creation rate are
+@@ -819,15 +818,15 @@ test_dos_begindir_over_stream_rate(void *arg)
+   circ = or_circuit_new(0, NULL);
+ 
+   for (int i = 0; i < 3; i++)
+-    tt_assert(!dos_should_refuse_begindir(circ, NULL));
++    dos_note_begindir_stream_rate(circ);
+   tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE), OP_EQ,
+             over0 + 1);
+   /* One more token a second later. */
+   monotime_coarse_set_mock_time_nsec(2000000000);
+-  tt_assert(!dos_should_refuse_begindir(circ, NULL));
++  dos_note_begindir_stream_rate(circ);
+   tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE), OP_EQ,
+             over0 + 1);
+-  tt_assert(!dos_should_refuse_begindir(circ, NULL));
++  dos_note_begindir_stream_rate(circ);
+   tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE), OP_EQ,
+             over0 + 2);
+   /* BEGIN_DIR cells leave the RELAY_BEGIN bucket alone. */

@@ -182,24 +182,31 @@ per-stream µs figures in the raw JSON are reported but not relied on.
    an upstream MR that duplicates merged work, or shipping a `.7` that diverges
    from upstream semantics. Action: treat this as a backport; align with
    upstream (§6).
-2. **(Correctness, for the `.7` rebase only) A mechanical rebase of item 4
-   onto `.7` would silently drop two new BEGIN_DIR counts.** `.7` adds
-   per-outcome counters at the call sites in `connection_exit_begin_conn()`
-   (outside `dos_should_refuse_begindir()`): an over-limit refusal count on the
-   branch item 4 relocates, and an admitted-path peer argument. Item 4's diff
-   deletes the post-allocation refuse block, so a naive 3-way merge drops both
-   — the build still compiles and the metrics still exist, they just never
-   increment on that path. Flagged by the Directory-flood metrics agent and
-   confirmed here against its instrumentation. **The delivered item 4 (a fixup
-   of 0012 on `.6`) is unaffected**: on `.6` the only over-limit count lives
-   *inside* `dos_should_refuse_begindir()` (`dos_note_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX)`),
-   so it moves with the call, and `test_dos_begindir_refused` asserts it
-   survives (`== 1`). Failure scenario: `.7` ships, enforcement is enabled, and
-   the per-hop `REFUSED_LIMIT`/`ADMITTED` dashboards read zero on the refused
-   path despite real refusals. Fix and regression guard:
-   `engineering/cleanup-indexing/ITEM4-ON-DOT7.md` — carry the call-site
-   increment up with the check, keep the admitted peer argument, and note the
-   over-limit-vs-hibernating reattribution.
+2. **(Correctness, for the `.7` rebase — resolved) A mechanical rebase of item 4
+   onto `.7` would silently drop two new BEGIN_DIR counts.** Flagged by the
+   Directory-flood metrics agent (note verbatim in
+   `engineering/cleanup-indexing/NOTE-FROM-METRICS-AGENT.md`) and verified here
+   against the actual `+tor41339.7` patches 0020 and 0024. `.7` extends
+   `dos_should_refuse_begindir(circ, stream)` to (a) set `stream->begindir_over_max`
+   on an over-limit stream (copied to the dir conn by `connection_exit_connect_dir()`
+   and counted in the over-max requests family) and (b) call
+   `dos_note_begindir_stream_rate()`, which must run after the directory and
+   hibernation checks. Moving the check before allocation gives it no `stream`
+   to mark (the `if (stream)` guard silently no-ops) and would run the rate
+   count before hibernation. **The delivered item 4 (fixup of 0012 on `.6`) is
+   unaffected**: `.6`'s function takes no stream and its only over-limit count
+   is inside it, which moves with the call (`test_dos_begindir_refused` asserts
+   `DOS_DIR_BEGINDIR_OVER_MAX == 1`). Failure scenario avoided: `.7` ships, the
+   limit is later enabled, and the over-max requests / stream-rate dashboards
+   read wrong on the refused path. **Resolved**: a `.7`-correct item 4 is
+   implemented and tested — `dos_should_refuse_begindir()` returns the over-max
+   result via an out-parameter (applied to `n_stream` after allocation),
+   `dos_note_begindir_stream_rate()` is called from `connection_exit_begin_conn()`
+   after the hibernation check, and the pre-alloc refuse is skipped while
+   hibernating so `HIBERNATING` keeps precedence. Patch
+   `engineering/cleanup-indexing/patches/item4-on-dot7/`; details in
+   `ITEM4-ON-DOT7.md`; `.7`+items 1-4 passes `make check` (33/1/0),
+   `--disable-module-relay`, and the 0020/0024 dos tests (25/25).
 3. **(Design) This backport asserts where upstream self-heals.** On an
    inconsistent index, upstream logs a non-fatal `BUG()` and falls back to an
    O(n) `smartlist_pos()` search; this backport `tor_assert()`s. Failure
@@ -226,9 +233,9 @@ pays a full O(N) `connection_array` absence scan (same scan the `vary_N` table
 measures — up to 44.6 M comparisons at N=64000). Items 1–3 turn that free into
 O(1); item 4 removes the allocate-and-free entirely. So on the `.6` backport
 (which has both) a refused BEGIN_DIR is O(1) and allocation-free; item 4's
-standalone saving (without items 1–3) would be the whole O(N) scan per refusal. When item 4 is eventually rebased onto a `.7` that
-instruments the BEGIN_DIR path, the new call-site counts must move with the
-check — see `engineering/cleanup-indexing/ITEM4-ON-DOT7.md`.
+standalone saving (without items 1–3) would be the whole O(N) scan per refusal. Item 4 has also been rebased onto the `.7` series (which instruments the
+BEGIN_DIR path) so the two new counts are preserved — see
+`engineering/cleanup-indexing/ITEM4-ON-DOT7.md`.
 
 ## Exact builds, tests, and environment
 
