@@ -60,73 +60,86 @@ def has(snap, name, **labels):
     return any(n == name and want <= ls for (n, ls) in snap)
 
 
-def control_orconns(args):
-    """Return the lines of GETINFO orconn-status, or raise."""
-    if args.control_socket:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.connect(args.control_socket)
-    else:
-        host, port = args.control.rsplit(':', 1)
-        s = socket.create_connection((host, int(port)), timeout=30)
-    f = s.makefile('rwb')
+class Control:
+    """A ControlPort session: authenticate, then GETINFO."""
 
-    def cmd(line):
-        f.write(line.encode() + b'\r\n')
-        f.flush()
+    def __init__(self, args):
+        if args.control_socket:
+            self.s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.s.connect(args.control_socket)
+        else:
+            host, port = args.control.rsplit(':', 1)
+            self.s = socket.create_connection((host, int(port)), timeout=30)
+        self.f = self.s.makefile('rwb')
+        if args.cookie:
+            cookie = binascii.hexlify(open(args.cookie, 'rb').read()).decode()
+            r = self.cmd('AUTHENTICATE ' + cookie)
+        elif args.password is not None:
+            r = self.cmd('AUTHENTICATE "%s"'
+                         % args.password.replace('"', '\\"'))
+        else:
+            r = self.cmd('AUTHENTICATE')
+        if not r[-1].startswith('250'):
+            raise RuntimeError('authentication failed: ' + r[-1])
+
+    def cmd(self, line):
+        self.f.write(line.encode() + b'\r\n')
+        self.f.flush()
         lines = []
         while True:
-            r = f.readline().decode(errors='replace').rstrip('\r\n')
+            r = self.f.readline().decode(errors='replace').rstrip('\r\n')
             if not r:
                 raise RuntimeError('control connection closed')
             lines.append(r)
             if r[3:4] == '+':          # data block follows, ends with "."
                 while True:
-                    d = f.readline().decode(errors='replace').rstrip('\r\n')
+                    d = self.f.readline().decode(errors='replace')
+                    d = d.rstrip('\r\n')
                     if d == '.':
                         break
                     lines.append(d)
             elif r[3:4] == ' ':
                 return lines
 
-    if args.cookie:
-        cookie = binascii.hexlify(open(args.cookie, 'rb').read()).decode()
-        r = cmd('AUTHENTICATE ' + cookie)
-    elif args.password is not None:
-        r = cmd('AUTHENTICATE "%s"' % args.password.replace('"', '\\"'))
-    else:
-        r = cmd('AUTHENTICATE')
-    if not r[-1].startswith('250'):
-        raise RuntimeError('authentication failed: ' + r[-1])
-    r = cmd('GETINFO orconn-status')
-    f.write(b'QUIT\r\n')
-    f.flush()
-    s.close()
-    if not r[-1].startswith('250'):
-        raise RuntimeError('GETINFO failed: ' + r[-1])
-    return [l for l in r if not l.startswith('250')]
+    def getinfo(self, key):
+        """Return the reply lines to GETINFO key, or None on an error."""
+        r = self.cmd('GETINFO ' + key)
+        if not r[-1].startswith('250'):
+            return None
+        return [l for l in r if not l.startswith('250')]
+
+    def close(self):
+        self.f.write(b'QUIT\r\n')
+        self.f.flush()
+        self.s.close()
 
 
 def classify_orconns(lines):
     """Count open OR connections by kind of peer.
 
-    orconn-status names a peer "$FP~nick" if it is in our nodelist, "$FP"
-    if it authenticated with a relay identity we don't know, and "IP:port"
-    if it never authenticated (a tor client or a bridge)."""
+    orconn-status names a peer "$FP~nick" if our node list has a name for
+    it (from our consensus or its descriptor), "$FP" if it authenticated
+    with an identity our node list has no name for, and "IP:port" if it
+    never authenticated (a tor client or a bridge). Return the counts, the
+    connections per client address, and the unnamed identities, which the
+    caller checks against the HSDir test without printing them."""
     kinds = collections.Counter()
     per_ip = collections.Counter()
+    unnamed = set()
     for l in lines:
         parts = l.split()
         if len(parts) < 2 or parts[-1] != 'CONNECTED':
             continue
         name = parts[0]
         if name.startswith('$') and '~' in name:
-            kinds['relay'] += 1
+            kinds['named'] += 1
         elif name.startswith('$'):
-            kinds['unlisted relay identity'] += 1
+            kinds['unnamed'] += 1
+            unnamed.add(name[1:41])
         else:
-            kinds['client (unauthenticated)'] += 1
+            kinds['client'] += 1
             per_ip[name.rsplit(':', 1)[0]] += 1
-    return kinds, per_ip
+    return kinds, per_ip, unnamed
 
 
 def fmt(v, rate):
@@ -314,14 +327,29 @@ def main():
 
     if args.control or args.control_socket:
         try:
-            kinds, per_ip = classify_orconns(control_orconns(args))
+            ctl = Control(args)
+            lines = ctl.getinfo('orconn-status')
+            if lines is None:
+                raise RuntimeError('GETINFO orconn-status failed')
+            kinds, per_ip, unnamed = classify_orconns(lines)
+            # The HSDir check: in our consensus, or a descriptor we have.
+            # Done in memory; identities are never printed.
+            known = sum(1 for fp in unnamed
+                        if ctl.getinfo('ns/id/' + fp) is not None or
+                        ctl.getinfo('desc/id/' + fp) is not None)
+            ctl.close()
         except Exception as e:  # noqa: BLE001 - report and carry on
             print('  open OR connections: ControlPort query failed: %s' % e)
             return
         print('  open OR connections by peer (GETINFO orconn-status), now')
-        for k in ('relay', 'unlisted relay identity',
-                  'client (unauthenticated)'):
-            print('    %-26s %d' % (k, kinds[k]))
+        print('    relay named in our node list            %d'
+              % kinds['named'])
+        print('    authenticated identity with no name     %d'
+              % kinds['unnamed'])
+        print('      of their %d identities, in our consensus or '
+              'descriptors: %d' % (len(unnamed), known))
+        print('    client (never authenticated)            %d'
+              % kinds['client'])
         if per_ip:
             print('    distinct client addresses: %d, most connections from '
                   'one address: %d' % (len(per_ip), max(per_ip.values())))

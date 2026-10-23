@@ -6,6 +6,13 @@
 > measurements: "bandwidth fails first", exact descriptor sizes, and a 79–83%
 > mitigation effect. §1–§2 give the measured data. §3–§6 separate measurement
 > from source-based reasoning and model estimates.
+>
+> **Updated 2026-10-23.** Another relay's count-only counters, posted to
+> tor-relays on 22 October, have since shown per-circuit reuse of onion
+> service requests directly (`begindir-questions.md`). The series has been
+> renumbered: the one-request-per-circuit and unknown-previous-hop rules are
+> now both options of 0011, and a pressure-gated byte budget (0014) ships
+> off. §4–§8 use the current numbering.
 
 **Sources:**
 - The operator's own measurements of four of their production relays:
@@ -132,9 +139,14 @@ the flood. It is not a count of one-hop requesters.
 - At onset, the excess was 5.65 BEGIN_DIR per extra congestion-control
   circuit.
 - That denominator counts only congestion-control circuits, not all circuits.
-  So per-circuit HS-request reuse is not established.
+  So per-circuit HS-request reuse is not established on F.
 - The earlier capture's unflooded-relay value of about 5.8 came from a
   different capture, not this host.
+- **Since then:** on another relay under the flood, the count-only counters
+  showed 84% of onion service requests arriving on a circuit that had
+  already made one, about 6.4 per such circuit, all from authenticated
+  previous hops (`begindir-questions.md`). Reuse is established there; F's
+  was not measured.
 
 **The CPU cost did not show as extra CPU.**
 - Whole-process CPU stayed at 0.84–1.00 cores in every window, including the
@@ -189,11 +201,12 @@ flood spends:
   those buffers accumulate until circuits close or tor's OOM handler acts.
 - How large that gets on a constrained host is **unmeasured**. The earlier
   model figures are withdrawn pending lab measurement.
-- **`MaxMemInQueues` defaults** (`config.c:4131-4143`):
+- **`MaxMemInQueues` defaults** (`config.c:4096-4160`):
   - below 8 GiB of RAM: 0.75 × RAM;
-  - at 8 GiB or more: 0.4 × RAM, capped at 8 GiB on 64-bit.
-- RAM is read from `/proc/meminfo`, so container limits are ignored. The
-  default counts only queues, buffers and caches.
+  - at 8 GiB or more: 0.4 × RAM;
+  - then clamped to between 0.25 GiB and 8 GiB on 64-bit (2 GiB on 32-bit).
+- RAM is read from `/proc/meminfo`, so container limits are ignored. It
+  bounds queues, buffers and caches, not the whole process's RSS.
 
 ## 4. Why stock tor has no brake on this path (source)
 
@@ -201,9 +214,10 @@ flood spends:
   per-circuit stream DoS check (`connection_edge.c:4333` returns before
   `:4340`). That check is also off by default and per-circuit.
 - **Circuit-creation limits only cover clients.** `DoSCircuitCreation` counts
-  client (unauthenticated) channels only (`dos.c:535`, `:720`). Patch 0001
-  addresses HS requests whose previous hop is not a known relay. It does this
-  for HS requests only and only when enforced; by default it only counts.
+  client (unauthenticated) channels only (`dos.c:535`, `:720`).
+  `HSDirRefuseUnknownPrevHop` (0011) addresses HS requests whose previous hop
+  is not a known relay, for HS requests only and only when enabled; by
+  default the series only counts.
 - **The "directory busy" check does not apply.**
   - The HS GET handler never calls it: its callers are
     `dircache.c:962/1071/1130/1228/1324`.
@@ -222,51 +236,73 @@ flood spends:
    - **Unknown-previous-hop share:** ΔU/ΔT, from `hsdir_unknown_prev_hop` (U).
    - **Circuits that carried two or more:** `hsdir_circ_reused`.
 
-   Served descriptor bytes and queued bytes are not exposed by tor today.
-   They would need lab instrumentation.
-2. **0002's effect depends on measured reuse.**
-   - If the flood's requests really share circuits at about F's ratio, one
-     request per circuit would keep about 21% of the flood's BEGIN_DIR and cut
-     about 79%, or about 83% if roughly 10 of F's 45 circuits/s are ordinary.
+   `.6` also counts every BEGIN_DIR stream by what it asked for and its
+   outcome, and `../operator/begindir-breakdown.py` prints all of it; the
+   proposed 0016 adds BEGIN_DIR per circuit for every request, not only HS.
+   `.6` counts descriptor responses handed off and open connections writing
+   one, not their bytes: served and queued bytes would need a new gauge or
+   lab instrumentation.
+2. **The one-request-per-circuit rule's effect depends on measured reuse.**
+   - If the flood's requests really share circuits at about F's ratio,
+     `HSDirOneRequestPerCircuit` (0011) would keep about 21% of the flood's
+     BEGIN_DIR and cut about 79%, or about 83% if roughly 10 of F's 45
+     circuits/s are ordinary.
    - That is an **upper bound conditional on reuse**, which §2 does not
-     establish. The closed-lab reuse-5 cell measured −67% in served bytes
-     (`../README.md`).
-   - If requests arrive one per circuit, 0002 does not reduce bytes served,
-     and each request then also costs a circuit handshake. Those handshakes
-     share a queue with legitimate circuits (`onion_queue.c:49`,
+     establish for F. The closed-lab reuse-5 cell measured −67% in served
+     bytes (`../README.md`).
+   - If requests arrive one per circuit, the rule does not reduce bytes
+     served, and each request then also costs a circuit handshake. Those
+     handshakes share a queue with legitimate circuits (`onion_queue.c:49`,
      `MaxOnionQueueDelay` 1750 ms).
-3. **0001 and 0002 belong together.** 0002 alone does not address HS requests
-   whose previous hop is not a known relay. 0001 does, and 0002's commit
-   message already requires it.
-4. **A per-HSDir byte budget for HS descriptor responses is a lab hypothesis,
-   not a recommendation.** It is not part of the 7-patch series.
-   - **Idea:** refuse cheaply before the descriptor is copied (between
-     `dircache.c:1375` and `:1384`) once a relay-sized budget is spent.
-   - **Before considering it, test in the lab:**
-     - legitimate-client success, given that each descriptor is stored on 8
-       HSDirs and a client picks among 6 (`hs_common.h:112,114,116`);
-     - behaviour with slow readers;
-     - behaviour if request patterns change;
-     - the client-side effect of the refusal status. A 503 marks the HSDir
-       overloaded for an hour in `router_pick_directory_server()`
-       (`dirclient.c:2137`, `routerlist.h:49`, `node_select.c:366`), mainly
-       affecting relays and clients without directory guards.
-5. **Small upstream candidate.** Make the `connection_in_array` assert O(1),
-   only if a call-graph profile shows the scan matters.
+3. **The two rules of 0011 cover different senders.** The one-request rule
+   does not address one-hop requests from relay identities we don't know;
+   `HSDirRefuseUnknownPrevHop` does. Each is enabled separately.
+4. **A byte budget exists as an option; enabling it is not recommended by
+   default.** 0014 sheds descriptor fetches only after a second goes over a
+   relay-wide budget, and ships off, counting what it would shed. The private
+   client lab measured stock C tor and Arti clients fetching while HSDirs shed
+   (`../engineering/client-lab/`). Enabling it on production relays is a
+   separate decision, after the measurements in §7 and these tests:
+   - legitimate-client success, given that each descriptor is stored on 8
+     HSDirs and a client picks among 6 (`hs_common.h:112,114,116`);
+   - starvation: whether descriptors within their own rate still get served
+     under sustained pressure, and with slow readers;
+   - retries: a shed fetch is retried at another HSDir, which moves load
+     rather than removing it;
+   - behaviour if request patterns change;
+   - the refusal itself. 0014 closes the circuit rather than answering 503,
+     because a 503 marks the HSDir overloaded for an hour in
+     `router_pick_directory_server()` (`dirclient.c:2137`,
+     `routerlist.h:49`, `node_select.c:366`).
+5. **Upstream candidate: the scan in every connection free.**
+   `connection_free_()` always asserts `!connection_in_array(conn)`, a linear
+   scan of the whole connection array (`connection.c:970`, `mainloop.c:437`),
+   and each BEGIN_DIR stream frees two connections. With N open connections
+   that is about 2N pointer comparisons per stream, so its cost grows with
+   both the request rate and the relay's size (arithmetic, unmeasured). It
+   also matters for 0012: it refuses a BEGIN_DIR after allocating its edge
+   connection and frees it through the same path, so enforcing it under a
+   flood would pay one full scan per refused cell; checking before the
+   allocation avoids that. A check at the connection's own `conn_array_index`
+   would be O(1), but `connection_remove()` does not reset that index today.
+   A call-graph profile should show how much of `connection_free_`'s share
+   is the scan.
 
 ## 6. Advice for constrained HSDirs on stock tor (source-based)
 
-- **Set `MaxMemInQueues` explicitly** for the real memory limit, especially in
-  containers.
+- **Set `MaxMemInQueues` from the memory tor can really use**, especially in
+  containers, where the default ignores the container's limit. It bounds
+  queues, buffers and caches, not total RSS, so leave room for the rest.
 - **Also set `MaxHSDirCacheBytes`.** Its default is `MaxMemInQueues/5`
   (`hs_cache.c:1263`), so lowering one shrinks the descriptor cache too.
 - **`RelayBandwidthRate` protects a bandwidth bill, not the relay.** Below
   51,200 B/s it also turns off directory service (`router.c:1269`).
-- **`AccountingMax` is not a defense.** With default rates, tor stops
-  advertising tunnelled directory service (`router.c:1325-1328`), losing
-  HSDir, Guard and V2Dir, and it can hibernate the relay.
-- **`DirCache 0` + reload is the last resort.** It refuses BEGIN_DIR without a
-  restart, but loses Guard and V2Dir as well as HSDir.
+- **`AccountingMax` caps transfer; it does not stop the flood.** It is the
+  right tool for a hard transfer allowance, but with default rates tor then
+  stops advertising tunnelled directory service (`router.c:1325-1328`),
+  losing HSDir, Guard and V2Dir, and it can hibernate the relay.
+- **`DirCache 0` + reload stops serving directory requests** without a
+  restart, at the cost of Guard and V2Dir as well as HSDir.
 
 ## 7. What to collect next
 
@@ -288,8 +324,9 @@ flood spends:
 
 ## 8. Open items
 
-- Per-circuit HS-request reuse, unknown-previous-hop share, served descriptor
-  bytes and queued bytes are unmeasured.
+- On F: per-circuit HS-request reuse and the unknown-previous-hop share are
+  unmeasured (another relay's are in `begindir-questions.md`). Served
+  descriptor bytes and queued bytes are unmeasured everywhere.
 - Constrained-host CPU and memory behaviour are unmeasured.
 - The operator could not verify the original perf recording metadata or the
   fourth comparison profile.

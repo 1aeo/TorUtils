@@ -27,9 +27,12 @@ validly-signed descriptor without a hash-ring responsibility or flag check. The
 field data (public operator reports, and the de-identified capture in `data/`)
 are consistent with **fetch** traffic (write:read ~11:1 on the attacked relay,
 ~180× its baseline request rate) with several `BEGIN_DIR` requests per circuit
-built (~5.7 on one relay); whether single circuits carry several HS requests,
-and whether fetches concentrate on a few descriptors, is not yet established
-(`analysis/flood-cost-and-constrained-hosts.md`).
+built (~5.7 on one relay; `analysis/flood-cost-and-constrained-hosts.md`).
+One relay's count-only counters, posted to tor-relays on 22 October 2026,
+showed single circuits carrying several HS requests: 84% of its HS requests
+came on a circuit that had already made one, all from authenticated previous
+hops (`analysis/begindir-questions.md`). Whether fetches concentrate on a few
+descriptors is not yet established.
 
 ## The series (`patches/`)
 

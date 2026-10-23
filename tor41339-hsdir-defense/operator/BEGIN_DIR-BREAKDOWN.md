@@ -91,12 +91,16 @@ unauthenticated channels, and only marks an address that holds at least
 `DoSCircuitCreationMinConnections` open connections (2 in the consensus as
 of October 2026): circuits from relays or unpublished relay identities, and
 from addresses with a single connection, never hit it. The ControlPort snapshot (`GETINFO
-orconn-status`) does split the open connections: a peer named `$FP~nick` is
-a relay we know, `$FP` an authenticated relay identity we don't know, and
-`address:port` an unauthenticated client or bridge; the script prints how
-many of each, how many distinct client addresses, and the most connections
-from one address. It is a snapshot of connections, not a count of circuits
-or streams.
+orconn-status`) splits the open connections by how tor names the peer:
+`$FP~nick` when our node list has a name for it, `$FP` when it authenticated
+with an identity our node list doesn't name, and `address:port` when it
+never authenticated (a tor client or a bridge). The node list is close to,
+but not the same test as, the HSDir check's "relay we know" (in our consensus
+or a descriptor we have), so the script checks each unnamed identity against
+those (`GETINFO ns/id/…` and `desc/id/…`) in memory and prints only the
+count. It also prints how many distinct client addresses there are and the
+most connections from one address. It is a snapshot of connections, not a
+count of circuits or streams, and it needs ControlPort access.
 
 ## With the proposed 0016 and 0017
 
@@ -173,16 +177,16 @@ Ubuntu 24.04), one HSDir received, at once: descriptor fetches multiplexed on
 shared circuits through relays, one-hop fetches from an unpublished relay
 identity, one-hop fetches from a plain client (answered 503), and the
 network's ordinary directory traffic. Over 45 seconds the script reported
-98.1% descriptor fetches (served or not found) and 1.9% other requests, with
-nothing unaccounted; 0.49/s `single_hop` (the one-hop client), 2.44/s from
-relays we know and 0.49/s from the unpublished identity. Over the
-whole run, the unpublished identity's 35 fetches matched
-`hsdir_unknown_prev_hop` and the one-hop client's 35 matched `single_hop`
-exactly, 2 circuits carried 105 descriptor requests each, and the
-ControlPort showed 12 relay connections, 1 unlisted relay identity and 2
-client connections (`engineering/breakdown-lab/results/v6-lab24v6.txt`).
-Counts are requests, not clients: in another run the same client sent two
-requests per fetch. With the proposed 0016 and 0017 bound over the
+99.4% descriptor fetches and 0.6% other requests, with nothing unaccounted;
+1.00/s `single_hop` (the one-hop client), 2.44/s from relays we know and
+0.49/s from the unpublished identity. Over the whole run, the unpublished
+identity's 35 fetches matched `hsdir_unknown_prev_hop` exactly; the one-hop
+client's 35 fetches showed as 70 `single_hop` requests (counts are requests,
+not clients: it sent two per fetch); 2 circuits carried 105 descriptor
+requests on average; and the ControlPort showed 10 connections to named
+relays, 2 from one unnamed identity, which the script found in neither our
+consensus nor our descriptors, and 1 client connection
+(`engineering/breakdown-lab/results/v6-lab24v6.txt`). With the proposed 0016 and 0017 bound over the
 package's tor, the same lab showed every class's requests adding up exactly
 to its accepted streams (client 70, known relay 180, unknown relay 37,
 including the unpublished identity's 2 consensus fetches of its own), and
