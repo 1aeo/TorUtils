@@ -1,0 +1,624 @@
+From b51a2e4d046e7cab27c2cdaa626a766ad9cc0100 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Fri, 23 Oct 2026 05:31:02 +0000
+Subject: [PATCH 21/23] relay_metrics: Count HSDir fetches per descriptor and
+ minute
+
+Whether a flood fetches a few onion service descriptors again and again,
+sweeps many of them, or asks for keys that miss calls for different
+fixes: a limit per descriptor, a limit per circuit or source, or a limit
+on misses. HSDirDescriptorFetchRate's count covers only descriptors in
+the cache, and only at its own rate.
+
+Count each fetch that reaches the cache, by whether it found the
+descriptor (lookup "found" or "not_found", as
+tor_relay_hsdir_fetch_total says) and by its place among the fetches of
+the same blinded key in the same minute, in the bands the source counts
+use, as tor_relay_hsdir_fetch_descriptor_total. Decode the key once,
+before the lookup, so that every spelling of a key in the URL counts as
+that key (base64 decoding stops at the first "="), and count a key that
+doesn't decode as a first fetch. Keep only a keyed hash of each key
+(siphash24g, whose key is random at each start) with its count, which
+stops at the last band, in a 64 KB table that the first fetch of each
+new minute clears. A key that finds no slot within 16 of its own counts
+as a first fetch, so a minute with more distinct keys than the table
+holds undercounts repeats, which only happens when the fetches are a
+sweep. Nothing per key is exported. Bridges don't count these, nor does
+a relay without a MetricsPort, the only place they are shown. Only
+dircache.c, which is built only with the relay module, calls the
+counter, so it needs no stub.
+
+Part of #41339.
+---
+ changes/ticket41339_metrics       |   8 +
+ src/feature/dircache/dircache.c   |  10 +-
+ src/feature/relay/relay_metrics.c |  83 ++++++++++
+ src/feature/relay/relay_metrics.h |  15 ++
+ src/test/test_hs_cache.c          | 255 +++++++++++++++++++++++++++++-
+ 5 files changed, 366 insertions(+), 5 deletions(-)
+
+diff --git a/changes/ticket41339_metrics b/changes/ticket41339_metrics
+index 95fcdcf745..5a36d7cfe3 100644
+--- a/changes/ticket41339_metrics
++++ b/changes/ticket41339_metrics
+@@ -53,3 +53,11 @@
+       counts sources per minute, and the later bands show how much a limit per
+       source would cut. Bridges don't count these, and other relays count them
+       only while a MetricsPort is configured. Part of ticket 41339.
++    - Count onion service descriptor fetches that reach the HSDir cache by
++      whether the descriptor was found (lookup) and by their place among the
++      fetches of the same descriptor in the same minute (nth), as
++      tor_relay_hsdir_fetch_descriptor_total. This tells an operator whether a
++      flood fetches a few descriptors again and again or sweeps many. Only a
++      keyed hash of each key is kept, until a later minute. Bridges don't count
++      these, and other relays count them only while a MetricsPort is
++      configured. Part of ticket 41339.
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index fe0afe1707..0559211134 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1433,6 +1433,7 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+   const char *pubkey_str = NULL;
+   const char *url = args->url;
+   ed25519_public_key_t blinded_key;
++  bool key_ok;
+ 
+   /* Reject non anonymous dir connections (which also tests if encrypted). We
+    * do not allow single hop clients to query an HSDir. */
+@@ -1455,15 +1456,18 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+   pubkey_str = url + strlen("/tor/hs/3/");
+   retval = hs_cache_lookup_as_dir(HS_VERSION_THREE,
+                                   pubkey_str, &desc_str);
++  /* Decode blinded key. This is certain to work if
++   * hs_cache_lookup_as_dir() found a descriptor. Count the fetch by the key,
++   * whichever way the URL spelled it. */
++  key_ok = ed25519_public_from_base64(&blinded_key, pubkey_str) == 0;
++  relay_note_hsdir_fetch_target(key_ok ? &blinded_key : NULL,
++                                retval > 0 && desc_str);
+   if (retval <= 0 || desc_str == NULL) {
+     relay_increment_hsdir_get_action(HSDIR_GET_NOT_FOUND);
+     write_short_http_response(conn, 404, "Not found");
+     goto done;
+   }
+ 
+-  /* Decode blinded key. This is certain to work else
+-   * hs_cache_lookup_as_dir() would have failed. */
+-  ed25519_public_from_base64(&blinded_key, pubkey_str);
+   if (!dos_hsdir_desc_fetch_allowed(
+                         hs_cache_get_dir_fetch_limiter(&blinded_key),
+                         strlen(desc_str))) {
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index 3cecb80e4a..f0a1c6528f 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -7,6 +7,7 @@
+  **/
+ 
+ #define RELAY_METRICS_ENTRY_PRIVATE
++#define RELAY_METRICS_PRIVATE
+ 
+ #include "orconfig.h"
+ 
+@@ -26,10 +27,12 @@
+ 
+ #include "lib/cc/ctassert.h"
+ #include "lib/container/smartlist.h"
++#include "lib/crypt_ops/crypto_ed25519.h"
+ #include "lib/log/util_bug.h"
+ #include "lib/malloc/malloc.h"
+ #include "lib/math/fp.h"
+ #include "lib/metrics/metrics_store.h"
++#include "ext/siphash.h"
+ 
+ #include "feature/dircommon/dir_connection_st.h"
+ #include "feature/dircommon/directory.h"
+@@ -82,6 +85,7 @@ static void fill_begindir_response_bytes_values(void);
+ static void fill_begindir_request_over_max_values(void);
+ static void fill_create_cell_source_values(void);
+ static void fill_begindir_cell_source_values(void);
++static void fill_hsdir_fetch_descriptor_values(void);
+ 
+ /** The base metrics that is a static array of metrics added to the metrics
+  * store.
+@@ -338,6 +342,15 @@ static const relay_metrics_entry_t base_metrics[] =
+             "source's in the same minute",
+     .fill_fn = fill_begindir_cell_source_values,
+   },
++  {
++    .key = RELAY_METRICS_NUM_HSDIR_FETCH_DESCRIPTORS,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_hsdir_fetch_descriptor_total),
++    .help = "Total number of onion service descriptor fetches, by their "
++            "place among the fetches of the same descriptor in the same "
++            "minute",
++    .fill_fn = fill_hsdir_fetch_descriptor_values,
++  },
+ };
+ static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
+ 
+@@ -1560,6 +1573,76 @@ fill_begindir_cell_source_values(void)
+   fill_source_cell_values(RELAY_METRICS_NUM_BEGINDIR_CELL_SOURCES, true);
+ }
+ 
++/** How many times a descriptor was fetched in the current minute, under a
++ * keyed hash of its blinded key. */
++typedef struct fetch_target_t {
++  /** The keyed hash of the descriptor's blinded key. */
++  uint64_t key_hash;
++  /** Its fetches in the current minute, stopping at NTH_BAND_MAX; 0 for a
++   * free slot. */
++  uint32_t n;
++} fetch_target_t;
++/** The descriptors fetched in the current minute, each in one of the
++ * FETCH_TARGET_PROBES slots from its own. */
++static fetch_target_t fetch_targets[FETCH_TARGET_SLOTS];
++/** The minute, approx_time() / 60, that fetch_targets holds. */
++static uint32_t fetch_targets_minute;
++/** Onion service descriptor fetches, by whether we found the descriptor and
++ * by their place among the fetches of the same one in the same minute. */
++static uint64_t hsdir_fetch_targets[2][NTH_BAND_COUNT];
++
++/** Note a fetch of the onion service descriptor with blinded key <b>key</b>,
++ * or NULL if the key in the URL didn't decode; <b>found</b> is whether we
++ * had it. Count it by its place among the fetches of the same key in the
++ * same minute; a key that didn't decode counts as a first fetch. We keep
++ * only a keyed hash of each key, until the first fetch of a later minute.
++ * Bridges don't count these, nor does a relay without a MetricsPort. */
++void
++relay_note_hsdir_fetch_target(const ed25519_public_key_t *key, bool found)
++{
++  const or_options_t *options = get_options();
++  const uint32_t minute = (uint32_t) (approx_time() / 60);
++  uint64_t key_hash;
++  uint32_t n = 1;
++
++  if (options->BridgeRelay || !options->MetricsPort_set)
++    return;
++  if (fetch_targets_minute != minute) {
++    memset(fetch_targets, 0, sizeof(fetch_targets));
++    fetch_targets_minute = minute;
++  }
++  key_hash = key ? siphash24g(key->pubkey, sizeof(key->pubkey)) : 0;
++  for (int i = 0; key && i < FETCH_TARGET_PROBES; i++) {
++    fetch_target_t *t = &fetch_targets[(key_hash + i) % FETCH_TARGET_SLOTS];
++    if (t->n == 0) {
++      t->key_hash = key_hash;
++      t->n = 1;
++      break;
++    }
++    if (t->key_hash == key_hash) {
++      if (t->n < NTH_BAND_MAX)
++        t->n++;
++      n = t->n;
++      break;
++    }
++  }
++  hsdir_fetch_targets[found][nth_band_of(n)]++;
++}
++
++/** Fill function for the RELAY_METRICS_NUM_HSDIR_FETCH_DESCRIPTORS metric. */
++static void
++fill_hsdir_fetch_descriptor_values(void)
++{
++  const relay_metrics_entry_t *rentry =
++    &base_metrics[RELAY_METRICS_NUM_HSDIR_FETCH_DESCRIPTORS];
++  static const char *const lookup_names[] = { "not_found", "found" };
++
++  for (int f = 0; f < 2; f++)
++    fill_labeled_values(rentry, "lookup", lookup_names[f], "nth",
++                        nth_band_names, hsdir_fetch_targets[f],
++                        NTH_BAND_COUNT);
++}
++
+ /** Tunneled directory responses fully handed to their stream, by type. */
+ static uint64_t dir_responses[DIR_RESPONSE_TYPE_COUNT];
+ /** Label values for a dir_response_type_t. */
+diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
+index 3a025db0a2..39d2549ab8 100644
+--- a/src/feature/relay/relay_metrics.h
++++ b/src/feature/relay/relay_metrics.h
+@@ -88,6 +88,9 @@ typedef enum {
+   /** BEGIN_DIR cells, by previous hop and place among their source's in the
+    * same minute. */
+   RELAY_METRICS_NUM_BEGINDIR_CELL_SOURCES,
++  /** Onion service descriptor fetches, by whether we found the descriptor
++   * and place among the fetches of the same one in the same minute. */
++  RELAY_METRICS_NUM_HSDIR_FETCH_DESCRIPTORS,
+ } relay_metrics_key_t;
+ 
+ /** The metadata of a relay metric. */
+@@ -235,12 +238,15 @@ typedef enum {
+ } dir_request_type_t;
+ 
+ struct dir_connection_t;
++struct ed25519_public_key_t;
+ void relay_note_dir_request(struct dir_connection_t *conn,
+                             dir_request_type_t type);
+ void relay_note_hsdir_not_anonymous(const struct dir_connection_t *conn,
+                                     bool is_post);
+ void relay_note_dir_response_bytes(const struct dir_connection_t *conn,
+                                    size_t n);
++void relay_note_hsdir_fetch_target(const struct ed25519_public_key_t *key,
++                                   bool found);
+ 
+ /** Type of a tunneled directory response that was fully handed to its
+  * stream (which doesn't mean that the client received it). */
+@@ -255,4 +261,13 @@ typedef enum {
+ 
+ void relay_increment_dir_response(dir_response_type_t);
+ 
++#ifdef RELAY_METRICS_PRIVATE
++/** Slots for the descriptors fetched in the current minute, and how far from
++ * its own slot a key may land. A key that doesn't fit counts as a first
++ * fetch, so a minute with more distinct keys than this undercounts repeats:
++ * those fetches are a sweep anyway. */
++#define FETCH_TARGET_SLOTS 4096
++#define FETCH_TARGET_PROBES 16
++#endif /* defined(RELAY_METRICS_PRIVATE) */
++
+ #endif /* !defined(TOR_FEATURE_RELAY_RELAY_METRICS_H) */
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index fad0c14657..b18f7aea0b 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -12,6 +12,7 @@
+ #define HS_CACHE_PRIVATE
+ #define CHANNEL_OBJECT_PRIVATE
+ #define DOS_PRIVATE
++#define RELAY_METRICS_PRIVATE
+ 
+ #include "trunnel/ed25519_cert.h"
+ #include "feature/hs/hs_cache.h"
+@@ -35,6 +36,7 @@
+ #include "lib/metrics/metrics_store_entry.h"
+ #include "lib/crypt_ops/crypto_format.h"
+ #include "lib/crypt_ops/crypto_rand.h"
++#include "ext/siphash.h"
+ 
+ #include "app/config/or_options_st.h"
+ #include "core/or/edge_connection_st.h"
+@@ -393,6 +395,10 @@ get_metric(const char *name, const char *key, const char *value)
+   get_metric(METRICS_NAME(relay_hsdir_fetch_total), "action", (action))
+ #define POST_METRIC(action) \
+   get_metric(METRICS_NAME(relay_hsdir_upload_total), "action", (action))
++/* tor_relay_hsdir_fetch_descriptor_total{lookup, nth} */
++#define FETCH_TARGET_METRIC(lookup, nth) \
++  get_metric2(METRICS_NAME(relay_hsdir_fetch_descriptor_total), "lookup", \
++              (lookup), "nth", (nth))
+ /* tor_relay_begindir_request_total{type, prev_hop}, and its sum over the
+  * three kinds of previous hop. */
+ #define REQ_METRIC(type, hop) \
+@@ -490,7 +496,7 @@ test_hsdir_get_post_metrics(void *arg)
+   ed25519_keypair_t signing_kp;
+   hs_descriptor_t *desc = NULL;
+   dir_connection_t *dirport;
+-  char *desc_str = NULL, *get = NULL;
++  char *desc_str = NULL, *get = NULL, *get_padded = NULL;
+   char key[ED25519_BASE64_LEN+1];
+   const char *post = "POST /tor/hs/3/publish HTTP/1.0\r\n\r\n";
+   or_circuit_t *dead;
+@@ -501,11 +507,15 @@ test_hsdir_get_post_metrics(void *arg)
+   int64_t get0[ARRAY_LENGTH(get_actions)];
+   int64_t post0[ARRAY_LENGTH(post_actions)];
+   int64_t hs_get0, hs_post0, hs_get_client0, hs_post_client0;
++  int64_t missing0, found0;
+   (void) arg;
+ 
+   init_test();
+   MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
+   get_options_mutable()->ORPort_set = 1; /* Accept descriptor uploads. */
++  get_options_mutable()->MetricsPort_set = 1;
++  missing0 = FETCH_TARGET_METRIC("not_found", "1");
++  found0 = FETCH_TARGET_METRIC("found", "2_10");
+   /* Other tests may have counted requests before we forked. */
+   for (size_t i = 0; i < ARRAY_LENGTH(get_actions); i++)
+     get0[i] = GET_METRIC(get_actions[i]);
+@@ -521,6 +531,8 @@ test_hsdir_get_post_metrics(void *arg)
+             OP_EQ, 0);
+   ed25519_public_to_base64(key, &desc->plaintext_data.blinded_pubkey);
+   tor_asprintf(&get, GET("/tor/hs/3/%s"), key);
++  /* The same key: base64 decoding stops at the first '='. */
++  tor_asprintf(&get_padded, GET("/tor/hs/3/%s=x"), key);
+ 
+   hsdir_request_on_new_circ(chan, get, NULL); /* Not uploaded yet. */
+   hsdir_request_on_new_circ(chan, post, desc_str);
+@@ -529,7 +541,7 @@ test_hsdir_get_post_metrics(void *arg)
+   hsdir_request_on_new_circ(chan,
+                             "POST /tor/hs/2/publish HTTP/1.0\r\n\r\n",
+                             desc_str);
+-  hsdir_request_on_new_circ(chan, get, NULL);
++  hsdir_request_on_new_circ(chan, get_padded, NULL);
+   /* A request that reaches a circuit already closing is refused too: it
+    * came from a relay, so it isn't single hop. */
+   dead = or_circuit_new(0, NULL);
+@@ -564,6 +576,11 @@ test_hsdir_get_post_metrics(void *arg)
+   tt_i64_op(REQ_SUM("hs_post"), OP_EQ, hs_post0 + 6);
+   tt_i64_op(REQ_METRIC("hs_get", "client"), OP_EQ, hs_get_client0 + 1);
+   tt_i64_op(REQ_METRIC("hs_post", "client"), OP_EQ, hs_post_client0 + 1);
++  /* Only the two fetches that reached the cache count, by descriptor
++   * however its key was spelled: it was missing the first time, and found on
++   * its second fetch. */
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "1"), OP_EQ, missing0 + 1);
++  tt_i64_op(FETCH_TARGET_METRIC("found", "2_10"), OP_EQ, found0 + 1);
+ 
+  done:
+   UNMOCK(connection_write_to_buf_impl_);
+@@ -574,6 +591,7 @@ test_hsdir_get_post_metrics(void *arg)
+   hs_descriptor_free(desc);
+   tor_free(desc_str);
+   tor_free(get);
++  tor_free(get_padded);
+ }
+ 
+ /* Publish a descriptor to the HSDir, then fetch it. Check that the received
+@@ -1433,6 +1451,84 @@ test_source_cell_metrics(void *arg)
+   free_fake_channel(client2);
+ }
+ 
++/* The blinded key numbered <b>i</b>, for tests. */
++static const ed25519_public_key_t *
++fetch_target_key(uint32_t i)
++{
++  static ed25519_public_key_t key;
++
++  set_uint32(key.pubkey, i);
++  return &key;
++}
++
++/* Descriptor fetches are counted by their place among the fetches of the
++ * same descriptor in the same minute, found and missing apart. A minute with
++ * more descriptors than the table holds counts the rest as first fetches, as
++ * it does keys that don't decode. */
++static void
++test_hsdir_fetch_target_metrics(void *arg)
++{
++  const time_t t0 = 1800000000; /* The start of a minute. */
++  const char *bands[] = { "1", "2_10", "11_100", "101_1000", "1001_plus" };
++  int64_t found0[ARRAY_LENGTH(bands)], missing0[ARRAY_LENGTH(bands)];
++  (void) arg;
++
++  get_options_mutable()->MetricsPort_set = 1;
++  for (size_t i = 0; i < ARRAY_LENGTH(bands); i++) {
++    found0[i] = FETCH_TARGET_METRIC("found", bands[i]);
++    missing0[i] = FETCH_TARGET_METRIC("not_found", bands[i]);
++  }
++  update_approx_time(t0);
++  for (int i = 0; i < 12; i++)
++    relay_note_hsdir_fetch_target(fetch_target_key(1), true);
++  relay_note_hsdir_fetch_target(fetch_target_key(2), false);
++  relay_note_hsdir_fetch_target(fetch_target_key(2), false);
++  tt_i64_op(FETCH_TARGET_METRIC("found", "1"), OP_EQ, found0[0] + 1);
++  tt_i64_op(FETCH_TARGET_METRIC("found", "2_10"), OP_EQ, found0[1] + 9);
++  tt_i64_op(FETCH_TARGET_METRIC("found", "11_100"), OP_EQ, found0[2] + 2);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "1"), OP_EQ, missing0[0] + 1);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "2_10"), OP_EQ, missing0[1] + 1);
++  /* Keys that don't decode are each a first fetch. */
++  relay_note_hsdir_fetch_target(NULL, false);
++  relay_note_hsdir_fetch_target(NULL, false);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "1"), OP_EQ, missing0[0] + 3);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "2_10"), OP_EQ, missing0[1] + 1);
++
++  /* A new minute starts over. */
++  update_approx_time(t0 + 60);
++  relay_note_hsdir_fetch_target(fetch_target_key(1), true);
++  tt_i64_op(FETCH_TARGET_METRIC("found", "1"), OP_EQ, found0[0] + 2);
++
++  /* More keys than fit: each extra one is a first fetch. */
++  for (uint32_t i = 100; i < 5100; i++)
++    relay_note_hsdir_fetch_target(fetch_target_key(i), false);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "1"), OP_EQ, missing0[0] + 5003);
++  relay_note_hsdir_fetch_target(fetch_target_key(1), true);
++  tt_i64_op(FETCH_TARGET_METRIC("found", "2_10"), OP_EQ, found0[1] + 10);
++
++  /* The last two bands. */
++  update_approx_time(t0 + 120);
++  for (int i = 0; i < 1001; i++)
++    relay_note_hsdir_fetch_target(fetch_target_key(3), false);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "101_1000"), OP_EQ,
++            missing0[3] + 900);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "1001_plus"), OP_EQ,
++            missing0[4] + 1);
++
++  /* Bridges don't count them, nor does a relay without a MetricsPort. */
++  get_options_mutable()->BridgeRelay = 1;
++  relay_note_hsdir_fetch_target(fetch_target_key(3), false);
++  get_options_mutable()->BridgeRelay = 0;
++  get_options_mutable()->MetricsPort_set = 0;
++  relay_note_hsdir_fetch_target(fetch_target_key(3), false);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "1001_plus"), OP_EQ,
++            missing0[4] + 1);
++
++ done:
++  get_options_mutable()->BridgeRelay = 0;
++  get_options_mutable()->MetricsPort_set = 0;
++}
++
+ /* The previous-hop families export one series per class (and per nth or
+  * type), never the unset class, with the counted values. */
+ static void
+@@ -1449,6 +1545,7 @@ test_prev_hop_metric_series(void *arg)
+     { METRICS_NAME(relay_begindir_request_over_max_total), 9 },
+     { METRICS_NAME(relay_create_cell_source_total), 15 },
+     { METRICS_NAME(relay_begindir_cell_source_total), 15 },
++    { METRICS_NAME(relay_hsdir_fetch_descriptor_total), 10 },
+   };
+   or_circuit_t *circ = or_circuit_new(0, NULL);
+   int64_t create0, first0, later0, tenth0;
+@@ -2280,6 +2377,150 @@ test_source_cell_metrics_port(void *arg)
+   free_fake_channel(relay);
+ }
+ 
++/* The slot where relay_note_hsdir_fetch_target() starts to look for the
++ * descriptor with blinded key <b>key</b>. */
++static unsigned
++fetch_target_slot(const ed25519_public_key_t *key)
++{
++  return (unsigned) (siphash24g(key->pubkey, sizeof(key->pubkey)) %
++                     FETCH_TARGET_SLOTS);
++}
++
++/* A fetch looks for its descriptor in the FETCH_TARGET_PROBES (16) slots
++ * from its own: of 17 descriptors that start at the same slot, 16 are found
++ * again and the 17th counts as a first fetch each time, until the minute
++ * ends. The keys all start at the table's last slot, so that their probes
++ * wrap to its start, and are chosen by slot, so this holds whatever the
++ * siphash key. */
++static void
++test_hsdir_fetch_target_probing(void *arg)
++{
++  const time_t t0 = 1800000000; /* The start of a minute. */
++  const int n_keys = FETCH_TARGET_PROBES + 1;
++  uint32_t keys[FETCH_TARGET_PROBES + 1];
++  unsigned slot;
++  int64_t first0, again0;
++  int n = 1;
++  (void) arg;
++
++  keys[0] = 1;
++  while (fetch_target_slot(fetch_target_key(keys[0])) !=
++         FETCH_TARGET_SLOTS - 1)
++    keys[0]++;
++  slot = fetch_target_slot(fetch_target_key(keys[0]));
++  for (uint32_t i = keys[0] + 1; n < n_keys && i < 10000000; i++) {
++    if (fetch_target_slot(fetch_target_key(i)) == slot)
++      keys[n++] = i;
++  }
++  tt_int_op(n, OP_EQ, n_keys);
++  get_options_mutable()->MetricsPort_set = 1;
++  first0 = FETCH_TARGET_METRIC("not_found", "1");
++  again0 = FETCH_TARGET_METRIC("not_found", "2_10");
++  update_approx_time(t0);
++
++  /* The first key twice, then the others twice each: the last one finds no
++   * slot, so both its fetches are first fetches. */
++  relay_note_hsdir_fetch_target(fetch_target_key(keys[0]), false);
++  relay_note_hsdir_fetch_target(fetch_target_key(keys[0]), false);
++  for (int i = 1; i < n_keys; i++)
++    relay_note_hsdir_fetch_target(fetch_target_key(keys[i]), false);
++  for (int i = 1; i < n_keys; i++)
++    relay_note_hsdir_fetch_target(fetch_target_key(keys[i]), false);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "1"), OP_EQ,
++            first0 + n_keys + 1);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "2_10"), OP_EQ,
++            again0 + n_keys - 1);
++  /* The last second of the same minute. */
++  update_approx_time(t0 + 59);
++  relay_note_hsdir_fetch_target(fetch_target_key(keys[1]), false);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "2_10"), OP_EQ, again0 + n_keys);
++
++ done:
++  ;
++}
++
++/* Two keys that differ only in their last byte are two descriptors. */
++static void
++test_hsdir_fetch_target_whole_key(void *arg)
++{
++  ed25519_public_key_t a, b;
++  int64_t first0, again0;
++  (void) arg;
++
++  memset(&a, 0x55, sizeof(a));
++  memcpy(&b, &a, sizeof(b));
++  b.pubkey[sizeof(b.pubkey) - 1] ^= 1;
++  get_options_mutable()->MetricsPort_set = 1;
++  first0 = FETCH_TARGET_METRIC("found", "1");
++  again0 = FETCH_TARGET_METRIC("found", "2_10");
++  update_approx_time(1800000000); /* The start of a minute. */
++  relay_note_hsdir_fetch_target(&a, true);
++  relay_note_hsdir_fetch_target(&b, true);
++  tt_i64_op(FETCH_TARGET_METRIC("found", "1"), OP_EQ, first0 + 2);
++  tt_i64_op(FETCH_TARGET_METRIC("found", "2_10"), OP_EQ, again0);
++
++ done:
++  ;
++}
++
++/* Fetches of two different keys are two first fetches, even when the keys
++ * don't decode and share their first 40 characters, which base64_decode()
++ * decodes before it fails. */
++static void
++test_hsdir_fetch_target_long_keys(void *arg)
++{
++  channel_t *chan = new_fake_channel();
++  char key[61], *req = NULL;
++  int64_t first0, again0;
++  (void) arg;
++
++  init_test();
++  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
++  get_options_mutable()->MetricsPort_set = 1;
++  update_approx_time(1800000000); /* The start of a minute. */
++  first0 = FETCH_TARGET_METRIC("not_found", "1");
++  again0 = FETCH_TARGET_METRIC("not_found", "2_10");
++  memset(key, 'a', sizeof(key) - 1);
++  key[sizeof(key) - 1] = '\0';
++  tor_asprintf(&req, GET("/tor/hs/3/%s"), key);
++  hsdir_request_on_new_circ(chan, req, NULL);
++  tor_free(req);
++  key[sizeof(key) - 2] = 'b';
++  tor_asprintf(&req, GET("/tor/hs/3/%s"), key);
++  hsdir_request_on_new_circ(chan, req, NULL);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "1"), OP_EQ, first0 + 2);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "2_10"), OP_EQ, again0);
++
++ done:
++  UNMOCK(connection_write_to_buf_impl_);
++  tor_free(req);
++  SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
++                    TO_OR_CIRCUIT(c)->p_chan = NULL);
++  circuit_free_all();
++  free_fake_channel(chan);
++}
++
++/* Without a MetricsPort, a relay doesn't remember descriptor fetches either:
++ * once one is added, a descriptor's next fetch is its first. */
++static void
++test_hsdir_fetch_target_metrics_port(void *arg)
++{
++  int64_t first0, again0;
++  (void) arg;
++
++  first0 = FETCH_TARGET_METRIC("not_found", "1");
++  again0 = FETCH_TARGET_METRIC("not_found", "2_10");
++  update_approx_time(1800000000); /* The start of a minute. */
++  relay_note_hsdir_fetch_target(fetch_target_key(1), false);
++  get_options_mutable()->MetricsPort_set = 1;
++  relay_note_hsdir_fetch_target(fetch_target_key(1), false);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "1"), OP_EQ, first0 + 1);
++  tt_i64_op(FETCH_TARGET_METRIC("not_found", "2_10"), OP_EQ, again0);
++
++ done:
++  get_options_mutable()->MetricsPort_set = 0;
++}
++
+ struct testcase_t hs_cache[] = {
+   /* Encoding tests. */
+   { "directory", test_directory, TT_FORK,
+@@ -2303,6 +2544,8 @@ struct testcase_t hs_cache[] = {
+   { "dir_over_max_request_metric", test_dir_over_max_request_metric,
+     TT_FORK, NULL, NULL },
+   { "source_cell_metrics", test_source_cell_metrics, TT_FORK, NULL, NULL },
++  { "hsdir_fetch_target_metrics", test_hsdir_fetch_target_metrics, TT_FORK,
++    NULL, NULL },
+   { "dir_server_conns_gauge", test_dir_server_conns_gauge, TT_FORK,
+     NULL, NULL },
+   { "hsdir_reuse_and_prev_hop_counters",
+@@ -2337,6 +2580,14 @@ struct testcase_t hs_cache[] = {
+     NULL, NULL },
+   { "source_cell_metrics_port", test_source_cell_metrics_port, TT_FORK,
+     NULL, NULL },
++  { "hsdir_fetch_target_probing", test_hsdir_fetch_target_probing, TT_FORK,
++    NULL, NULL },
++  { "hsdir_fetch_target_whole_key", test_hsdir_fetch_target_whole_key,
++    TT_FORK, NULL, NULL },
++  { "hsdir_fetch_target_long_keys", test_hsdir_fetch_target_long_keys,
++    TT_FORK, NULL, NULL },
++  { "hsdir_fetch_target_metrics_port", test_hsdir_fetch_target_metrics_port,
++    TT_FORK, NULL, NULL },
+ 
+   END_OF_TESTCASES
+ };
+-- 
+2.43.0
+

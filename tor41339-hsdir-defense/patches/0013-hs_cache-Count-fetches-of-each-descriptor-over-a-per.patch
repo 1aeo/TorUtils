@@ -1,0 +1,381 @@
+From 40ccaa3b2e96c53549525eb400e912a6c157705e Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Wed, 21 Oct 2026 09:05:25 +0000
+Subject: [PATCH 13/23] hs_cache: Count fetches of each descriptor over a
+ per-descriptor rate
+
+An HSDir queues the whole descriptor for every fetch it answers. During
+a flood such as the one in tor#41339, an operator can't tell whether
+the fetches concentrate on a few descriptors or spread over many, and
+that decides whether any per-descriptor defense could help.
+
+Give each cached descriptor a fetch token bucket, kept when the
+descriptor is replaced, with HSDirDescriptorFetchRate (default 5 per
+second) and HSDirDescriptorFetchBurst (default 20), and count fetches
+that find it empty as tor_relay_dos_total{type="hsdir_fetch_over_rate"}.
+Compared with tor_relay_hsdir_fetch_total{action="success"}, it shows
+the shape of a flood: one on a few descriptors moves both, one spread
+over many moves only the latter. Nothing is refused, and the counter is
+relay-wide, so it says nothing about any one descriptor.
+
+Part of #41339.
+---
+ changes/ticket41339_dos           |   5 ++
+ doc/man/tor.1.txt                 |  14 ++++
+ src/core/or/dos.c                 |  23 +++++++
+ src/core/or/dos.h                 |   4 ++
+ src/core/or/dos_options.inc       |   8 +++
+ src/feature/dircache/dircache.c   |  14 ++--
+ src/feature/hs/hs_cache.c         |  10 +++
+ src/feature/hs/hs_cache.h         |   5 ++
+ src/feature/relay/relay_metrics.c |   2 +
+ src/test/test_hs_cache.c          | 102 ++++++++++++++++++++++++++++++
+ 10 files changed, 180 insertions(+), 7 deletions(-)
+
+diff --git a/changes/ticket41339_dos b/changes/ticket41339_dos
+index d44b72969b..0dfff68016 100644
+--- a/changes/ticket41339_dos
++++ b/changes/ticket41339_dos
+@@ -5,6 +5,11 @@
+       refuse such requests whose previous hop is not a known relay. Refused
+       requests are counted as action "refused" in tor_relay_hsdir_fetch_total
+       and tor_relay_hsdir_upload_total. Part of ticket 41339.
++    - Add the HSDirDescriptorFetchRate and HSDirDescriptorFetchBurst options.
++      An HSDir counts fetches of each cached onion service descriptor over that
++      rate as tor_relay_dos_total{type="hsdir_fetch_over_rate"} on the
++      MetricsPort, which shows whether a flood of fetches concentrates on a few
++      descriptors. Part of ticket 41339.
+ 
+   o Minor features (denial-of-service, directory cache):
+     - Add the DoSBeginDirLimitEnabled and DoSBeginDirMaxStreams options and
+diff --git a/doc/man/tor.1.txt b/doc/man/tor.1.txt
+index b504b55247..4dfc613375 100644
+--- a/doc/man/tor.1.txt
++++ b/doc/man/tor.1.txt
+@@ -3191,6 +3191,20 @@ MetricsPort.
+     the consensus parameter. If not defined in the consensus, the value is
+     0. (Default: auto)
+ 
++[[HSDirDescriptorFetchRate]] **HSDirDescriptorFetchRate** __NUM__::
++
++    The rate of fetches per second of each cached onion service descriptor,
++    at least 1, over which an HSDir counts them as
++    tor_relay_dos_total\{type="hsdir_fetch_over_rate"} on the MetricsPort.
++    (Default: 5)
++
++[[HSDirDescriptorFetchBurst]] **HSDirDescriptorFetchBurst** __NUM__::
++
++    The burst of fetches of each cached onion service descriptor, at least 1,
++    allowed before they count as over HSDirDescriptorFetchRate. It is also
++    the most fetches in any one second that count as within the rate.
++    (Default: 20)
++
+ 
+ For onion services, mitigations are a work in progress and multiple options
+ are currently available.
+diff --git a/src/core/or/dos.c b/src/core/or/dos.c
+index 2819ec90be..57445f79f5 100644
+--- a/src/core/or/dos.c
++++ b/src/core/or/dos.c
+@@ -751,6 +751,29 @@ dos_should_refuse_unknown_hsdir_prev_hop(void)
+                              "HSDirRefuseUnknownPrevHop");
+ }
+ 
++/** Take a token from <b>bucket</b>, the fetch rate limiter of a cached onion
++ * service descriptor, and count the fetch if it was empty. */
++void
++dos_hsdir_note_desc_fetch(token_bucket_ctr_t *bucket)
++{
++  const dos_options_t *options = dos_get_options();
++  const uint32_t rate = MAX(options->HSDirDescriptorFetchRate, 1);
++  const uint32_t burst = MAX(options->HSDirDescriptorFetchBurst, 1);
++  const uint32_t now = (uint32_t) monotime_coarse_absolute_sec();
++
++  if (!bucket->cfg.rate) {
++    token_bucket_ctr_init(bucket, rate, burst, now);
++  } else if (bucket->cfg.rate != rate ||
++             (uint32_t) bucket->cfg.burst != burst) {
++    token_bucket_ctr_adjust(bucket, rate, burst);
++  }
++  token_bucket_ctr_refill(bucket, now);
++  if (token_bucket_ctr_get(bucket) > 0)
++    token_bucket_ctr_dec(bucket, 1);
++  else
++    dos_note_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE);
++}
++
+ /* Called when a CREATE cell is received from the given channel. */
+ void
+ dos_cc_new_create_cell(channel_t *chan)
+diff --git a/src/core/or/dos.h b/src/core/or/dos.h
+index 2f6d041a34..74d72a6a6d 100644
+--- a/src/core/or/dos.h
++++ b/src/core/or/dos.h
+@@ -95,6 +95,9 @@ typedef enum dos_dir_stat_t {
+   /** BEGIN_DIR cells on a circuit with DoSBeginDirMaxStreams open directory
+    * streams. */
+   DOS_DIR_BEGINDIR_OVER_MAX,
++  /** Fetches of a cached onion service descriptor over
++   * HSDirDescriptorFetchRate. */
++  DOS_DIR_HSDIR_FETCH_OVER_RATE,
+ 
+   DOS_DIR_STAT_COUNT
+ } dos_dir_stat_t;
+@@ -103,6 +106,7 @@ void dos_note_dir_stat(dos_dir_stat_t stat);
+ uint64_t dos_get_dir_stat(dos_dir_stat_t stat);
+ int dos_should_close_reused_hsdir_circ(void);
+ int dos_should_refuse_unknown_hsdir_prev_hop(void);
++void dos_hsdir_note_desc_fetch(token_bucket_ctr_t *bucket);
+ void dos_note_circ_max_outq(const channel_t *chan);
+ 
+ uint32_t dos_get_num_cc_marked_addr(void);
+diff --git a/src/core/or/dos_options.inc b/src/core/or/dos_options.inc
+index 5f1fe6235b..02cb5e6268 100644
+--- a/src/core/or/dos_options.inc
++++ b/src/core/or/dos_options.inc
+@@ -87,4 +87,12 @@ CONF_VAR(HSDirOneRequestPerCircuit, AUTOBOOL, 0, "auto")
+  * same name. */
+ CONF_VAR(HSDirRefuseUnknownPrevHop, AUTOBOOL, 0, "auto")
+ 
++/** Fetches per second of each cached onion service descriptor over which an
++ * HSDir counts them. */
++CONF_VAR(HSDirDescriptorFetchRate, POSINT, 0, "5")
++
++/** Burst of fetches of each cached descriptor allowed before they count as
++ * over HSDirDescriptorFetchRate. */
++CONF_VAR(HSDirDescriptorFetchBurst, POSINT, 0, "20")
++
+ END_CONF_STRUCT(dos_options_t)
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index eaa511bb3e..11573f43d7 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1426,6 +1426,7 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+   const char *desc_str = NULL;
+   const char *pubkey_str = NULL;
+   const char *url = args->url;
++  ed25519_public_key_t blinded_key;
+ 
+   /* Reject non anonymous dir connections (which also tests if encrypted). We
+    * do not allow single hop clients to query an HSDir. */
+@@ -1455,6 +1456,11 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+     goto done;
+   }
+ 
++  /* Decode blinded key. This is certain to work else
++   * hs_cache_lookup_as_dir() would have failed. */
++  ed25519_public_from_base64(&blinded_key, pubkey_str);
++  dos_hsdir_note_desc_fetch(hs_cache_get_dir_fetch_limiter(&blinded_key));
++
+   /* Found requested descriptor! Pass it to this nice client. */
+   relay_increment_hsdir_get_action(HSDIR_GET_SUCCESS);
+   write_http_response_header(conn, strlen(desc_str), NO_METHOD, 0);
+@@ -1463,13 +1469,7 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+   /* We have successfully written the descriptor on the connection outbuf so
+    * save this query identifier into the dir_connection_t in order
+    * to associate it to the descriptor once the response is written out. */
+-  {
+-    /* Decode blinded key. This is certain to work else
+-     * hs_cache_lookup_as_dir() would have failed. */
+-    ed25519_public_key_t blinded_key;
+-    ed25519_public_from_base64(&blinded_key, pubkey_str);
+-    conn->hs_ident = hs_ident_server_dir_conn_new(&blinded_key);
+-  }
++  conn->hs_ident = hs_ident_server_dir_conn_new(&blinded_key);
+ 
+  done:
+   return 0;
+diff --git a/src/feature/hs/hs_cache.c b/src/feature/hs/hs_cache.c
+index 3d43bdb74b..230064078f 100644
+--- a/src/feature/hs/hs_cache.c
++++ b/src/feature/hs/hs_cache.c
+@@ -196,6 +196,7 @@ cache_store_v3_as_dir(hs_cache_dir_descriptor_t *desc)
+      * remove the entry we currently have from our cache so we can then
+      * store the new one. */
+     desc->n_downloaded = cache_entry->n_downloaded;
++    desc->fetch_limiter = cache_entry->fetch_limiter;
+     remove_v3_desc_as_dir(cache_entry);
+     hs_cache_decrement_allocation(cache_get_dir_entry_size(cache_entry));
+     cache_dir_desc_free(cache_entry);
+@@ -454,6 +455,15 @@ hs_cache_mark_dowloaded_as_dir(const hs_ident_dir_conn_t *ident)
+   }
+ }
+ 
++/** Return the fetch rate limiter of the descriptor for <b>key</b> in our
++ * directory cache, or NULL if we don't have it. */
++token_bucket_ctr_t *
++hs_cache_get_dir_fetch_limiter(const ed25519_public_key_t *key)
++{
++  hs_cache_dir_descriptor_t *entry = lookup_v3_desc_as_dir(key->pubkey);
++  return entry ? &entry->fetch_limiter : NULL;
++}
++
+ /** Clean all directory caches using the current time now. */
+ void
+ hs_cache_clean_as_dir(time_t now)
+diff --git a/src/feature/hs/hs_cache.h b/src/feature/hs/hs_cache.h
+index 9cf73c1ba7..482567b61d 100644
+--- a/src/feature/hs/hs_cache.h
++++ b/src/feature/hs/hs_cache.h
+@@ -16,6 +16,7 @@
+ #include "feature/hs/hs_ident.h"
+ #include "feature/rend/rendcommon.h"
+ #include "feature/nodelist/torcert.h"
++#include "lib/evloop/token_bucket.h"
+ 
+ struct ed25519_public_key_t;
+ 
+@@ -73,6 +74,8 @@ typedef struct hs_cache_dir_descriptor_t {
+    * heuristic for the OOM cache cleaning. It is very large so we avoid an kind
+    * of possible wrapping. */
+   uint64_t n_downloaded;
++  /** Counts fetches of this descriptor over HSDirDescriptorFetchRate. */
++  token_bucket_ctr_t fetch_limiter;
+ } hs_cache_dir_descriptor_t;
+ 
+ /* Public API */
+@@ -98,6 +101,8 @@ int hs_cache_store_as_dir(const char *desc);
+ int hs_cache_lookup_as_dir(uint32_t version, const char *query,
+                            const char **desc_out);
+ void hs_cache_mark_dowloaded_as_dir(const hs_ident_dir_conn_t *ident);
++token_bucket_ctr_t *hs_cache_get_dir_fetch_limiter(
++                                    const struct ed25519_public_key_t *key);
+ 
+ const hs_descriptor_t *
+ hs_cache_lookup_as_client(const struct ed25519_public_key_t *key);
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index 693dfce8f1..14617e5a5f 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -466,6 +466,8 @@ fill_dos_values(void)
+     { "hsdir_unknown_prev_hop",
+       dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP) },
+     { "begindir_over_max", dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX) },
++    { "hsdir_fetch_over_rate",
++      dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE) },
+   };
+ 
+   for (size_t i = 0; i < ARRAY_LENGTH(entries); i++) {
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index be5006d59b..d2f4048186 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -1349,6 +1349,106 @@ test_hsdir_reuse_and_prev_hop_defenses(void *arg)
+   tor_free(chan);
+ }
+ 
++/* HSDirs count fetches of a descriptor over HSDirDescriptorFetchRate, and
++ * still serve them. */
++static void
++test_hsdir_desc_fetch_over_rate(void *arg)
++{
++  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
++  ed25519_keypair_t signing_kp;
++  hs_descriptor_t *desc = NULL;
++  char *desc_str = NULL, *get = NULL;
++  char key[ED25519_BASE64_LEN+1];
++  dos_options_t *dos_opts;
++  uint64_t over;
++  int64_t served;
++  const uint64_t billion = 1000000000;
++  uint64_t now = 100 * billion;
++  (void) arg;
++
++  init_test();
++  monotime_enable_test_mocking();
++  monotime_coarse_set_mock_time_nsec(now);
++  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
++  get_options_mutable()->ORPort_set = 1; /* Accept descriptor uploads. */
++  dos_opts = get_dos_options(get_options_mutable());
++  dos_opts->HSDirDescriptorFetchRate = 1;
++  dos_opts->HSDirDescriptorFetchBurst = 2;
++  tt_int_op(ed25519_keypair_generate(&signing_kp, 0), OP_EQ, 0);
++  desc = hs_helper_build_hs_desc_with_ip(&signing_kp);
++  tt_int_op(hs_desc_encode_descriptor(desc, &signing_kp, NULL, &desc_str),
++            OP_EQ, 0);
++  tt_int_op(hs_cache_store_as_dir(desc_str), OP_EQ, 0);
++  ed25519_public_to_base64(key, &desc->plaintext_data.blinded_pubkey);
++  tor_asprintf(&get, GET("/tor/hs/3/%s"), key);
++  served = GET_METRIC("success");
++
++  /* A fetch over the burst is counted, and served. */
++  for (int i = 0; i < 3; i++) {
++    hsdir_request_on_new_circ(chan, get, NULL);
++    tt_assert(!strcmpstart(hsdir_reply, "HTTP/1.0 200 "));
++  }
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE), OP_EQ, 1);
++  tt_i64_op(GET_METRIC("success"), OP_EQ, served + 3);
++  tt_i64_op(get_metric(METRICS_NAME(relay_dos_total), "type",
++                       "hsdir_fetch_over_rate"), OP_EQ, 1);
++
++  /* The bucket is kept when the descriptor is replaced. */
++  desc->plaintext_data.revision_counter++;
++  tor_free(desc_str);
++  tt_int_op(hs_desc_encode_descriptor(desc, &signing_kp, NULL, &desc_str),
++            OP_EQ, 0);
++  tt_int_op(hs_cache_store_as_dir(desc_str), OP_EQ, 0);
++  hsdir_request_on_new_circ(chan, get, NULL);
++  tt_assert(!strcmpstart(hsdir_reply, "HTTP/1.0 200 "));
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE), OP_EQ, 2);
++
++  /* A second later, one more fetch is within the rate. */
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  hsdir_request_on_new_circ(chan, get, NULL);
++  hsdir_request_on_new_circ(chan, get, NULL);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE), OP_EQ, 3);
++
++  /* New limits apply to cached descriptors, and 0 means 1. */
++  dos_opts->HSDirDescriptorFetchBurst = 3;
++  monotime_coarse_set_mock_time_nsec(now += 100 * billion);
++  over = dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE);
++  for (int i = 0; i < 5; i++)
++    hsdir_request_on_new_circ(chan, get, NULL);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE), OP_EQ, over + 2);
++  dos_opts->HSDirDescriptorFetchRate = 0;
++  dos_opts->HSDirDescriptorFetchBurst = 0;
++  monotime_coarse_set_mock_time_nsec(now += 100 * billion);
++  over = dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE);
++  for (int i = 0; i < 5; i++)
++    hsdir_request_on_new_circ(chan, get, NULL);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE), OP_EQ, over + 4);
++
++  /* A new rate alone applies too: three more fetches a second later. */
++  dos_opts->HSDirDescriptorFetchBurst = 5;
++  monotime_coarse_set_mock_time_nsec(now += 100 * billion);
++  for (int i = 0; i < 5; i++)
++    hsdir_request_on_new_circ(chan, get, NULL);
++  dos_opts->HSDirDescriptorFetchRate = 3;
++  monotime_coarse_set_mock_time_nsec(now += billion);
++  over = dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE);
++  for (int i = 0; i < 4; i++)
++    hsdir_request_on_new_circ(chan, get, NULL);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE), OP_EQ, over + 1);
++
++ done:
++  monotime_disable_test_mocking();
++  UNMOCK(connection_write_to_buf_impl_);
++  SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
++                    TO_OR_CIRCUIT(c)->p_chan = NULL);
++  circuit_free_all();
++  tor_free(hsdir_reply);
++  tor_free(chan);
++  hs_descriptor_free(desc);
++  tor_free(desc_str);
++  tor_free(get);
++}
++
+ struct testcase_t hs_cache[] = {
+   /* Encoding tests. */
+   { "directory", test_directory, TT_FORK,
+@@ -1371,6 +1471,8 @@ struct testcase_t hs_cache[] = {
+     test_hsdir_reuse_and_prev_hop_counters, TT_FORK, NULL, NULL },
+   { "hsdir_reuse_and_prev_hop_defenses",
+     test_hsdir_reuse_and_prev_hop_defenses, TT_FORK, NULL, NULL },
++  { "hsdir_desc_fetch_over_rate", test_hsdir_desc_fetch_over_rate, TT_FORK,
++    NULL, NULL },
+   { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
+     NULL, NULL },
+   { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
+-- 
+2.43.0
+
