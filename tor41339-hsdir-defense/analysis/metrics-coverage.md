@@ -167,42 +167,19 @@ per-channel counts first. "Refuse a stream or close a circuit" is open for
 refusing streams), and its comparison needs the received/admitted/churn
 metrics above, all of which **P** provides.
 
-## What is missing, ranked
+## What is missing
 
-**1. Deploy what is built.** 0016 and 0017 answer Q2 fully, most of Q1, and
-parts of Q3, Q4, Q5 and Q10. They are not in any package yet.
+[`metrics-proposal.md`](metrics-proposal.md) replaces the ranked list that
+was here. It merges that list with:
 
-**2. Cheap extensions** (small, no new privacy exposure; could go in the same
-build):
+- a second ten-question review written against live `.6` data;
+- the operator critique;
+- the design reviews of 0016;
+- a stock profile that put most of the main thread in connection-cleanup
+  scans.
 
-| Addition | Answers | How |
-|---|---|---|
-| circuits reaching 2, 10 and 50 BEGIN_DIR cells, by class | Q3 | count when a circuit's 2nd, 10th or 50th cell arrives, at 0016's hook; 100 needs one more bit per circuit (8 bytes per circuit) |
-| HS requests per circuit beyond 2 | Q3 | widen 0010's 2-bit counter; count circuits reaching 10 and 50 HS requests |
-| consensus vs descriptor-only | Q5 | split `known_relay` in `channel_get_prev_hop()` (a third class bit) |
-| bytes queued, by state | Q9 | sum the output buffers in 0008's existing scrape-time walk |
-| response bytes handed onward, by class | Q9 | count where tor already counts directory bytes |
-| onion queue depth and oldest wait | Q8, Q4 | a scrape-time gauge from `onion_num_pending()` and the queue head's age |
-| event-loop delay | Q8 | the lateness of a once-a-second timer, maximum over the last minute |
-| peak BEGIN_DIR in any one second over the last minute | Q3 | a per-second counter and a running maximum |
-
-**3. Larger, needing a privacy review** (they describe individual peers or
-descriptors, even without naming them):
-
-| Addition | Answers | How |
-|---|---|---|
-| distinct channels that sent CREATE or BEGIN_DIR in the last minute, and the top-one and top-ten shares, by class | Q4 | per-channel counters, summarized at a minute boundary; no identity or address exported. On a bridge or a quiet relay these could describe single users, so an opt-in option |
-| descriptors by download count, and the top-one and top-ten shares | Q6 | a scrape-time walk of the HSDir cache's existing `n_downloaded` counts |
-| distinct keys fetched per minute, hits and misses apart | Q6 | an approximate distinct count (a few-KB sketch, keyed per run) |
-
-**4. Nice to have:** response latency and stream lifetime histograms (Q9);
-uptime and consensus-time gauges (Q5, Q7); a gauge of which defenses are
-enabled (Q10); consensus diffs apart, and a transport label for DirPort
-requests (Q1).
-
-**5. Not tor metrics:** per-thread CPU (it could be added to **T** from
-`/proc`), `perf` call graphs, a known-normal workload, and matched enforcement
-experiments.
+It ranks each addition by data gained per line of code, and maps this
+note's question numbers to its own.
 
 The review's broader point stands: before any defense becomes a production
 change, the comparison has to come from these metrics plus a known-normal

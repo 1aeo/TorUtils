@@ -220,7 +220,9 @@ update. Passive collection comes first; any controlled probe/enforcement trial
 requires a separate human decision. Keep the same native artifact and metric
 set across patched members and modes. Rollout is one pilot, then small
 approved batches toward half of the pilot host's relays; retain stock references and
-patched-off controls. No handoff counters or extra C telemetry are planned.
+patched-off controls. The `.6` rollout adds no handoff counters or extra C
+telemetry; [`analysis/metrics-proposal.md`](analysis/metrics-proposal.md)
+proposes metrics for a later build, which need their own decision.
 
 To see what a relay's BEGIN_DIR traffic is during a flood, run
 [`operator/begindir-breakdown.py`](operator/BEGIN_DIR-BREAKDOWN.md) against
@@ -229,6 +231,10 @@ the Tor network team asked operators on tor-relays in October 2026, as far as
 the `.6` metrics allow; [`analysis/begindir-questions.md`](analysis/begindir-questions.md)
 explains what they can and cannot tell, and the proposed metric changes
 `patches/proposed/0016` and `0017`, which are **not** in the `.6` packages.
+[`analysis/metrics-coverage.md`](analysis/metrics-coverage.md) maps ten
+questions about the flood to the metrics that answer them.
+[`analysis/metrics-proposal.md`](analysis/metrics-proposal.md) proposes what
+to add next.
 
 ## Live capture (`data/`)
 
