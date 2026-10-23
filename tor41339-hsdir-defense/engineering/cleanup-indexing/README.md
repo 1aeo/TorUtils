@@ -18,6 +18,7 @@ patches/against-0.4.9.14/   items 1-3, git format-patch on base 8fe2745
 patches/item4-fixup-of-0012/ item 4 as a fixup! of the series' 0012
 bench_cleanup.c             scaling microbenchmark (real libtor lifecycle)
 INVARIANT-AUDIT.md          invariant + mutation audit for all three lists
+ITEM4-ON-DOT7.md            how to rebase item 4 onto .7 without losing BEGIN_DIR counts
 UPSTREAM-NOTE.md            draft note to the Tor network team (not sent)
 CANARY-ROLLBACK.md          unexecuted .7 canary/rollback plan
 results/scaling-*.json      microbenchmark raw (baseline vs patched)
