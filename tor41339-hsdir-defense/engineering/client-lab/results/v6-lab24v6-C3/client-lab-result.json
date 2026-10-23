@@ -1,0 +1,3647 @@
+{
+ "phase_seconds": 60,
+ "phases_selected": "B0,C3",
+ "clients_kinds": [
+  "ctor",
+  "arti"
+ ],
+ "budget_token": "56 KBytes",
+ "D_onion": "p75pcb2tfmpjd5yghfxwhebmkxl32diyzinhzr4q2w5cv2c2dndhwhad",
+ "E_onion": "6n4mvumj7ep7e36aj3beqvfx22ssk4yqskn7fszgo7vrb3kykng57cad",
+ "relays": [
+  "000a",
+  "001a",
+  "002a",
+  "003a",
+  "004r",
+  "005r",
+  "006r",
+  "007r",
+  "008r",
+  "009r"
+ ],
+ "ctor_client_nodes": [
+  "010c",
+  "011c",
+  "012c",
+  "013c",
+  "014c",
+  "015c"
+ ],
+ "voting_interval_s": 20,
+ "time_period_s": 480,
+ "phases": [
+  {
+   "phase": "B0",
+   "desc": "baseline: no load, every HSDir at defaults",
+   "period_guard_wait_s": 0.0,
+   "time_period": 3734722,
+   "holders": {
+    "D": [
+     "000a",
+     "002a",
+     "003a",
+     "004r",
+     "005r",
+     "006r",
+     "007r",
+     "009r"
+    ],
+    "E": [
+     "000a",
+     "001a",
+     "002a",
+     "004r",
+     "005r",
+     "006r",
+     "007r",
+     "008r"
+    ]
+   },
+   "load_spec": {
+    "mode": "none"
+   },
+   "load_targets": {},
+   "relay_conf_applied": [
+    {
+     "relay": "000a",
+     "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchBudget=0"
+    },
+    {
+     "relay": "001a",
+     "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchBudget=0"
+    },
+    {
+     "relay": "002a",
+     "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchBudget=0"
+    },
+    {
+     "relay": "003a",
+     "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchBudget=0"
+    },
+    {
+     "relay": "004r",
+     "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchBudget=0"
+    },
+    {
+     "relay": "005r",
+     "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchBudget=0"
+    },
+    {
+     "relay": "006r",
+     "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchBudget=0"
+    },
+    {
+     "relay": "007r",
+     "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchBudget=0"
+    },
+    {
+     "relay": "008r",
+     "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchBudget=0"
+    },
+    {
+     "relay": "009r",
+     "conf": "HSDirDescriptorFetchLimit=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchBudget=0"
+    }
+   ],
+   "limited_relays": [],
+   "setup_s": 1.0,
+   "holders_at_end": {
+    "D": [
+     "000a",
+     "002a",
+     "003a",
+     "004r",
+     "005r",
+     "006r",
+     "007r",
+     "009r"
+    ]
+   },
+   "holders_changed": false,
+   "load": {
+    "wall_s": 60.0,
+    "issued": 0,
+    "issued_per_s": 0.0,
+    "recv": 0,
+    "answered_or_refused_at_targets_per_s": 0.0,
+    "per_thread": []
+   },
+   "metrics_delta": {
+    "000a": {
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 14,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 3,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 3
+    },
+    "001a": {
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 5,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 4,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 4
+    },
+    "002a": {
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 3,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 3,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 9
+    },
+    "003a": {
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 22
+    },
+    "004r": {
+     "tor_relay_hsdir_get_total{action=\"success\"}": 7,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 7,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 7
+    },
+    "005r": {
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 3,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 3,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 3
+    },
+    "006r": {
+     "tor_relay_hsdir_get_total{action=\"success\"}": 4,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 4,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 4
+    },
+    "007r": {
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 7,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 7,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 7
+    },
+    "008r": {
+     "tor_relay_hsdir_get_total{action=\"success\"}": 1,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 1,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 1
+    }
+   },
+   "totals": {
+    "hsdir_fetch_over_rate": 0,
+    "hsdir_fetch_pressure": 0,
+    "hsdir_fetch_shed": 0,
+    "get_refused": 0,
+    "get_success": 32,
+    "get_not_found": 0,
+    "get_single_hop": 0,
+    "begin_dir": 72
+   },
+   "getconf_sample": {
+    "000a": [
+     "HSDirDescriptorFetchBurst=20",
+     "HSDirDescriptorFetchLimit=0",
+     "HSDirDescriptorFetchRate=5",
+     "HSDirFetchBudget=0"
+    ]
+   },
+   "clients": {
+    "arti": {
+     "D": {
+      "onion": "p75pcb2t",
+      "summary": {
+       "requests": 10,
+       "ok": 10,
+       "success_rate": 1.0,
+       "lat_p50_s": 0.282,
+       "lat_p90_s": 0.459,
+       "ttfb_p50_s": 0.282,
+       "fail_lat_p50_s": null,
+       "hsdir_attempts_per_ok": 1.0,
+       "hsdir_attempts_per_fail": null,
+       "max_hsdir_attempts": 1,
+       "ok_after_failover": 0,
+       "fail_after_desc": 0,
+       "skipped_window_over": 0,
+       "ok_without_fetch": 0,
+       "asked_limited_hsdir": 0,
+       "ok_when_asked_limited": 0,
+       "hsdir_attempt_outcomes": {
+        "ok": 10
+       },
+       "curl_rc": {
+        "0": 10
+       }
+      },
+      "requests": [
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-B0-D-0-873378",
+        "t": 2.6,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.404,
+        "total_s": 0.404,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "002a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-B0-D-1-878578",
+        "t": 7.8,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.249,
+        "total_s": 0.249,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-B0-D-2-883778",
+        "t": 13.0,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.219,
+        "total_s": 0.219,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "005r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "005r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-B0-D-3-888978",
+        "t": 18.2,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.243,
+        "total_s": 0.243,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "000a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "000a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-B0-D-4-894178",
+        "t": 23.4,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.228,
+        "total_s": 0.228,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "002a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-B0-D-5-899378",
+        "t": 28.6,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.459,
+        "total_s": 0.459,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-B0-D-6-904578",
+        "t": 33.8,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.234,
+        "total_s": 0.234,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-B0-D-7-909778",
+        "t": 39.0,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.282,
+        "total_s": 0.282,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "005r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "005r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-B0-D-8-914978",
+        "t": 44.2,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.376,
+        "total_s": 0.377,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "006r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-B0-D-9-920178",
+        "t": 49.4,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.427,
+        "total_s": 0.427,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       }
+      ]
+     },
+     "E": {
+      "onion": "6n4mvumj",
+      "summary": {
+       "requests": 10,
+       "ok": 10,
+       "success_rate": 1.0,
+       "lat_p50_s": 0.302,
+       "lat_p90_s": 0.368,
+       "ttfb_p50_s": 0.302,
+       "fail_lat_p50_s": null,
+       "hsdir_attempts_per_ok": 1.0,
+       "hsdir_attempts_per_fail": null,
+       "max_hsdir_attempts": 1,
+       "ok_after_failover": 0,
+       "fail_after_desc": 0,
+       "skipped_window_over": 0,
+       "ok_without_fetch": 0,
+       "asked_limited_hsdir": 0,
+       "ok_when_asked_limited": 0,
+       "hsdir_attempt_outcomes": {
+        "ok": 10
+       },
+       "curl_rc": {
+        "0": 10
+       }
+      },
+      "requests": [
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-B0-E-0-874678",
+        "t": 3.9,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.253,
+        "total_s": 0.253,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "000a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "000a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-B0-E-1-879878",
+        "t": 9.1,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.351,
+        "total_s": 0.351,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-B0-E-2-885078",
+        "t": 14.3,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.27,
+        "total_s": 0.27,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-B0-E-3-890278",
+        "t": 19.5,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.248,
+        "total_s": 0.248,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-B0-E-4-895478",
+        "t": 24.7,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.368,
+        "total_s": 0.368,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "008r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "008r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-B0-E-5-900678",
+        "t": 29.9,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.331,
+        "total_s": 0.331,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-B0-E-6-905878",
+        "t": 35.1,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.328,
+        "total_s": 0.328,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-B0-E-7-911078",
+        "t": 40.3,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.212,
+        "total_s": 0.212,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-B0-E-8-916278",
+        "t": 45.5,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.302,
+        "total_s": 0.302,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "000a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "000a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-B0-E-9-921478",
+        "t": 50.7,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.278,
+        "total_s": 0.278,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       }
+      ]
+     }
+    },
+    "ctor": {
+     "D": {
+      "onion": "p75pcb2t",
+      "summary": {
+       "requests": 6,
+       "ok": 6,
+       "success_rate": 1.0,
+       "lat_p50_s": 0.232,
+       "lat_p90_s": 0.371,
+       "ttfb_p50_s": 0.23,
+       "fail_lat_p50_s": null,
+       "hsdir_attempts_per_ok": 1.0,
+       "hsdir_attempts_per_fail": null,
+       "max_hsdir_attempts": 1,
+       "ok_after_failover": 0,
+       "fail_after_desc": 0,
+       "skipped_window_over": 0,
+       "ok_without_fetch": 0,
+       "asked_limited_hsdir": 0,
+       "ok_when_asked_limited": 0,
+       "hsdir_attempt_outcomes": {
+        "ok": 6
+       },
+       "curl_rc": {
+        "0": 6
+       }
+      },
+      "requests": [
+       {
+        "kind": "ctor",
+        "client": "010c",
+        "onion": "p75pcb2t",
+        "user": "ctor-B0-D-0-870778",
+        "t": 0.4,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.23,
+        "total_s": 0.23,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.008,
+          "outcome": "ok",
+          "detail": 0.086
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "002a"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "012c",
+        "onion": "p75pcb2t",
+        "user": "ctor-B0-D-1-879445",
+        "t": 9.07,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.251,
+        "total_s": 0.252,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.062
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "006r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "014c",
+        "onion": "p75pcb2t",
+        "user": "ctor-B0-D-2-888111",
+        "t": 17.73,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.214,
+        "total_s": 0.214,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "005r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.059
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "005r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "010c",
+        "onion": "p75pcb2t",
+        "user": "ctor-B0-D-3-896778",
+        "t": 26.4,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.189,
+        "total_s": 0.189,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.061
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "006r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "012c",
+        "onion": "p75pcb2t",
+        "user": "ctor-B0-D-4-905444",
+        "t": 35.07,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.37,
+        "total_s": 0.371,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.061
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "014c",
+        "onion": "p75pcb2t",
+        "user": "ctor-B0-D-5-914111",
+        "t": 43.73,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.188,
+        "total_s": 0.232,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.057
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ]
+       }
+      ]
+     },
+     "E": {
+      "onion": "6n4mvumj",
+      "summary": {
+       "requests": 6,
+       "ok": 6,
+       "success_rate": 1.0,
+       "lat_p50_s": 0.289,
+       "lat_p90_s": 0.392,
+       "ttfb_p50_s": 0.289,
+       "fail_lat_p50_s": null,
+       "hsdir_attempts_per_ok": 1.0,
+       "hsdir_attempts_per_fail": null,
+       "max_hsdir_attempts": 1,
+       "ok_after_failover": 0,
+       "fail_after_desc": 0,
+       "skipped_window_over": 0,
+       "ok_without_fetch": 0,
+       "asked_limited_hsdir": 0,
+       "ok_when_asked_limited": 0,
+       "hsdir_attempt_outcomes": {
+        "ok": 6
+       },
+       "curl_rc": {
+        "0": 6
+       }
+      },
+      "requests": [
+       {
+        "kind": "ctor",
+        "client": "011c",
+        "onion": "6n4mvumj",
+        "user": "ctor-B0-E-0-872945",
+        "t": 2.57,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.392,
+        "total_s": 0.392,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.104
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "006r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "013c",
+        "onion": "6n4mvumj",
+        "user": "ctor-B0-E-1-881611",
+        "t": 11.23,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.247,
+        "total_s": 0.247,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.067
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "015c",
+        "onion": "6n4mvumj",
+        "user": "ctor-B0-E-2-890278",
+        "t": 19.9,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.25,
+        "total_s": 0.25,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.06
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "011c",
+        "onion": "6n4mvumj",
+        "user": "ctor-B0-E-3-898944",
+        "t": 28.57,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.289,
+        "total_s": 0.289,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.095
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "013c",
+        "onion": "6n4mvumj",
+        "user": "ctor-B0-E-4-907611",
+        "t": 37.23,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.305,
+        "total_s": 0.305,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.101
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "015c",
+        "onion": "6n4mvumj",
+        "user": "ctor-B0-E-5-916278",
+        "t": 45.9,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.235,
+        "total_s": 0.235,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.062
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "all_pids_unchanged": true,
+   "arti_alive": true
+  },
+  {
+   "phase": "C3",
+   "desc": ".6: three times the C1 load on D at every HSDir holding it; FetchLimit=1 + small budget on EVERY HSDir (low lottery odds: the limit of what retries can recover)",
+   "period_guard_wait_s": 0.0,
+   "time_period": 3734722,
+   "holders": {
+    "D": [
+     "000a",
+     "002a",
+     "003a",
+     "004r",
+     "005r",
+     "006r",
+     "007r",
+     "009r"
+    ],
+    "E": [
+     "000a",
+     "001a",
+     "002a",
+     "004r",
+     "005r",
+     "006r",
+     "007r",
+     "008r"
+    ]
+   },
+   "load_spec": {
+    "mode": "concentrated",
+    "pattern": "steady",
+    "rate_per_hsdir": 30
+   },
+   "load_targets": {
+    "p75pcb2t": [
+     "000a",
+     "002a",
+     "003a",
+     "004r",
+     "005r",
+     "006r",
+     "007r",
+     "009r"
+    ]
+   },
+   "relay_conf_applied": [
+    {
+     "relay": "000a",
+     "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchBudget=\"56 KBytes\""
+    },
+    {
+     "relay": "001a",
+     "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchBudget=\"56 KBytes\""
+    },
+    {
+     "relay": "002a",
+     "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchBudget=\"56 KBytes\""
+    },
+    {
+     "relay": "003a",
+     "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchBudget=\"56 KBytes\""
+    },
+    {
+     "relay": "004r",
+     "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchBudget=\"56 KBytes\""
+    },
+    {
+     "relay": "005r",
+     "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchBudget=\"56 KBytes\""
+    },
+    {
+     "relay": "006r",
+     "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchBudget=\"56 KBytes\""
+    },
+    {
+     "relay": "007r",
+     "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchBudget=\"56 KBytes\""
+    },
+    {
+     "relay": "008r",
+     "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchBudget=\"56 KBytes\""
+    },
+    {
+     "relay": "009r",
+     "conf": "HSDirDescriptorFetchLimit=1 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchBudget=\"56 KBytes\""
+    }
+   ],
+   "limited_relays": [
+    "000a",
+    "001a",
+    "002a",
+    "003a",
+    "004r",
+    "005r",
+    "006r",
+    "007r",
+    "008r",
+    "009r"
+   ],
+   "setup_s": 1.0,
+   "holders_at_end": {
+    "D": [
+     "000a",
+     "002a",
+     "003a",
+     "004r",
+     "005r",
+     "006r",
+     "007r",
+     "009r"
+    ]
+   },
+   "holders_changed": false,
+   "load": {
+    "wall_s": 61.0,
+    "issued": 14400,
+    "issued_per_s": 236.02,
+    "recv": 556,
+    "answered_or_refused_at_targets_per_s": 77.56,
+    "per_thread": [
+     {
+      "onion": "p75pcb2t",
+      "hsdirs": [
+       "000a",
+       "002a",
+       "003a",
+       "004r",
+       "005r",
+       "006r",
+       "007r",
+       "009r"
+      ],
+      "pattern": "steady",
+      "rate": 30,
+      "issued": 14400,
+      "recv": 556,
+      "fail": 0,
+      "err": null
+     }
+    ]
+   },
+   "metrics_delta": {
+    "000a": {
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 1193,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 630,
+     "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 245,
+     "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 163,
+     "tor_relay_dos_total{type=\"hsdir_fetch_over_rate\"}": 566,
+     "tor_relay_dos_total{type=\"hsdir_fetch_pressure\"}": 622,
+     "tor_relay_dos_total{type=\"hsdir_fetch_shed\"}": 379,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 251,
+     "tor_relay_hsdir_get_total{action=\"single_hop\"}": 433,
+     "tor_relay_hsdir_get_total{action=\"refused\"}": 379
+    },
+    "001a": {
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 11,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 8,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 8
+    },
+    "002a": {
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 595,
+     "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 238,
+     "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 153,
+     "tor_relay_dos_total{type=\"hsdir_fetch_over_rate\"}": 533,
+     "tor_relay_dos_total{type=\"hsdir_fetch_pressure\"}": 587,
+     "tor_relay_dos_total{type=\"hsdir_fetch_shed\"}": 350,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 245,
+     "tor_relay_hsdir_get_total{action=\"single_hop\"}": 419,
+     "tor_relay_hsdir_get_total{action=\"refused\"}": 350,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 1144
+    },
+    "003a": {
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 1214,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 256,
+     "tor_relay_hsdir_get_total{action=\"single_hop\"}": 459,
+     "tor_relay_hsdir_get_total{action=\"refused\"}": 357,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 613,
+     "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 256,
+     "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 139,
+     "tor_relay_dos_total{type=\"hsdir_fetch_over_rate\"}": 551,
+     "tor_relay_dos_total{type=\"hsdir_fetch_pressure\"}": 605,
+     "tor_relay_dos_total{type=\"hsdir_fetch_shed\"}": 357
+    },
+    "004r": {
+     "tor_relay_hsdir_get_total{action=\"success\"}": 236,
+     "tor_relay_hsdir_get_total{action=\"single_hop\"}": 380,
+     "tor_relay_hsdir_get_total{action=\"refused\"}": 339,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 575,
+     "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 227,
+     "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 139,
+     "tor_relay_dos_total{type=\"hsdir_fetch_over_rate\"}": 509,
+     "tor_relay_dos_total{type=\"hsdir_fetch_pressure\"}": 562,
+     "tor_relay_dos_total{type=\"hsdir_fetch_shed\"}": 339,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 1085
+    },
+    "005r": {
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 603,
+     "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 238,
+     "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 151,
+     "tor_relay_dos_total{type=\"hsdir_fetch_over_rate\"}": 541,
+     "tor_relay_dos_total{type=\"hsdir_fetch_pressure\"}": 593,
+     "tor_relay_dos_total{type=\"hsdir_fetch_shed\"}": 361,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 1129,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 242,
+     "tor_relay_hsdir_get_total{action=\"single_hop\"}": 387,
+     "tor_relay_hsdir_get_total{action=\"refused\"}": 361
+    },
+    "006r": {
+     "tor_relay_hsdir_get_total{action=\"success\"}": 242,
+     "tor_relay_hsdir_get_total{action=\"single_hop\"}": 375,
+     "tor_relay_hsdir_get_total{action=\"refused\"}": 319,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 1060,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 561,
+     "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 230,
+     "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 137,
+     "tor_relay_dos_total{type=\"hsdir_fetch_over_rate\"}": 492,
+     "tor_relay_dos_total{type=\"hsdir_fetch_pressure\"}": 538,
+     "tor_relay_dos_total{type=\"hsdir_fetch_shed\"}": 319
+    },
+    "007r": {
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 581,
+     "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 237,
+     "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 127,
+     "tor_relay_dos_total{type=\"hsdir_fetch_over_rate\"}": 512,
+     "tor_relay_dos_total{type=\"hsdir_fetch_pressure\"}": 570,
+     "tor_relay_dos_total{type=\"hsdir_fetch_shed\"}": 334,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 247,
+     "tor_relay_hsdir_get_total{action=\"single_hop\"}": 399,
+     "tor_relay_hsdir_get_total{action=\"refused\"}": 334,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 1098
+    },
+    "008r": {
+     "tor_relay_hsdir_get_total{action=\"success\"}": 3,
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 4,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 3
+    },
+    "009r": {
+     "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 1091,
+     "tor_relay_dos_total{type=\"hsdir_request_total\"}": 574,
+     "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 245,
+     "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 147,
+     "tor_relay_dos_total{type=\"hsdir_fetch_over_rate\"}": 512,
+     "tor_relay_dos_total{type=\"hsdir_fetch_pressure\"}": 562,
+     "tor_relay_dos_total{type=\"hsdir_fetch_shed\"}": 329,
+     "tor_relay_hsdir_get_total{action=\"success\"}": 245,
+     "tor_relay_hsdir_get_total{action=\"single_hop\"}": 395,
+     "tor_relay_hsdir_get_total{action=\"refused\"}": 329
+    }
+   },
+   "totals": {
+    "hsdir_fetch_over_rate": 4216,
+    "hsdir_fetch_pressure": 4639,
+    "hsdir_fetch_shed": 2768,
+    "get_refused": 2768,
+    "get_success": 1975,
+    "get_not_found": 0,
+    "get_single_hop": 3247,
+    "begin_dir": 9029
+   },
+   "getconf_sample": {
+    "000a": [
+     "HSDirDescriptorFetchBurst=2",
+     "HSDirDescriptorFetchLimit=1",
+     "HSDirDescriptorFetchRate=1",
+     "HSDirFetchBudget=57344"
+    ]
+   },
+   "clients": {
+    "arti": {
+     "D": {
+      "onion": "p75pcb2t",
+      "summary": {
+       "requests": 20,
+       "ok": 19,
+       "success_rate": 0.95,
+       "lat_p50_s": 0.52,
+       "lat_p90_s": 0.928,
+       "ttfb_p50_s": 0.52,
+       "fail_lat_p50_s": 0.508,
+       "hsdir_attempts_per_ok": 2.68,
+       "hsdir_attempts_per_fail": 6.0,
+       "max_hsdir_attempts": 6,
+       "ok_after_failover": 10,
+       "fail_after_desc": 0,
+       "skipped_window_over": 0,
+       "ok_without_fetch": 0,
+       "asked_limited_hsdir": 20,
+       "ok_when_asked_limited": 19,
+       "hsdir_attempt_outcomes": {
+        "closed": 38,
+        "ok": 19
+       },
+       "curl_rc": {
+        "0": 19,
+        "97": 1
+       }
+      },
+      "requests": [
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-0-935677",
+        "t": 1.3,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.916,
+        "total_s": 0.916,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.063,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "006r",
+          "t": 0.169,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "007r",
+          "t": 0.236,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "005r",
+          "t": 0.372,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "002a",
+          "t": 0.455,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 6,
+        "n_hsdir_failed": 5,
+        "asked": [
+         "004r",
+         "000a",
+         "006r",
+         "007r",
+         "005r",
+         "002a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-1-938277",
+        "t": 3.9,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.624,
+        "total_s": 0.625,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "007r",
+          "t": 0.039,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.107,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "004r",
+          "t": 0.143,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "006r",
+          "t": 0.227,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 5,
+        "n_hsdir_failed": 4,
+        "asked": [
+         "002a",
+         "007r",
+         "000a",
+         "004r",
+         "006r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-2-940877",
+        "t": 6.5,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.359,
+        "total_s": 0.359,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "002a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-3-943477",
+        "t": 9.1,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.448,
+        "total_s": 0.449,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "006r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-4-946077",
+        "t": 11.7,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.599,
+        "total_s": 0.599,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "002a",
+          "t": 0.059,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "005r",
+          "t": 0.092,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.167,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "004r",
+          "t": 0.211,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 5,
+        "n_hsdir_failed": 4,
+        "asked": [
+         "007r",
+         "002a",
+         "005r",
+         "000a",
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-5-948677",
+        "t": 14.3,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.38,
+        "total_s": 0.38,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "005r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "005r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-6-951277",
+        "t": 16.9,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.407,
+        "total_s": 0.407,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "002a",
+          "t": 0.062,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 2,
+        "n_hsdir_failed": 1,
+        "asked": [
+         "006r",
+         "002a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-7-953877",
+        "t": 19.5,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.349,
+        "total_s": 0.349,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "000a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "000a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-8-956477",
+        "t": 22.1,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.402,
+        "total_s": 0.402,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "002a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-9-959077",
+        "t": 24.7,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.352,
+        "total_s": 0.352,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "002a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-10-961677",
+        "t": 27.3,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.928,
+        "total_s": 0.928,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.03,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "007r",
+          "t": 0.102,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "005r",
+          "t": 0.17,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "002a",
+          "t": 0.202,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "006r",
+          "t": 0.27,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 6,
+        "n_hsdir_failed": 5,
+        "asked": [
+         "004r",
+         "000a",
+         "007r",
+         "005r",
+         "002a",
+         "006r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-11-964277",
+        "t": 29.9,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.684,
+        "total_s": 0.684,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.067,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "006r",
+          "t": 0.091,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "004r",
+          "t": 0.186,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 4,
+        "n_hsdir_failed": 3,
+        "asked": [
+         "007r",
+         "000a",
+         "006r",
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-12-966877",
+        "t": 32.5,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.52,
+        "total_s": 0.52,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "002a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-13-969477",
+        "t": 35.1,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.528,
+        "total_s": 0.528,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "002a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-14-972077",
+        "t": 37.7,
+        "ok": false,
+        "http_code": "000",
+        "curl_rc": 97,
+        "ttfb_s": 0.0,
+        "total_s": 0.508,
+        "err": "curl: (97) Can't complete SOCKS5 connection to <onion>. (1)",
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.071,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "005r",
+          "t": 0.135,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "007r",
+          "t": 0.263,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "004r",
+          "t": 0.395,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "006r",
+          "t": 0.458,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         }
+        ],
+        "n_hsdir_attempts": 6,
+        "n_hsdir_failed": 6,
+        "asked": [
+         "002a",
+         "000a",
+         "005r",
+         "007r",
+         "004r",
+         "006r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": false,
+        "arti_conn_failure": "error: Unable to download hidden service descriptor",
+        "events": []
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-15-974677",
+        "t": 40.3,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.688,
+        "total_s": 0.689,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "005r",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "002a",
+          "t": 0.048,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "004r",
+          "t": 0.087,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.166,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 4,
+        "n_hsdir_failed": 3,
+        "asked": [
+         "005r",
+         "002a",
+         "004r",
+         "000a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-16-977277",
+        "t": 42.9,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.466,
+        "total_s": 0.466,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-17-979877",
+        "t": 45.5,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.967,
+        "total_s": 0.967,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "007r",
+          "t": 0.039,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "005r",
+          "t": 0.133,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.246,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "004r",
+          "t": 0.367,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 5,
+        "n_hsdir_failed": 4,
+        "asked": [
+         "002a",
+         "007r",
+         "005r",
+         "000a",
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-18-982477",
+        "t": 48.1,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.62,
+        "total_s": 0.62,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "007r",
+          "t": 0.024,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.15,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 3,
+        "n_hsdir_failed": 2,
+        "asked": [
+         "006r",
+         "007r",
+         "000a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "p75pcb2t",
+        "user": "arti-C3-D-19-985077",
+        "t": 50.7,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.442,
+        "total_s": 0.442,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "006r",
+          "t": 0.127,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 2,
+        "n_hsdir_failed": 1,
+        "asked": [
+         "007r",
+         "006r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       }
+      ]
+     },
+     "E": {
+      "onion": "6n4mvumj",
+      "summary": {
+       "requests": 20,
+       "ok": 20,
+       "success_rate": 1.0,
+       "lat_p50_s": 0.452,
+       "lat_p90_s": 0.684,
+       "ttfb_p50_s": 0.429,
+       "fail_lat_p50_s": null,
+       "hsdir_attempts_per_ok": 1.05,
+       "hsdir_attempts_per_fail": null,
+       "max_hsdir_attempts": 2,
+       "ok_after_failover": 1,
+       "fail_after_desc": 0,
+       "skipped_window_over": 0,
+       "ok_without_fetch": 0,
+       "asked_limited_hsdir": 20,
+       "ok_when_asked_limited": 20,
+       "hsdir_attempt_outcomes": {
+        "ok": 20,
+        "closed": 1
+       },
+       "curl_rc": {
+        "0": 20
+       }
+      },
+      "requests": [
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-0-936327",
+        "t": 1.95,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.511,
+        "total_s": 0.511,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-1-938927",
+        "t": 4.55,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.429,
+        "total_s": 0.429,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-2-941527",
+        "t": 7.15,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.346,
+        "total_s": 0.346,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-3-944127",
+        "t": 9.75,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.346,
+        "total_s": 0.346,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-4-946727",
+        "t": 12.35,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.5,
+        "total_s": 0.5,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "006r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-5-949328",
+        "t": 14.95,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.492,
+        "total_s": 0.492,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-6-951927",
+        "t": 17.55,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.469,
+        "total_s": 0.529,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-7-954527",
+        "t": 20.15,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.549,
+        "total_s": 0.549,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "006r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-8-957127",
+        "t": 22.75,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.423,
+        "total_s": 0.423,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "006r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-9-959727",
+        "t": 25.35,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.311,
+        "total_s": 0.311,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-10-962327",
+        "t": 27.95,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.487,
+        "total_s": 0.487,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-11-964927",
+        "t": 30.55,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.404,
+        "total_s": 0.452,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-12-967527",
+        "t": 33.15,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.684,
+        "total_s": 0.684,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "closed",
+          "detail": "error: directory error: IO error: Stream not connected"
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.06,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 2,
+        "n_hsdir_failed": 1,
+        "asked": [
+         "006r",
+         "000a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-13-970127",
+        "t": 35.75,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.379,
+        "total_s": 0.379,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-14-972727",
+        "t": 38.35,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.591,
+        "total_s": 0.591,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-15-975327",
+        "t": 40.95,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.38,
+        "total_s": 0.425,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-16-977927",
+        "t": 43.55,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.407,
+        "total_s": 0.451,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-17-980527",
+        "t": 46.15,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.732,
+        "total_s": 0.732,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-18-983127",
+        "t": 48.75,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.334,
+        "total_s": 0.334,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       },
+       {
+        "kind": "arti",
+        "client": "arti",
+        "onion": "6n4mvumj",
+        "user": "arti-C3-E-19-985727",
+        "t": 51.35,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.386,
+        "total_s": 0.386,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "008r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": null
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "008r"
+        ],
+        "desc_fetch_rounds": 1,
+        "desc_obtained": true
+       }
+      ]
+     }
+    },
+    "ctor": {
+     "D": {
+      "onion": "p75pcb2t",
+      "summary": {
+       "requests": 10,
+       "ok": 10,
+       "success_rate": 1.0,
+       "lat_p50_s": 0.625,
+       "lat_p90_s": 0.913,
+       "ttfb_p50_s": 0.625,
+       "fail_lat_p50_s": null,
+       "hsdir_attempts_per_ok": 2.9,
+       "hsdir_attempts_per_fail": null,
+       "max_hsdir_attempts": 6,
+       "ok_after_failover": 8,
+       "fail_after_desc": 0,
+       "skipped_window_over": 0,
+       "ok_without_fetch": 0,
+       "asked_limited_hsdir": 10,
+       "ok_when_asked_limited": 10,
+       "hsdir_attempt_outcomes": {
+        "no_reply": 19,
+        "ok": 10
+       },
+       "curl_rc": {
+        "0": 10
+       }
+      },
+      "requests": [
+       {
+        "kind": "ctor",
+        "client": "010c",
+        "onion": "p75pcb2t",
+        "user": "ctor-C3-D-0-934377",
+        "t": 0.4,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.696,
+        "total_s": 0.696,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "002a",
+          "t": 0.127,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.198,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "005r",
+          "t": 0.251,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "006r",
+          "t": 0.354,
+          "outcome": "ok",
+          "detail": 0.504
+         }
+        ],
+        "n_hsdir_attempts": 5,
+        "n_hsdir_failed": 4,
+        "asked": [
+         "004r",
+         "002a",
+         "000a",
+         "005r",
+         "006r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "012c",
+        "onion": "p75pcb2t",
+        "user": "ctor-C3-D-1-939577",
+        "t": 5.6,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.462,
+        "total_s": 0.462,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.155
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "014c",
+        "onion": "p75pcb2t",
+        "user": "ctor-C3-D-2-944777",
+        "t": 10.8,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.389,
+        "total_s": 0.389,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "005r",
+          "t": 0.042,
+          "outcome": "ok",
+          "detail": 0.142
+         }
+        ],
+        "n_hsdir_attempts": 2,
+        "n_hsdir_failed": 1,
+        "asked": [
+         "004r",
+         "005r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "010c",
+        "onion": "p75pcb2t",
+        "user": "ctor-C3-D-3-949977",
+        "t": 16.0,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.913,
+        "total_s": 0.913,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "007r",
+          "t": 0.18,
+          "outcome": "ok",
+          "detail": 0.313
+         }
+        ],
+        "n_hsdir_attempts": 2,
+        "n_hsdir_failed": 1,
+        "asked": [
+         "002a",
+         "007r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "012c",
+        "onion": "p75pcb2t",
+        "user": "ctor-C3-D-4-955177",
+        "t": 21.2,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.519,
+        "total_s": 0.519,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "007r",
+          "t": 0.011,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.097,
+          "outcome": "ok",
+          "detail": 0.213
+         }
+        ],
+        "n_hsdir_attempts": 3,
+        "n_hsdir_failed": 2,
+        "asked": [
+         "002a",
+         "007r",
+         "000a"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "014c",
+        "onion": "p75pcb2t",
+        "user": "ctor-C3-D-5-960377",
+        "t": 26.4,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.706,
+        "total_s": 0.754,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "004r",
+          "t": 0.106,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "007r",
+          "t": 0.174,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "005r",
+          "t": 0.268,
+          "outcome": "ok",
+          "detail": 0.435
+         }
+        ],
+        "n_hsdir_attempts": 4,
+        "n_hsdir_failed": 3,
+        "asked": [
+         "002a",
+         "004r",
+         "007r",
+         "005r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "010c",
+        "onion": "p75pcb2t",
+        "user": "ctor-C3-D-6-965577",
+        "t": 31.6,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.751,
+        "total_s": 0.751,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "002a",
+          "t": 0.0,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "007r",
+          "t": 0.04,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "006r",
+          "t": 0.154,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "000a",
+          "t": 0.239,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "004r",
+          "t": 0.312,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "005r",
+          "t": 0.411,
+          "outcome": "ok",
+          "detail": 0.473
+         }
+        ],
+        "n_hsdir_attempts": 6,
+        "n_hsdir_failed": 5,
+        "asked": [
+         "002a",
+         "007r",
+         "006r",
+         "000a",
+         "004r",
+         "005r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "012c",
+        "onion": "p75pcb2t",
+        "user": "ctor-C3-D-7-970777",
+        "t": 36.8,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.459,
+        "total_s": 0.459,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "005r",
+          "t": 0.0,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "006r",
+          "t": 0.08,
+          "outcome": "ok",
+          "detail": 0.171
+         }
+        ],
+        "n_hsdir_attempts": 2,
+        "n_hsdir_failed": 1,
+        "asked": [
+         "005r",
+         "006r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "014c",
+        "onion": "p75pcb2t",
+        "user": "ctor-C3-D-8-975977",
+        "t": 42.0,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.625,
+        "total_s": 0.625,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "005r",
+          "t": 0.065,
+          "outcome": "no_reply",
+          "detail": null
+         },
+         {
+          "hsdir": "004r",
+          "t": 0.169,
+          "outcome": "ok",
+          "detail": 0.287
+         }
+        ],
+        "n_hsdir_attempts": 3,
+        "n_hsdir_failed": 2,
+        "asked": [
+         "007r",
+         "005r",
+         "004r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "010c",
+        "onion": "p75pcb2t",
+        "user": "ctor-C3-D-9-981177",
+        "t": 47.2,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.403,
+        "total_s": 0.403,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.168
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ]
+       }
+      ]
+     },
+     "E": {
+      "onion": "6n4mvumj",
+      "summary": {
+       "requests": 10,
+       "ok": 10,
+       "success_rate": 1.0,
+       "lat_p50_s": 0.401,
+       "lat_p90_s": 0.566,
+       "ttfb_p50_s": 0.401,
+       "fail_lat_p50_s": null,
+       "hsdir_attempts_per_ok": 1.0,
+       "hsdir_attempts_per_fail": null,
+       "max_hsdir_attempts": 1,
+       "ok_after_failover": 0,
+       "fail_after_desc": 0,
+       "skipped_window_over": 0,
+       "ok_without_fetch": 0,
+       "asked_limited_hsdir": 10,
+       "ok_when_asked_limited": 10,
+       "hsdir_attempt_outcomes": {
+        "ok": 10
+       },
+       "curl_rc": {
+        "0": 10
+       }
+      },
+      "requests": [
+       {
+        "kind": "ctor",
+        "client": "011c",
+        "onion": "6n4mvumj",
+        "user": "ctor-C3-E-0-935677",
+        "t": 1.7,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.401,
+        "total_s": 0.401,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.153
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "006r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "013c",
+        "onion": "6n4mvumj",
+        "user": "ctor-C3-E-1-940877",
+        "t": 6.9,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.279,
+        "total_s": 0.279,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.091
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "006r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "015c",
+        "onion": "6n4mvumj",
+        "user": "ctor-C3-E-2-946077",
+        "t": 12.1,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.367,
+        "total_s": 0.367,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "008r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.119
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "008r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "011c",
+        "onion": "6n4mvumj",
+        "user": "ctor-C3-E-3-951277",
+        "t": 17.3,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.281,
+        "total_s": 0.281,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "001a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.061
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "001a"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "013c",
+        "onion": "6n4mvumj",
+        "user": "ctor-C3-E-4-956477",
+        "t": 22.5,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.34,
+        "total_s": 0.387,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.115
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "015c",
+        "onion": "6n4mvumj",
+        "user": "ctor-C3-E-5-961677",
+        "t": 27.7,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.446,
+        "total_s": 0.446,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "004r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.117
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "004r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "011c",
+        "onion": "6n4mvumj",
+        "user": "ctor-C3-E-6-966877",
+        "t": 32.9,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.351,
+        "total_s": 0.351,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "007r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.124
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "007r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "013c",
+        "onion": "6n4mvumj",
+        "user": "ctor-C3-E-7-972077",
+        "t": 38.1,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.565,
+        "total_s": 0.566,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "008r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.139
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "008r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "015c",
+        "onion": "6n4mvumj",
+        "user": "ctor-C3-E-8-977277",
+        "t": 43.3,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.444,
+        "total_s": 0.444,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "006r",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.177
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "006r"
+        ]
+       },
+       {
+        "kind": "ctor",
+        "client": "011c",
+        "onion": "6n4mvumj",
+        "user": "ctor-C3-E-9-982477",
+        "t": 48.5,
+        "ok": true,
+        "http_code": "200",
+        "curl_rc": 0,
+        "ttfb_s": 0.49,
+        "total_s": 0.491,
+        "err": null,
+        "hsdir_attempts": [
+         {
+          "hsdir": "000a",
+          "t": 0.0,
+          "outcome": "ok",
+          "detail": 0.068
+         }
+        ],
+        "n_hsdir_attempts": 1,
+        "n_hsdir_failed": 0,
+        "asked": [
+         "000a"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "all_pids_unchanged": true,
+   "arti_alive": true
+  }
+ ],
+ "fail": [],
+ "known_options": [
+  "HSDirDescriptorFetchBurst",
+  "HSDirDescriptorFetchLimit",
+  "HSDirDescriptorFetchRate",
+  "HSDirFetchBudget"
+ ],
+ "arti": {
+  "bin": "/arti/bin/arti",
+  "socks_port": 9400,
+  "sha256": "b2867768f9c9da3b3eaff04ad2c0c584c54201d12b53f215d4dfe6909871a11b",
+  "version": "Arti 2.7.0",
+  "conf": {
+   "hsdir_interval": "8",
+   "cbtmintimeout": "2000"
+  },
+  "bootstrap_s": 0.5
+ },
+ "desc_bytes_D": 14108,
+ "result": "PASS"
+}

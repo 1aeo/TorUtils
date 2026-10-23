@@ -1,0 +1,85 @@
+os: Ubuntu 24.04.5 LTS; tor: 0.4.9.14-1~noble+1+tor41339.6
+iface: lo:
+INFO:chutney:creating '/work/net/nodes.1792726936', linking to '/work/net/nodes'
+Creating identity key for test003a     with /usr/bin/tor-gencert
+INFO:chutney:Loading network from nodes dir: '/work/net/nodes'->'/work/net/nodes.1792726936
+Starting nodes
+
+Starting nodes
+
+torrc=/work/lc-reuse/torrc ctl=8020 role=client bin=/lc/tor EVIL_ISO_SESSIONGRP=1 EVIL_ONEHOP=unset
+torrc=/work/lc-onehop/torrc ctl=8022 role=onehop bin=/lc/tor EVIL_ISO_SESSIONGRP=unset EVIL_ONEHOP=1
+torrc=/work/lc-clientonehop/torrc ctl=8024 role=client bin=/lc/tor EVIL_ISO_SESSIONGRP=unset EVIL_ONEHOP=1
+load client reuse bootstrapped: True
+load client onehop-unlisted bootstrapped: True
+load client onehop-client bootstrapped: True
+target HSDir 004r
+=== rates while loaded ===
+BEGIN_DIR streams, per second over 45 s
+  opened (tor_relay_streams_total{type="BEGIN_DIR"}): 3.96/s
+  Q1: what they asked for
+    onion service descriptor fetches   99.4%  3.93/s
+    onion service descriptor uploads    0.0%  0.00/s
+    other directory requests            0.6%  0.02/s
+    no request, or unparsable           0.0%  0.00/s
+    still waiting for a request now   0
+    unaccounted (opened - classified - change in waiting): 0.00/s
+  Q4: onion service requests by previous hop
+    unauthenticated client, or circuit already closing (503, single_hop): 1.00/s
+    authenticated, relay we know (consensus or descriptors): 2.44/s
+    authenticated, relay identity we do not know: 0.49/s
+    (other directory requests and empty streams are not split by previous hop by these metrics)
+  Q2: requests per circuit
+    onion service requests on a circuit that already made one: 2.93/s of 2.93/s
+    BEGIN_DIR cells on a circuit already holding DoSBeginDirMaxStreams open directory streams: 0.00/s
+  Q3: circuits
+    CREATE handshakes processed, from authenticated previous hops only (stock leaves clients out): 0.04/s
+    CREATE handshakes dropped, from authenticated previous hops only (stock leaves clients out): 0.00/s
+    congestion-control circuits created, from every kind of previous hop: 0.04/s
+      minus authenticated ntor_v3 handshakes (clients' circuits plus the relay's own, roughly): 0.00/s
+    rejected by the per-address circuit limit (client channels only): 0.00/s
+    open circuits now: 49
+  descriptor fetches over HSDirFetchBudget: 0.00/s, shed or would be shed: 0.00/s, refused: 0.00/s
+  open OR connections by peer (GETINFO orconn-status), now
+    relay named in our node list            10
+    authenticated identity with no name     2
+      of their 1 identities, in our consensus or descriptors: 0
+    client (never authenticated)            1
+    distinct client addresses: 1, most connections from one address: 1
+
+loads: {'reuse': {'load_issued': 175, 'load_recv': 175, 'load_fail': 0, 'load_groups': 35}, 'onehop-unlisted': {'load_issued': 35, 'load_recv': 35, 'load_fail': 0}, 'onehop-client': {'load_issued': 35, 'load_recv': 0, 'load_fail': 0}}
+=== totals since start ===
+BEGIN_DIR streams, since the relay started
+  opened (tor_relay_streams_total{type="BEGIN_DIR"}): 289
+  Q1: what they asked for
+    onion service descriptor fetches   97.2%  281
+    onion service descriptor uploads    2.1%  6
+    other directory requests            0.7%  2
+    no request, or unparsable           0.0%  0
+    still waiting for a request now   0
+    unaccounted (opened - classified - change in waiting): 0
+  Q4: onion service requests by previous hop
+    unauthenticated client, or circuit already closing (503, single_hop): 70
+    authenticated, relay we know (consensus or descriptors): 182
+    authenticated, relay identity we do not know: 35
+    (other directory requests and empty streams are not split by previous hop by these metrics)
+  Q2: requests per circuit
+    onion service requests on a circuit that already made one: 208 of 217
+    circuits that made more than one: 2, 105.0 requests each on average
+    BEGIN_DIR cells on a circuit already holding DoSBeginDirMaxStreams open directory streams: 0
+  Q3: circuits
+    CREATE handshakes processed, from authenticated previous hops only (stock leaves clients out): 27
+    CREATE handshakes dropped, from authenticated previous hops only (stock leaves clients out): 0
+    congestion-control circuits created, from every kind of previous hop: 90
+      minus authenticated ntor_v3 handshakes (clients' circuits plus the relay's own, roughly): 67
+    rejected by the per-address circuit limit (client channels only): 0
+    open circuits now: 49
+  descriptor fetches over HSDirFetchBudget: 0, shed or would be shed: 0, refused: 0
+  open OR connections by peer (GETINFO orconn-status), now
+    relay named in our node list            10
+    authenticated identity with no name     2
+      of their 1 identities, in our consensus or descriptors: 0
+    client (never authenticated)            1
+    distinct client addresses: 1, most connections from one address: 1
+ 
+--- bad syscalls: 0

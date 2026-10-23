@@ -1,0 +1,128 @@
+client lab: image=lab26v6 phases=full phase_s=60 arti=arti out=v6-lab26v6
+interfaces: lo 
+os: Ubuntu 26.04.1 LTS; tor: 0.4.9.14-1~resolute+1+tor41339.6; Tor version 0.4.9.14.; Sandbox=1
+arti: Arti 2.7.0
+INFO:chutney:creating '/work/net/nodes.1792665999', linking to '/work/net/nodes'
+Creating identity key for test003a     with /usr/bin/tor-gencert
+INFO:chutney:Loading network from nodes dir: '/work/net/nodes'->'/work/net/nodes.1792665999
+Starting nodes
+
+Starting nodes
+
+httpd on 127.0.0.1:4747
+torrc=/work/lc-reuse/torrc ctl=8090 role=client bin=/lc/tor EVIL_ISO_SESSIONGRP=1 EVIL_ONEHOP=unset
+arti: Arti 2.7.0, bootstrapped in 0.5 s (hsdir_interval=8, cbtmintimeout=2000)
+known shedding options: ['HSDirDescriptorFetchBurst', 'HSDirDescriptorFetchLimit', 'HSDirDescriptorFetchRate', 'HSDirFetchBudget']
+D(loaded)=bekefage... E(control)=aebe5mnm... relays=['000a', '001a', '002a', '003a', '004r', '005r', '006r', '007r', '008r', '009r'] ctor clients=['010c', '011c', '012c', '013c', '014c', '015c'] hs=['016h', '017h', '018h', '019h', '020h', '021h']
+descriptor size of D: 14109 bytes; time period 480 s
+phases: ['B0', 'C0', 'C1', 'C3', 'C2', 'S0', 'S1'] (PHASE_S=60, BUDGET token=56 KBytes, clients=['ctor', 'arti'])
+
+--- phase B0 (t+5s): baseline: no load, every HSDir at defaults
+  ctor D  6/6  ok  p50=0.284 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 6}
+  ctor E  6/6  ok  p50=0.244 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 6}
+  arti D 10/10 ok  p50=0.244 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 10}
+  arti E 10/10 ok  p50=0.285 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 10}
+  relays: refused=0 over_rate=0 pressure=0 shed=0 begin_dir=74 load answered+refused/s=0.0 limited=[] holders_changed=False pids_ok=True arti_alive=True
+
+--- phase C0 (t+68s): steady load on D at every HSDir holding it; enforcement off (FetchLimit=0) everywhere, small budget on .6 (observe mode: counters move, nothing refused)
+  ctor D  8/8  ok  p50=0.36 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 8}
+  ctor E  8/8  ok  p50=0.397 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 8}
+  arti D 12/12 ok  p50=0.421 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 12}
+  arti E 12/12 ok  p50=0.519 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 12}
+  relays: refused=0 over_rate=4327 pressure=4800 shed=2870 begin_dir=4882 load answered+refused/s=79.21 limited=[] holders_changed=False pids_ok=True arti_alive=True
+
+--- phase C1 (t+133s): .6: same load; FetchLimit=1 + small budget on EVERY HSDir (shedding everywhere; E's fetches are within their rate and answered first)
+  period guard: waiting 99 s for a time period to settle
+  ctor D 10/10 ok  p50=0.425 s  hsdir/ok=1.7  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'no_reply': 7, 'ok': 10}
+  ctor E 10/10 ok  p50=0.472 s  hsdir/ok=1.2  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 10, 'no_reply': 2}
+  arti D 19/20 ok  p50=0.474 s  hsdir/ok=2.26  fail_p50=0.311 s  hsdir/fail=6.0  hsdir outcomes={'closed': 30, 'ok': 19}
+  arti E 20/20 ok  p50=0.413 s  hsdir/ok=1.45  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 20, 'closed': 9}
+  relays: refused=1395 over_rate=2816 pressure=3045 shed=1395 begin_dir=4186 load answered+refused/s=54.9 limited=['000a', '001a', '002a', '003a', '004r', '005r', '006r', '007r', '008r', '009r'] holders_changed=False pids_ok=True arti_alive=True
+
+--- phase C3 (t+297s): .6: three times the C1 load on D at every HSDir holding it; FetchLimit=1 + small budget on EVERY HSDir (low lottery odds: the limit of what retries can recover)
+  ctor D  9/10 ok  p50=0.37 s  hsdir/ok=2.22  fail_p50=1.714 s  hsdir/fail=6.0  hsdir outcomes={'no_reply': 17, 'ok': 9}
+  ctor E 10/10 ok  p50=0.423 s  hsdir/ok=1.1  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 10, 'no_reply': 1}
+  arti D 18/20 ok  p50=0.385 s  hsdir/ok=2.28  fail_p50=0.423 s  hsdir/fail=6.0  hsdir outcomes={'ok': 18, 'closed': 35}
+  arti E 20/20 ok  p50=0.355 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 20}
+  relays: refused=2900 over_rate=4334 pressure=4793 shed=2900 begin_dir=9197 load answered+refused/s=79.6 limited=['000a', '001a', '002a', '003a', '004r', '005r', '006r', '007r', '008r', '009r'] holders_changed=False pids_ok=True arti_alive=True
+
+--- phase C2 (t+363s): .6: same load; FetchLimit=1 + small budget on ONE HSDir that clients ask for D, others at defaults (failover)
+  ctor D 16/16 ok  p50=0.478 s  hsdir/ok=1.06  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 16, 'no_reply': 1}
+  ctor E  6/6  ok  p50=0.537 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 6}
+  arti D 24/24 ok  p50=0.392 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 24}
+  arti E 24/24 ok  p50=0.427 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 24}
+  relays: refused=140 over_rate=2361 pressure=347 shed=140 begin_dir=4763 load answered+refused/s=76.09 limited=['001a'] holders_changed=False pids_ok=True arti_alive=True
+
+--- phase S0 (t+431s): .6: spread load: several onions at one common HSDir, each below its per-descriptor rate (4/s < 5/s), together over the budget; observe mode
+  ctor D  8/8  ok  p50=0.27 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 8}
+  ctor E  8/8  ok  p50=0.265 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 8}
+  arti D 12/12 ok  p50=0.205 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 12}
+  arti E 12/12 ok  p50=0.267 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 12}
+  relays: refused=0 over_rate=0 pressure=1202 shed=971 begin_dir=1330 load answered+refused/s=19.77 limited=[] holders_changed=False pids_ok=True arti_alive=True
+
+--- phase S1 (t+499s): .6: same spread load; FetchLimit=1 + small budget on EVERY HSDir (relay-wide budget, lottery among fetches within their rate)
+  ctor D 10/10 ok  p50=0.375 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 10}
+  ctor E 10/10 ok  p50=0.253 s  hsdir/ok=1.1  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 10, 'no_reply': 1}
+  arti D 20/20 ok  p50=0.211 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 20}
+  arti E 20/20 ok  p50=0.234 s  hsdir/ok=1.0  fail_p50=- s  hsdir/fail=-  hsdir outcomes={'ok': 20}
+  relays: refused=236 over_rate=0 pressure=482 shed=236 begin_dir=1103 load answered+refused/s=7.97 limited=['000a', '001a', '002a', '003a', '004r', '005r', '006r', '007r', '008r', '009r'] holders_changed=False pids_ok=True arti_alive=True
+
+=== client reachability (per phase x client x onion) ===
+phase  client  onion  ok/req  p50_s  p90_s  fail_p50  hsdir/ok  hsdir/fail  failover_ok  hit_limited(ok)  fail_after_desc
+B0     ctor    D      6/6     0.284  0.417  -         1.0       -           0            0(0)             0              
+B0     ctor    E      6/6     0.244  0.258  -         1.0       -           0            0(0)             0              
+B0     arti    D      10/10   0.244  0.483  -         1.0       -           0            0(0)             0              
+B0     arti    E      10/10   0.285  0.494  -         1.0       -           0            0(0)             0              
+C0     ctor    D      8/8     0.36   0.489  -         1.0       -           0            0(0)             0              
+C0     ctor    E      8/8     0.397  0.674  -         1.0       -           0            0(0)             0              
+C0     arti    D      12/12   0.421  0.513  -         1.0       -           0            0(0)             0              
+C0     arti    E      12/12   0.519  0.642  -         1.0       -           0            0(0)             0              
+C1     ctor    D      10/10   0.425  3.026  -         1.7       -           4            10(10)           0              
+C1     ctor    E      10/10   0.472  0.534  -         1.2       -           2            10(10)           0              
+C1     arti    D      19/20   0.474  0.767  0.311     2.26      6.0         10           20(19)           0              
+C1     arti    E      20/20   0.413  0.516  -         1.45      -           8            20(20)           0              
+C3     ctor    D      9/10    0.37   0.687  1.714     2.22      6.0         6            10(9)            0              
+C3     ctor    E      10/10   0.423  0.505  -         1.1       -           1            10(10)           0              
+C3     arti    D      18/20   0.385  0.603  0.423     2.28      6.0         10           20(18)           0              
+C3     arti    E      20/20   0.355  0.51   -         1.0       -           0            20(20)           0              
+C2     ctor    D      16/16   0.478  0.601  -         1.06      -           1            1(1)             0              
+C2     ctor    E      6/6     0.537  1.216  -         1.0       -           0            0(0)             0              
+C2     arti    D      24/24   0.392  0.493  -         1.0       -           0            4(4)             0              
+C2     arti    E      24/24   0.427  0.548  -         1.0       -           0            0(0)             0              
+S0     ctor    D      8/8     0.27   0.416  -         1.0       -           0            0(0)             0              
+S0     ctor    E      8/8     0.265  1.159  -         1.0       -           0            0(0)             0              
+S0     arti    D      12/12   0.205  0.241  -         1.0       -           0            0(0)             0              
+S0     arti    E      12/12   0.267  0.287  -         1.0       -           0            0(0)             0              
+S1     ctor    D      10/10   0.375  1.934  -         1.0       -           0            10(10)           0              
+S1     ctor    E      10/10   0.253  2.044  -         1.1       -           1            10(10)           0              
+S1     arti    D      20/20   0.211  0.425  -         1.0       -           0            20(20)           0              
+S1     arti    E      20/20   0.234  0.396  -         1.0       -           0            20(20)           0              
+
+=== relays (per phase) ===
+phase  load                 load/s  limited                                            refused  over_rate  pressure  shed  begin_dir  TP       holders_chg
+B0     none/-               0.0     -                                                  0        0          0         0     74         3734720  False      
+C0     concentrated/steady  79.21   -                                                  0        4327       4800      2870  4882       3734720  False      
+C1     concentrated/steady  54.9    000a,001a,002a,003a,004r,005r,006r,007r,008r,009r  1395     2816       3045      1395  4186       3734721  False      
+C3     concentrated/steady  79.6    000a,001a,002a,003a,004r,005r,006r,007r,008r,009r  2900     4334       4793      2900  9197       3734721  False      
+C2     concentrated/steady  76.09   001a                                               140      2361       347       140   4763       3734721  False      
+S0     spread/steady        19.77   -                                                  0        0          1202      971   1330       3734721  False      
+S1     spread/steady        7.97    000a,001a,002a,003a,004r,005r,006r,007r,008r,009r  236      0          482       236   1103       3734721  False      
+
+wrote /out/client-lab-result.json
+RESULT: PASS (baseline ok for ctor+arti; 7 phases measured in 566 s)
+--- bad syscalls across all node logs: 0
+--- shedding / refusal log lines:
+     16 Closing a circuit that fetched an onion service descriptor while we are over HSDirFetchBudget.
+--- per-relay Sandbox / seccomp:
+000a Sandbox=1 Seccomp_filters: 2
+001a Sandbox=1 Seccomp_filters: 2
+002a Sandbox=1 Seccomp_filters: 2
+003a Sandbox=1 Seccomp_filters: 2
+004r Sandbox=1 Seccomp_filters: 2
+005r Sandbox=1 Seccomp_filters: 2
+006r Sandbox=1 Seccomp_filters: 2
+007r Sandbox=1 Seccomp_filters: 2
+008r Sandbox=1 Seccomp_filters: 2
+009r Sandbox=1 Seccomp_filters: 2
+client lab: wall time 701 s
+RESULT: PASS (baseline ok for ctor+arti; 7 phases measured in 566 s)
