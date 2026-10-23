@@ -1,0 +1,88 @@
+{
+  "_redaction": {
+    "note": "De-identified live-relay capture. Fleet-inventory counts (total relays, HSDir count, analysis-cohort size, excluded-relay count, and per-window aggregated-relay counts) are replaced with \"redacted\" to avoid disclosing operator infrastructure scale. All rates, ratios, multiples, per-second byte/circuit/onionskin figures, derived percentages, and DoS-heartbeat counter totals are retained unchanged — those are the attack-shape signal the simulator is tuned against and contain no fleet-size information.",
+    "per_relay_labels": "relay_A / relay_B / relay_C are opaque labels, not hostnames, IPs, or fingerprints."
+  },
+  "scope": {
+    "relays_total": "redacted",
+    "hsdir_relays": "redacted",
+    "tor_version": "unknown",
+    "inventory_reported_version_for_analysis_cohort": "0.4.9.14",
+    "patched_counters_present": false,
+    "capture_start": "2026-10-13T01:40:00Z",
+    "capture_end": "2026-10-14T01:40:00Z",
+    "analysis_cohort_relays": "redacted",
+    "analysis_cohort_hsdir_in_both_windows": "redacted",
+    "excluded_from_paired_comparison_after_hsdir_loss": "redacted"
+  },
+  "flood_window": {
+    "start": "2026-10-13T20:20:00.000Z",
+    "end": "2026-10-13T21:20:00.000Z",
+    "duration_s": 3600,
+    "relays_aggregated": "redacted",
+    "samples_per_relay": 30,
+    "intervals_per_relay": 29,
+    "request_rate_begin_dir_per_s": { "median": 1119, "p95": 1200.983333, "peak": 1310.116851 },
+    "request_rate_begin_dir_mean_per_s": 1118.437075,
+    "bytes_written_per_s": 644417243.470079,
+    "bytes_read_per_s": 597431959.175271,
+    "write_read_ratio": 1.078645,
+    "bytes_per_begin_dir": 576176.550787,
+    "circuits_created_per_s": 431.972712,
+    "onionskins_processed_per_s": 558.662373,
+    "onionskins_dropped_per_s": 0,
+    "reuse_fraction": null,
+    "hsdir_circ_reused_per_s": null,
+    "unknown_prev_hop_fraction": null,
+    "hsdir_unknown_prev_hop_per_s": null,
+    "avg_requests_per_circuit_proxy": 2.589138,
+    "per_relay": {
+      "relay_A": { "HSDir": true, "request_rate_begin_dir_per_s": { "median": 949.791667, "peak": 1136.775 }, "request_rate_begin_dir_mean_per_s": 952.949138, "bytes_written_per_s": 45328240.730747, "bytes_read_per_s": 3987459.943391, "write_read_ratio": 11.367698, "bytes_per_begin_dir": 47566.274974, "circuits_created_per_s": 167.440517, "onionskins_processed_per_s": 177.886494, "avg_requests_per_circuit_proxy": 5.69127 },
+      "relay_B": { "HSDir": true, "request_rate_begin_dir_per_s": { "median": 54.575, "peak": 57.5 }, "request_rate_begin_dir_mean_per_s": 52.755172, "write_read_ratio": 1.008321, "circuits_created_per_s": 9.52069, "avg_requests_per_circuit_proxy": 5.541108 },
+      "relay_C": { "HSDir": true, "request_rate_begin_dir_per_s": { "median": 15.457818, "peak": 16.683333 }, "request_rate_begin_dir_mean_per_s": 15.502586, "write_read_ratio": 1.013201, "circuits_created_per_s": 13.154598, "avg_requests_per_circuit_proxy": 1.178492 }
+    }
+  },
+  "baseline_window": {
+    "start": "2026-10-13T19:00:00.000Z",
+    "end": "2026-10-13T20:00:00.000Z",
+    "duration_s": 3600,
+    "relays_aggregated": "redacted",
+    "request_rate_begin_dir_per_s": { "median": 181.508866, "p95": 191.708333, "peak": 192.616667 },
+    "request_rate_begin_dir_mean_per_s": 182.677874,
+    "circuits_created_per_s": 281.697414,
+    "onionskins_processed_per_s": 400.498851,
+    "avg_requests_per_circuit_proxy": 0.64849,
+    "per_relay": {
+      "relay_A": { "HSDir": true, "request_rate_begin_dir_mean_per_s": 5.312356, "write_read_ratio": 1.011816, "circuits_created_per_s": 10.150862, "avg_requests_per_circuit_proxy": 0.52334 },
+      "relay_B": { "HSDir": true, "request_rate_begin_dir_mean_per_s": 57.86523, "circuits_created_per_s": 9.895402, "avg_requests_per_circuit_proxy": 5.847688 },
+      "relay_C": { "HSDir": true, "request_rate_begin_dir_mean_per_s": 16.096264, "circuits_created_per_s": 14.012069, "avg_requests_per_circuit_proxy": 1.148743 }
+    }
+  },
+  "flood_vs_baseline_notes": {
+    "aggregate_begin_dir_mean_multiple": 6.122455,
+    "aggregate_cc_created_rate_multiple": 1.533464,
+    "relay_A_mean_rate_multiple": 179.383513,
+    "interpretation": "The fixed cohort mean BEGIN_DIR rate rose 6.12x. relay_A rose 179.38x and supplied ~85.20% of flood-window starts. relay_B and relay_C decreased ~8.83% and ~3.69%; they are included by flood-window request-count ranking, not proof each was attacked."
+  },
+  "journal_addendum": {
+    "dos_heartbeat_records": 180,
+    "heartbeat_counter_observation_duration_s": { "minimum": 43179.640903, "maximum": 43200.025302 },
+    "positive_counter_changes": {
+      "circuits_killed_for_cell_queue_limit": 985,
+      "circuit_creation_rejection_events": 7055980,
+      "concurrent_connection_rejections": 207610,
+      "connection_rate_rejections": 1038,
+      "INTRODUCE2_rejections": 1,
+      "single_hop_client_refusals": 0,
+      "stream_rejections": null
+    },
+    "relays_reporting_DoSStreamCreationEnabled_disabled": "redacted (all HSDirs in cohort)"
+  },
+  "gaps": [
+    "Neither hsdir_circ_reused nor hsdir_unknown_prev_hop appeared in the capture: those counters are patch-only, so direct reuse and unknown-previous-hop quantities cannot be derived. Absence alone does not establish an unmodified binary.",
+    "avg_requests_per_circuit_proxy is BEGIN_DIR/s / cc_circuits_created/s; valid-directional on the attacked relay only (relay_A 5.69); the cohort aggregate must NOT be used.",
+    "Traffic counters include other relay traffic; BEGIN_DIR counts handled starts not completed responses; bytes_per_begin_dir is not a measured response size.",
+    "circuit_creation_rejection_events counts client-channel CREATEs (DoSCircuitCreation), not attacker circuits or BEGIN_DIR; not a reuse signal.",
+    "DoSStreamCreation disabled on all HSDirs, so stream-rejection data is unavailable (not an enabled-defense zero)."
+  ]
+}
