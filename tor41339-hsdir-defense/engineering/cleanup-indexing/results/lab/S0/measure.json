@@ -1,0 +1,1 @@
+{"target": "004r", "target_fp": "<fp>", "rate": 4000.0, "concurrency": 24, "seconds": 45.02, "hsfetch_sent": 1652, "begin_dir_delta": 721, "main_thread_cpu_s": 0.12, "cpu_us_per_begin_dir": 166.436, "begin_dir_per_s": 16.0}

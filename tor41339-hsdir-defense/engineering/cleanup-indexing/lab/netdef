@@ -1,0 +1,22 @@
+# Closed-lab network for ticket 41339 HSDir-flood simulation.
+# Loopback-only private chutney net: own authorities/consensus, no real Tor.
+# Every relay (authorities are relays too) gets a MetricsPort + short
+# heartbeat so the target HSDir can be measured. SafeLogging 0 is already
+# set by chutney's torrc template for all nodes.
+def extra(i):
+    return ("HeartbeatPeriod 5 seconds\n"
+            f"MetricsPort 127.0.0.1:{19100 + i}\n"
+            "MetricsPortPolicy accept 127.0.0.1\n")
+
+Authority = Node(tag="a", authority=1, relay=1)
+Relay = Node(tag="r", relay=1, exit=1)
+Client = Node(tag="c", client=1, launch_phase=2)
+HS = Node(tag="h", hs=1, launch_phase=2)
+
+# >=3 authorities (4), >=5 relays all HSDir (5), 2 clients (stock+spare),
+# >=3 onion services (3).
+NODES = ([Authority.specialize(extra_raw_torrc=extra(i)) for i in range(4)] +
+         [Relay.specialize(extra_raw_torrc=extra(4 + i)) for i in range(5)] +
+         Client.getN(2) + HS.getN(3))
+
+ConfigureNodes(NODES)

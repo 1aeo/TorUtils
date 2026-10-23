@@ -1,0 +1,8 @@
+=== S0 bin=<path> (Tor version 0.4.9.14.) rate=4000 secs=45 conc=24 target=004r ===
+INFO:chutney:creating '<netdir>/nodes.1792736884', linking to '<netdir>/nodes'
+Creating identity key for test003a     with <path>
+INFO:chutney:Loading network from nodes dir: '<netdir>/nodes'->'<netdir>/nodes.1792736884
+Starting nodes
+
+Starting nodes
+

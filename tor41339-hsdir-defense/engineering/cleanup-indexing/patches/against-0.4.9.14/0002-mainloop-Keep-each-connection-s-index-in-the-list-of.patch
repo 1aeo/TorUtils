@@ -1,0 +1,351 @@
+From 6c22493cf52dc3901907e19a597f39ef27949793 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Thu, 22 Oct 2026 22:41:21 -0700
+Subject: [PATCH 2/3] mainloop: Keep each connection's index in the list of
+ conns to close
+
+add_connection_to_closeable_list() asserted that the connection was not
+already on closeable_connection_lst, connection_unlink() took it off
+with smartlist_remove(), and connection_free_() asserted it was gone.
+Each of these scans the whole list, which holds every connection marked
+for close since the last close pass, plus any held open to flush. So
+closing K connections in one pass cost about 3*K*K/2 pointer
+comparisons, more with held-open connections.
+
+Keep each connection's position on that list in a new
+closeable_conn_index, as conn_array_index does for the connection array,
+and remove with smartlist_del(), fixing the index of the connection it
+moves into the slot. That moves the same connection into the same place
+as smartlist_remove() did, so close_closeable_connections() still closes
+connections in the same order; assert there that each connection's index
+matches the loop position. A unit test cross-checks the indexes against
+a scan of the list, including connections marked while a close pass is
+running and a connection held open across a pass.
+
+The new field fills padding in connection_t on 64-bit platforms.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ changes/mainloop_closeable_index |   6 ++
+ src/core/mainloop/connection.c   |   5 +-
+ src/core/mainloop/mainloop.c     |  45 ++++++++--
+ src/core/mainloop/mainloop.h     |   1 +
+ src/core/or/connection_st.h      |   3 +
+ src/test/test_mainloop.c         | 136 +++++++++++++++++++++++++++++++
+ 6 files changed, 188 insertions(+), 8 deletions(-)
+ create mode 100644 changes/mainloop_closeable_index
+
+diff --git a/changes/mainloop_closeable_index b/changes/mainloop_closeable_index
+new file mode 100644
+index 0000000..d3f0fac
+--- /dev/null
++++ b/changes/mainloop_closeable_index
+@@ -0,0 +1,6 @@
++  o Minor features (performance, relay):
++    - Remember where each connection is in the list of connections to
++      close, so that marking a connection for close and closing it no
++      longer scan that list. When many connections close in the same
++      pass, as under a flood of BEGIN_DIR streams, these scans grew with
++      the square of the number of connections closing.
+diff --git a/src/core/mainloop/connection.c b/src/core/mainloop/connection.c
+index cca6631..f5e0929 100644
+--- a/src/core/mainloop/connection.c
++++ b/src/core/mainloop/connection.c
+@@ -694,8 +694,8 @@ connection_new(int type, int socket_family)
+  *
+  * Set conn-\>magic to the correct value.
+  *
+- * Set conn-\>type to <b>type</b>. Set conn-\>s and conn-\>conn_array_index to
+- * -1 to signify they are not yet assigned.
++ * Set conn-\>type to <b>type</b>. Set conn-\>s, conn-\>conn_array_index and
++ * conn-\>closeable_conn_index to -1 to signify they are not yet assigned.
+  *
+  * Initialize conn's timestamps to now.
+  */
+@@ -731,6 +731,7 @@ connection_init(time_t now, connection_t *conn, int type, int socket_family)
+ 
+   conn->s = TOR_INVALID_SOCKET; /* give it a default of 'not used' */
+   conn->conn_array_index = -1; /* also default to 'not used' */
++  conn->closeable_conn_index = -1; /* not marked for close */
+   conn->global_identifier = n_connections_allocated++;
+ 
+   conn->type = type;
+diff --git a/src/core/mainloop/mainloop.c b/src/core/mainloop/mainloop.c
+index f930642..efc6a37 100644
+--- a/src/core/mainloop/mainloop.c
++++ b/src/core/mainloop/mainloop.c
+@@ -164,8 +164,9 @@ static unsigned newnym_epoch = 0;
+ /** Smartlist of all open connections. */
+ STATIC smartlist_t *connection_array = NULL;
+ /** List of connections that have been marked for close and need to be freed
+- * and removed from connection_array. */
+-static smartlist_t *closeable_connection_lst = NULL;
++ * and removed from connection_array. Each connection on it holds its index
++ * here in its closeable_conn_index. */
++STATIC smartlist_t *closeable_connection_lst = NULL;
+ /** List of linked connections that are currently reading data into their
+  * inbuf from their partner's outbuf. */
+ static smartlist_t *active_linked_connection_lst = NULL;
+@@ -198,6 +199,7 @@ static int can_complete_circuits = 0;
+ #define LAZY_DESCRIPTOR_RETRY_INTERVAL (60)
+ 
+ static int conn_close_if_marked(int i);
++static void remove_from_closeable_list(connection_t *conn);
+ static void connection_start_reading_from_linked_conn(connection_t *conn);
+ static int connection_should_read_from_linked_conn(connection_t *conn);
+ static void conn_read_callback(evutil_socket_t fd, short event, void *_conn);
+@@ -348,7 +350,7 @@ connection_unlink(connection_t *conn)
+       connection_start_reading(conn->linked_conn);
+     conn->linked_conn = NULL;
+   }
+-  smartlist_remove(closeable_connection_lst, conn);
++  remove_from_closeable_list(conn);
+   smartlist_remove(active_linked_connection_lst, conn);
+   if (conn->type == CONN_TYPE_EXIT) {
+     assert_connection_edge_not_dns_pending(TO_EDGE_CONN(conn));
+@@ -421,18 +423,47 @@ tor_init_connection_lists(void)
+ void
+ add_connection_to_closeable_list(connection_t *conn)
+ {
+-  tor_assert(!smartlist_contains(closeable_connection_lst, conn));
++  tor_assert(!connection_is_on_closeable_list(conn));
+   tor_assert(conn->marked_for_close);
+   assert_connection_ok(conn, time(NULL));
++  conn->closeable_conn_index = smartlist_len(closeable_connection_lst);
+   smartlist_add(closeable_connection_lst, conn);
+   mainloop_schedule_postloop_cleanup();
+ }
+ 
+-/** Return 1 if conn is on the closeable list, else return 0. */
++/** Return 1 if conn is on the closeable list, else return 0. Checks the
++ * stored index in O(1); asserts it agrees with the list. */
+ int
+ connection_is_on_closeable_list(connection_t *conn)
+ {
+-  return smartlist_contains(closeable_connection_lst, conn);
++  const int idx = conn->closeable_conn_index;
++
++  if (idx < 0) {
++    tor_assert(idx == -1);
++    return 0;
++  }
++  tor_assert(idx < smartlist_len(closeable_connection_lst));
++  tor_assert(smartlist_get(closeable_connection_lst, idx) == conn);
++  return 1;
++}
++
++/** If <b>conn</b> is on the closeable list, remove it in O(1), moving the
++ * last connection on the list into its slot as smartlist_remove() would. */
++static void
++remove_from_closeable_list(connection_t *conn)
++{
++  const int idx = conn->closeable_conn_index;
++
++  if (!connection_is_on_closeable_list(conn))
++    return;
++  smartlist_del(closeable_connection_lst, idx);
++  conn->closeable_conn_index = -1;
++  if (idx < smartlist_len(closeable_connection_lst)) {
++    connection_t *moved = smartlist_get(closeable_connection_lst, idx);
++    tor_assert(moved->closeable_conn_index ==
++               smartlist_len(closeable_connection_lst));
++    moved->closeable_conn_index = idx;
++  }
+ }
+ 
+ /** Return true iff conn is in the current poll array. */
+@@ -866,6 +897,8 @@ close_closeable_connections(void)
+   int i;
+   for (i = 0; i < smartlist_len(closeable_connection_lst); ) {
+     connection_t *conn = smartlist_get(closeable_connection_lst, i);
++    /* Closing conn moves the last connection on the list into slot i. */
++    tor_assert(conn->closeable_conn_index == i);
+     if (conn->conn_array_index < 0) {
+       connection_unlink(conn); /* blow it away right now */
+     } else {
+diff --git a/src/core/mainloop/mainloop.h b/src/core/mainloop/mainloop.h
+index 2110cc5..19b9d04 100644
+--- a/src/core/mainloop/mainloop.h
++++ b/src/core/mainloop/mainloop.h
+@@ -108,6 +108,7 @@ STATIC int check_network_participation_callback(time_t now,
+ 
+ #ifdef TOR_UNIT_TESTS
+ extern smartlist_t *connection_array;
++extern smartlist_t *closeable_connection_lst;
+ 
+ /* We need the periodic_event_item_t definition. */
+ #include "core/mainloop/periodic.h"
+diff --git a/src/core/or/connection_st.h b/src/core/or/connection_st.h
+index 87ab6af..bc62717 100644
+--- a/src/core/or/connection_st.h
++++ b/src/core/or/connection_st.h
+@@ -154,6 +154,9 @@ struct connection_t {
+                               * iteration of the main loop? (If true, holds
+                               * the line number where this connection was
+                               * marked.) */
++  /** Index of this connection in closeable_connection_lst, or -1 if it is
++   * not on that list. */
++  int closeable_conn_index;
+   const char *marked_for_close_file; /**< For debugging: in which file were
+                                       * we marked for close? */
+   /**
+diff --git a/src/test/test_mainloop.c b/src/test/test_mainloop.c
+index 12e3d64..ab3c4aa 100644
+--- a/src/test/test_mainloop.c
++++ b/src/test/test_mainloop.c
+@@ -410,6 +410,10 @@ check_conn_lists(void)
+   SMARTLIST_FOREACH_BEGIN(get_connection_array(), connection_t *, conn) {
+     tt_int_op(conn->conn_array_index, OP_EQ, conn_sl_idx);
+   } SMARTLIST_FOREACH_END(conn);
++  SMARTLIST_FOREACH_BEGIN(closeable_connection_lst, connection_t *, conn) {
++    tt_int_op(conn->closeable_conn_index, OP_EQ, conn_sl_idx);
++    tt_assert(conn->marked_for_close);
++  } SMARTLIST_FOREACH_END(conn);
+  done:
+   ;
+ }
+@@ -493,6 +497,137 @@ test_mainloop_conn_array_index(void *arg)
+   monotime_disable_test_mocking();
+ }
+ 
++/** Connections that mock_connection_free_record() has freed, in order. */
++static smartlist_t *freed_conns = NULL;
++static void
++mock_connection_free_record(connection_t *conn)
++{
++  smartlist_add(freed_conns, conn);
++  connection_free___real(conn);
++}
++
++/** Connections that mock_start_reading_mark_more() marks for close. */
++static smartlist_t *conns_to_mark = NULL;
++/** Mock for connection_start_reading() (which connection_unlink() calls to
++ * wake a closed connection's peer): mark more connections for close from
++ * inside close_closeable_connections(). */
++static void
++mock_start_reading_mark_more(connection_t *conn)
++{
++  (void) conn;
++  SMARTLIST_FOREACH(conns_to_mark, connection_t *, c,
++                    connection_mark_for_close(c));
++  smartlist_clear(conns_to_mark);
++}
++
++/** Test that marking connections for close and closing them keep every
++ * closeable_conn_index, and that they close in the same order as before. */
++static void
++test_mainloop_closeable_index(void *arg)
++{
++  connection_t *held = NULL, *unadded = NULL, *peer = NULL;
++  connection_t *conns[8] = { NULL };
++  tor_socket_t fds[2] = { TOR_INVALID_SOCKET, TOR_INVALID_SOCKET };
++  char junk[4096];
++  int i;
++  (void) arg;
++
++  tor_init_connection_lists();
++  freed_conns = smartlist_new();
++  conns_to_mark = smartlist_new();
++
++  /* A directory connection held open: its socket takes no more data, so
++   * close_closeable_connections() leaves it on the list across the pass. */
++  tt_int_op(tor_socketpair(AF_UNIX, SOCK_STREAM, 0, fds), OP_EQ, 0);
++  tt_int_op(set_socket_nonblocking(fds[0]), OP_EQ, 0);
++  memset(junk, 'x', sizeof(junk));
++  while (tor_socket_send(fds[0], junk, sizeof(junk), 0) > 0)
++    ;
++  held = connection_new(CONN_TYPE_DIR, AF_INET);
++  held->s = fds[0];
++  fds[0] = TOR_INVALID_SOCKET;
++  held->state = DIR_CONN_STATE_SERVER_WRITING;
++  held->purpose = DIR_PURPOSE_SERVER;
++  held->address = tor_strdup("127.0.0.1");
++  tt_int_op(connection_add(held), OP_EQ, 0);
++  buf_add(held->outbuf, "x", 1);
++  tt_int_op(held->closeable_conn_index, OP_EQ, -1);
++  connection_mark_and_flush(held);
++  tt_int_op(held->closeable_conn_index, OP_EQ, 0);
++
++  for (i = 0; i < 8; i += 2) {
++    make_linked_pair(&conns[i], &conns[i + 1]);
++    tt_int_op(connection_add(conns[i]), OP_EQ, 0);
++    tt_int_op(connection_add(conns[i + 1]), OP_EQ, 0);
++  }
++  for (i = 0; i < 6; i += 2) {
++    connection_mark_for_close(conns[i]);
++    check_conn_lists();
++  }
++  tt_int_op(conns[4]->closeable_conn_index, OP_EQ, 3);
++
++  /* Each close moves the last connection on the list into its slot, as
++   * smartlist_remove() did: conns[0], then conns[4], then conns[2]. */
++  MOCK(connection_free_, mock_connection_free_record);
++  close_closeable_connections();
++  UNMOCK(connection_free_);
++  tt_int_op(smartlist_len(freed_conns), OP_EQ, 3);
++  tt_ptr_op(smartlist_get(freed_conns, 0), OP_EQ, conns[0]);
++  tt_ptr_op(smartlist_get(freed_conns, 1), OP_EQ, conns[4]);
++  tt_ptr_op(smartlist_get(freed_conns, 2), OP_EQ, conns[2]);
++  conns[0] = conns[2] = conns[4] = NULL;
++  tt_int_op(smartlist_len(closeable_connection_lst), OP_EQ, 1);
++  tt_int_op(held->closeable_conn_index, OP_EQ, 0);
++  check_conn_lists();
++
++  /* Connections marked for close while we are closing others go on the end
++   * of the list and get closed in the same pass. */
++  conns[7]->reading_from_linked_conn = 1;
++  smartlist_add(conns_to_mark, conns[1]);
++  smartlist_add(conns_to_mark, conns[7]);
++  connection_mark_for_close(conns[6]);
++  MOCK(connection_start_reading, mock_start_reading_mark_more);
++  close_closeable_connections();
++  UNMOCK(connection_start_reading);
++  conns[1] = conns[6] = conns[7] = NULL;
++  tt_int_op(smartlist_len(closeable_connection_lst), OP_EQ, 1);
++  check_conn_lists();
++
++  /* A connection that was never added gets closed too. */
++  make_linked_pair(&unadded, &peer);
++  connection_mark_for_close(unadded);
++  tt_int_op(unadded->closeable_conn_index, OP_EQ, 1);
++  close_closeable_connections();
++  unadded = NULL;
++  tt_ptr_op(peer->linked_conn, OP_EQ, NULL);
++  connection_free(peer);
++  check_conn_lists();
++
++  /* Once we stop holding it open, the held connection closes. */
++  held->hold_open_until_flushed = 0;
++  close_closeable_connections();
++  held = NULL;
++  tt_int_op(smartlist_len(closeable_connection_lst), OP_EQ, 0);
++  check_conn_lists();
++
++  for (i = 0; i < 8; ++i) {
++    if (conns[i]) {
++      tt_int_op(conns[i]->closeable_conn_index, OP_EQ, -1);
++      connection_remove(conns[i]);
++      connection_free(conns[i]);
++    }
++  }
++  tt_int_op(smartlist_len(get_connection_array()), OP_EQ, 0);
++
++ done:
++  UNMOCK(connection_free_);
++  UNMOCK(connection_start_reading);
++  smartlist_free(freed_conns);
++  smartlist_free(conns_to_mark);
++  if (SOCKET_OK(fds[0])) tor_close_socket(fds[0]);
++  if (SOCKET_OK(fds[1])) tor_close_socket(fds[1]);
++}
++
+ #define MAINLOOP_TEST(name) \
+   { #name, test_mainloop_## name , TT_FORK, NULL, NULL }
+ 
+@@ -504,5 +639,6 @@ struct testcase_t mainloop_tests[] = {
+   MAINLOOP_TEST(dormant_load_state),
+   MAINLOOP_TEST(dormant_save_state),
+   MAINLOOP_TEST(conn_array_index),
++  MAINLOOP_TEST(closeable_index),
+   END_OF_TESTCASES
+ };

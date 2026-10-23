@@ -1,0 +1,47 @@
+[
+ {
+  "id": "M1_array_reset_skip",
+  "status": "KILLED(test)",
+  "desc": "connection_remove: do not reset conn_array_index"
+ },
+ {
+  "id": "M2_array_moved_off",
+  "status": "KILLED(test)",
+  "desc": "connection_remove: wrong moved-element array index"
+ },
+ {
+  "id": "M3_close_add_zero",
+  "status": "KILLED(test)",
+  "desc": "add_connection_to_closeable_list: wrong index on add"
+ },
+ {
+  "id": "M4_close_reset_skip",
+  "status": "KILLED(test)",
+  "desc": "remove_from_closeable_list: do not reset index"
+ },
+ {
+  "id": "M5_close_moved_off",
+  "status": "KILLED(test)",
+  "desc": "remove_from_closeable_list: wrong moved-element index"
+ },
+ {
+  "id": "M6_active_add_zero",
+  "status": "KILLED(test)",
+  "desc": "start_reading_from_linked_conn: wrong index on add"
+ },
+ {
+  "id": "M7_active_reset_skip",
+  "status": "KILLED(test)",
+  "desc": "remove_from_active_linked_list: do not reset index"
+ },
+ {
+  "id": "M8_active_flag_skip",
+  "status": "KILLED(test)",
+  "desc": "remove_from_active_linked_list: do not clear active_on_link"
+ },
+ {
+  "id": "M9_active_moved_off",
+  "status": "KILLED(test)",
+  "desc": "remove_from_active_linked_list: wrong moved-element index"
+ }
+]

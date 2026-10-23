@@ -1,0 +1,368 @@
+From 91112dceedbef7aac31e3da07582841cefa88455 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Thu, 22 Oct 2026 22:42:39 -0700
+Subject: [PATCH 3/3] mainloop: Keep each linked connection's index in the
+ active list
+
+connection_stop_reading_from_linked_conn() took a connection off
+active_linked_connection_lst with smartlist_remove(), and
+connection_start_reading_from_linked_conn() and connection_unlink()
+checked membership or removed with a scan. The list holds every linked
+connection that currently has data to move, and these functions run on
+every read or write toggle of a linked connection, so under a flood of
+short-lived BEGIN_DIR streams one of these scans can dominate the main
+thread: a profile of a relay under such a flood put about 50% of its
+main thread's user-space CPU in the scan in
+connection_stop_reading_from_linked_conn() alone.
+
+The code already tracked membership with the active_on_link flag; the
+note there said an index was not worth it because it did not show up on
+profiles. Under this flood it does. Add active_linked_conn_index beside
+the flag, remove with smartlist_del() and fix the moved connection's
+index, and keep the flag and index in step. connection_unlink() removes
+through the same helper instead of its own scan, and connection_free_()
+gains an O(1) check that the connection it frees is off the list.
+connection_in_active_linked_list() replaces the open-coded membership
+checks; a unit test cross-checks the index against a scan of the list,
+including both sides of a linked-pair teardown.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ changes/mainloop_active_linked_index |  7 ++
+ src/core/mainloop/connection.c       |  7 +-
+ src/core/mainloop/mainloop.c         | 64 ++++++++++++++----
+ src/core/mainloop/mainloop.h         |  3 +
+ src/core/or/connection_st.h          |  3 +
+ src/test/test_mainloop.c             | 97 ++++++++++++++++++++++++++++
+ 6 files changed, 167 insertions(+), 14 deletions(-)
+ create mode 100644 changes/mainloop_active_linked_index
+
+diff --git a/changes/mainloop_active_linked_index b/changes/mainloop_active_linked_index
+new file mode 100644
+index 0000000..f85ce1c
+--- /dev/null
++++ b/changes/mainloop_active_linked_index
+@@ -0,0 +1,7 @@
++  o Minor features (performance, relay):
++    - Remember where each linked connection is in the list of linked
++      connections with data to move, so that activating or deactivating
++      one, or tearing it down, no longer scans that list. A linked
++      connection is activated and deactivated on every read or write
++      toggle, and a profile of a relay under a flood of BEGIN_DIR streams
++      put half of its main thread's user-space CPU in one such scan.
+diff --git a/src/core/mainloop/connection.c b/src/core/mainloop/connection.c
+index f5e0929..49cf8e3 100644
+--- a/src/core/mainloop/connection.c
++++ b/src/core/mainloop/connection.c
+@@ -694,8 +694,9 @@ connection_new(int type, int socket_family)
+  *
+  * Set conn-\>magic to the correct value.
+  *
+- * Set conn-\>type to <b>type</b>. Set conn-\>s, conn-\>conn_array_index and
+- * conn-\>closeable_conn_index to -1 to signify they are not yet assigned.
++ * Set conn-\>type to <b>type</b>. Set conn-\>s, conn-\>conn_array_index,
++ * conn-\>active_linked_conn_index and conn-\>closeable_conn_index to -1 to
++ * signify they are not yet assigned.
+  *
+  * Initialize conn's timestamps to now.
+  */
+@@ -731,6 +732,7 @@ connection_init(time_t now, connection_t *conn, int type, int socket_family)
+ 
+   conn->s = TOR_INVALID_SOCKET; /* give it a default of 'not used' */
+   conn->conn_array_index = -1; /* also default to 'not used' */
++  conn->active_linked_conn_index = -1; /* not on the active linked list */
+   conn->closeable_conn_index = -1; /* not marked for close */
+   conn->global_identifier = n_connections_allocated++;
+ 
+@@ -968,6 +970,7 @@ connection_free_,(connection_t *conn))
+   if (!conn)
+     return;
+   tor_assert(!connection_is_on_closeable_list(conn));
++  tor_assert(!connection_in_active_linked_list(conn));
+   /* connection_add() and connection_remove() keep conn_array_index up to
+    * date, so this confirms in O(1) that conn has left the array. */
+   tor_assert(conn->conn_array_index < 0);
+diff --git a/src/core/mainloop/mainloop.c b/src/core/mainloop/mainloop.c
+index efc6a37..a6c53b8 100644
+--- a/src/core/mainloop/mainloop.c
++++ b/src/core/mainloop/mainloop.c
+@@ -168,8 +168,9 @@ STATIC smartlist_t *connection_array = NULL;
+  * here in its closeable_conn_index. */
+ STATIC smartlist_t *closeable_connection_lst = NULL;
+ /** List of linked connections that are currently reading data into their
+- * inbuf from their partner's outbuf. */
+-static smartlist_t *active_linked_connection_lst = NULL;
++ * inbuf from their partner's outbuf. Each connection on it holds its index
++ * here in its active_linked_conn_index, and has active_on_link set. */
++STATIC smartlist_t *active_linked_connection_lst = NULL;
+ /** Flag: Set to true iff we entered the current libevent main loop via
+  * <b>loop_once</b>. If so, there's no need to trigger a loopexit in order
+  * to handle linked connections. */
+@@ -200,7 +201,7 @@ static int can_complete_circuits = 0;
+ 
+ static int conn_close_if_marked(int i);
+ static void remove_from_closeable_list(connection_t *conn);
+-static void connection_start_reading_from_linked_conn(connection_t *conn);
++static void remove_from_active_linked_list(connection_t *conn);
+ static int connection_should_read_from_linked_conn(connection_t *conn);
+ static void conn_read_callback(evutil_socket_t fd, short event, void *_conn);
+ static void conn_write_callback(evutil_socket_t fd, short event, void *_conn);
+@@ -351,7 +352,7 @@ connection_unlink(connection_t *conn)
+     conn->linked_conn = NULL;
+   }
+   remove_from_closeable_list(conn);
+-  smartlist_remove(active_linked_connection_lst, conn);
++  remove_from_active_linked_list(conn);
+   if (conn->type == CONN_TYPE_EXIT) {
+     assert_connection_edge_not_dns_pending(TO_EDGE_CONN(conn));
+   }
+@@ -473,6 +474,47 @@ connection_in_array(connection_t *conn)
+   return smartlist_contains(connection_array, conn);
+ }
+ 
++/** Return 1 if conn is on the active linked connection list, else 0. Checks
++ * the stored index in O(1); asserts it agrees with active_on_link. */
++int
++connection_in_active_linked_list(const connection_t *conn)
++{
++  const int idx = conn->active_linked_conn_index;
++  int on_list;
++
++  if (idx < 0) {
++    tor_assert(idx == -1);
++    on_list = 0;
++  } else {
++    tor_assert(idx < smartlist_len(active_linked_connection_lst));
++    tor_assert(smartlist_get(active_linked_connection_lst, idx) == conn);
++    on_list = 1;
++  }
++  tor_assert(on_list == (int) conn->active_on_link);
++  return on_list;
++}
++
++/** If <b>conn</b> is on the active linked connection list, remove it in
++ * O(1), moving the last connection on the list into its slot as
++ * smartlist_remove() would, and clear active_on_link. */
++static void
++remove_from_active_linked_list(connection_t *conn)
++{
++  const int idx = conn->active_linked_conn_index;
++
++  if (!connection_in_active_linked_list(conn))
++    return;
++  smartlist_del(active_linked_connection_lst, idx);
++  conn->active_linked_conn_index = -1;
++  conn->active_on_link = 0;
++  if (idx < smartlist_len(active_linked_connection_lst)) {
++    connection_t *moved = smartlist_get(active_linked_connection_lst, idx);
++    tor_assert(moved->active_linked_conn_index ==
++               smartlist_len(active_linked_connection_lst));
++    moved->active_linked_conn_index = idx;
++  }
++}
++
+ /** Set <b>*array</b> to an array of all connections. <b>*array</b> must not
+  * be modified.
+  */
+@@ -855,7 +897,7 @@ tor_event_loop_shutdown_is_pending(void)
+ /** Helper: Tell the main loop to begin reading bytes into <b>conn</b> from
+  * its linked connection, if it is not doing so already.  Called by
+  * connection_start_reading and connection_start_writing as appropriate. */
+-static void
++STATIC void
+ connection_start_reading_from_linked_conn(connection_t *conn)
+ {
+   tor_assert(conn);
+@@ -863,10 +905,12 @@ connection_start_reading_from_linked_conn(connection_t *conn)
+ 
+   if (!conn->active_on_link) {
+     conn->active_on_link = 1;
++    conn->active_linked_conn_index =
++      smartlist_len(active_linked_connection_lst);
+     smartlist_add(active_linked_connection_lst, conn);
+     mainloop_event_activate(schedule_active_linked_connections_event);
+   } else {
+-    tor_assert(smartlist_contains(active_linked_connection_lst, conn));
++    tor_assert(connection_in_active_linked_list(conn));
+   }
+ }
+ 
+@@ -880,13 +924,9 @@ connection_stop_reading_from_linked_conn(connection_t *conn)
+   tor_assert(conn->linked == 1);
+ 
+   if (conn->active_on_link) {
+-    conn->active_on_link = 0;
+-    /* FFFF We could keep an index here so we can smartlist_del
+-     * cleanly.  On the other hand, this doesn't show up on profiles,
+-     * so let's leave it alone for now. */
+-    smartlist_remove(active_linked_connection_lst, conn);
++    remove_from_active_linked_list(conn);
+   } else {
+-    tor_assert(!smartlist_contains(active_linked_connection_lst, conn));
++    tor_assert(!connection_in_active_linked_list(conn));
+   }
+ }
+ 
+diff --git a/src/core/mainloop/mainloop.h b/src/core/mainloop/mainloop.h
+index 19b9d04..84a8232 100644
+--- a/src/core/mainloop/mainloop.h
++++ b/src/core/mainloop/mainloop.h
+@@ -22,6 +22,7 @@ int connection_add_impl(connection_t *conn, int is_connecting);
+ int connection_remove(connection_t *conn);
+ void connection_unregister_events(connection_t *conn);
+ int connection_in_array(connection_t *conn);
++int connection_in_active_linked_list(const connection_t *conn);
+ void add_connection_to_closeable_list(connection_t *conn);
+ int connection_is_on_closeable_list(connection_t *conn);
+ 
+@@ -101,6 +102,7 @@ extern struct token_bucket_rw_t global_relayed_bucket;
+ STATIC void run_connection_housekeeping(int i, time_t now);
+ STATIC int run_main_loop_until_done(void);
+ STATIC void close_closeable_connections(void);
++STATIC void connection_start_reading_from_linked_conn(connection_t *conn);
+ STATIC void teardown_periodic_events(void);
+ STATIC int get_my_roles(const or_options_t *);
+ STATIC int check_network_participation_callback(time_t now,
+@@ -109,6 +111,7 @@ STATIC int check_network_participation_callback(time_t now,
+ #ifdef TOR_UNIT_TESTS
+ extern smartlist_t *connection_array;
+ extern smartlist_t *closeable_connection_lst;
++extern smartlist_t *active_linked_connection_lst;
+ 
+ /* We need the periodic_event_item_t definition. */
+ #include "core/mainloop/periodic.h"
+diff --git a/src/core/or/connection_st.h b/src/core/or/connection_st.h
+index bc62717..606b829 100644
+--- a/src/core/or/connection_st.h
++++ b/src/core/or/connection_st.h
+@@ -99,6 +99,9 @@ struct connection_t {
+    * or has no socket. */
+   tor_socket_t s;
+   int conn_array_index; /**< Index into the global connection array. */
++  /** Index of this connection in active_linked_connection_lst, or -1 if it
++   * is not on that list. Mirrors active_on_link. */
++  int active_linked_conn_index;
+ 
+   struct event *read_event; /**< Libevent event structure. */
+   struct event *write_event; /**< Libevent event structure. */
+diff --git a/src/test/test_mainloop.c b/src/test/test_mainloop.c
+index ab3c4aa..c98eed7 100644
+--- a/src/test/test_mainloop.c
++++ b/src/test/test_mainloop.c
+@@ -414,6 +414,10 @@ check_conn_lists(void)
+     tt_int_op(conn->closeable_conn_index, OP_EQ, conn_sl_idx);
+     tt_assert(conn->marked_for_close);
+   } SMARTLIST_FOREACH_END(conn);
++  SMARTLIST_FOREACH_BEGIN(active_linked_connection_lst, connection_t *, conn) {
++    tt_int_op(conn->active_linked_conn_index, OP_EQ, conn_sl_idx);
++    tt_assert(conn->active_on_link);
++  } SMARTLIST_FOREACH_END(conn);
+  done:
+   ;
+ }
+@@ -628,6 +632,98 @@ test_mainloop_closeable_index(void *arg)
+   if (SOCKET_OK(fds[1])) tor_close_socket(fds[1]);
+ }
+ 
++/** Test that the active linked connection list keeps every
++ * active_linked_conn_index through additions, removals in any position,
++ * toggling, and linked-peer teardown. */
++static void
++test_mainloop_active_linked_index(void *arg)
++{
++  connection_t *a[4] = { NULL }, *b[4] = { NULL };
++  int i;
++  (void) arg;
++
++  tor_init_connection_lists();
++  initialize_mainloop_events();
++
++  for (i = 0; i < 4; ++i) {
++    make_linked_pair(&a[i], &b[i]);
++    tt_int_op(connection_add(a[i]), OP_EQ, 0);
++    tt_int_op(connection_add(b[i]), OP_EQ, 0);
++    a[i]->writing_to_linked_conn = 1;
++    b[i]->reading_from_linked_conn = 1;
++    buf_add(a[i]->outbuf, "x", 1);
++  }
++
++  /* Activate the four dir sides; indices follow insertion order. */
++  for (i = 0; i < 4; ++i) {
++    connection_start_reading_from_linked_conn(b[i]);
++    tt_int_op(b[i]->active_linked_conn_index, OP_EQ, i);
++    tt_int_op(b[i]->active_on_link, OP_EQ, 1);
++  }
++  tt_int_op(smartlist_len(active_linked_connection_lst), OP_EQ, 4);
++  check_conn_lists();
++
++  /* Starting again is idempotent. */
++  connection_start_reading_from_linked_conn(b[1]);
++  tt_int_op(smartlist_len(active_linked_connection_lst), OP_EQ, 4);
++  tt_int_op(b[1]->active_linked_conn_index, OP_EQ, 1);
++
++  /* Remove the head: the last connection (b[3]) moves into its slot. */
++  connection_stop_reading_from_linked_conn(b[0]);
++  tt_int_op(b[0]->active_linked_conn_index, OP_EQ, -1);
++  tt_int_op(b[0]->active_on_link, OP_EQ, 0);
++  tt_int_op(b[3]->active_linked_conn_index, OP_EQ, 0);
++  check_conn_lists();
++  /* Remove the tail: nothing moves. */
++  connection_stop_reading_from_linked_conn(b[2]);
++  tt_int_op(b[2]->active_linked_conn_index, OP_EQ, -1);
++  tt_int_op(smartlist_len(active_linked_connection_lst), OP_EQ, 2);
++  check_conn_lists();
++  /* Stopping an inactive connection is a no-op. */
++  connection_stop_reading_from_linked_conn(b[2]);
++  tt_int_op(smartlist_len(active_linked_connection_lst), OP_EQ, 2);
++
++  /* Toggle b[0] back on: it appends to the end. */
++  connection_start_reading_from_linked_conn(b[0]);
++  tt_int_op(b[0]->active_linked_conn_index, OP_EQ, 2);
++  tt_int_op(b[0]->active_on_link, OP_EQ, 1);
++  check_conn_lists();
++
++  /* Tearing down the exit side of a pair wakes its still-reading dir side
++   * (so it notices EOF) and takes the exit side off the active list. */
++  connection_start_reading_from_linked_conn(a[1]);
++  tt_assert(connection_in_active_linked_list(a[1]));
++  connection_mark_for_close(a[1]);
++  close_closeable_connections();
++  a[1] = NULL;
++  tt_ptr_op(b[1]->linked_conn, OP_EQ, NULL);
++  tt_int_op(b[1]->active_on_link, OP_EQ, 1);
++  tt_assert(connection_in_active_linked_list(b[1]));
++  check_conn_lists();
++
++  for (i = 0; i < 4; ++i) {
++    if (a[i]) {
++      if (a[i]->active_on_link)
++        connection_stop_reading_from_linked_conn(a[i]);
++      if (a[i]->linked_conn) a[i]->linked_conn->linked_conn = NULL;
++      a[i]->linked_conn = NULL;
++      connection_remove(a[i]); connection_free(a[i]);
++    }
++    if (b[i]) {
++      if (b[i]->active_on_link)
++        connection_stop_reading_from_linked_conn(b[i]);
++      if (b[i]->linked_conn) b[i]->linked_conn->linked_conn = NULL;
++      b[i]->linked_conn = NULL;
++      connection_remove(b[i]); connection_free(b[i]);
++    }
++  }
++  tt_int_op(smartlist_len(active_linked_connection_lst), OP_EQ, 0);
++  tt_int_op(smartlist_len(get_connection_array()), OP_EQ, 0);
++
++ done:
++  ;
++}
++
+ #define MAINLOOP_TEST(name) \
+   { #name, test_mainloop_## name , TT_FORK, NULL, NULL }
+ 
+@@ -640,5 +736,6 @@ struct testcase_t mainloop_tests[] = {
+   MAINLOOP_TEST(dormant_save_state),
+   MAINLOOP_TEST(conn_array_index),
+   MAINLOOP_TEST(closeable_index),
++  MAINLOOP_TEST(active_linked_index),
+   END_OF_TESTCASES
+ };

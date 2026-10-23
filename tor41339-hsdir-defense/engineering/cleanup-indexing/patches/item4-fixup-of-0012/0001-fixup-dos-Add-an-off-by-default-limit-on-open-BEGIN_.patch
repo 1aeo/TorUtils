@@ -1,0 +1,63 @@
+From 90782a29723f6e4806780dd0997a88d2b4d5484f Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Thu, 22 Oct 2026 22:43:12 -0700
+Subject: [PATCH] fixup! dos: Add an off-by-default limit on open BEGIN_DIR
+ streams per circuit
+
+Refuse an over-limit BEGIN_DIR before allocating its exit and directory
+connections, by moving the dos_should_refuse_begindir() check to the top of
+the BEGIN_DIR branch of connection_exit_begin_conn(), ahead of
+edge_connection_new(). Before, a refused BEGIN_DIR allocated the stream and
+then freed it.
+
+This moves the check ahead of the we_are_hibernating() check. That changes
+behaviour only when the limit is enabled, the relay is hibernating, and the
+circuit is already over the limit: the client then gets
+END_STREAM_REASON_MISC (over limit) rather than END_STREAM_REASON_HIBERNATING.
+Both are retriable and the stream is refused either way, so no client loses
+service; the over-limit counter now also counts these, which is what we want
+to measure. The END reason and counting for the non-hibernating case are
+unchanged.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/core/or/connection_edge.c | 19 +++++++++++++------
+ 1 file changed, 13 insertions(+), 6 deletions(-)
+
+diff --git a/src/core/or/connection_edge.c b/src/core/or/connection_edge.c
+index b400f6f..89dcb25 100644
+--- a/src/core/or/connection_edge.c
++++ b/src/core/or/connection_edge.c
+@@ -4245,6 +4245,17 @@ connection_exit_begin_conn(const relay_msg_t *msg, circuit_t *circ)
+                                     layer_hint);
+       return 0;
+     }
++    /* Refuse a BEGIN_DIR on a circuit that already has too many open
++     * directory streams, before we allocate the exit and directory
++     * connections for the stream, so a flood of these over the limit costs
++     * us nothing to turn away. dos_should_refuse_begindir() counts the
++     * over-limit stream whether or not the defense is enabled. */
++    tor_assert(or_circ);
++    if (dos_should_refuse_begindir(or_circ)) {
++      relay_send_end_cell_from_edge(msg->stream_id, circ,
++                                    END_STREAM_REASON_MISC, layer_hint);
++      return 0;
++    }
+     /* Make sure to get the 'real' address of the previous hop: the
+      * caller might want to know whether the remote IP address has changed,
+      * and we might already have corrected base_.addr[ess] for the relay's
+@@ -4326,12 +4337,8 @@ connection_exit_begin_conn(const relay_msg_t *msg, circuit_t *circ)
+   if (msg->command == RELAY_COMMAND_BEGIN_DIR) {
+     tor_addr_t tmp_addr;
+     tor_assert(or_circ);
+-    if (dos_should_refuse_begindir(or_circ)) {
+-      relay_send_end_cell_from_edge(msg->stream_id, circ,
+-                                    END_STREAM_REASON_MISC, layer_hint);
+-      connection_free_(TO_CONN(n_stream));
+-      return 0;
+-    }
++    /* The over-limit refusal already happened, before we allocated
++     * n_stream. */
+     if (or_circ->p_chan &&
+         channel_get_addr_if_possible(or_circ->p_chan, &tmp_addr)) {
+       tor_addr_copy(&n_stream->base_.addr, &tmp_addr);

@@ -1,0 +1,12 @@
+FROM tor41350-build:2404
+# Measurement/lab tools only, installed at image-build time (network on). The
+# lab itself runs with --network none; no load is generated at build time.
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      linux-tools-generic linux-tools-common procps python3-venv python3-stem \
+      python3-typing-extensions python3-tomli-w python3-paramiko python3-typeguard ca-certificates git iproute2 net-tools curl \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone https://gitlab.torproject.org/tpo/core/chutney.git /opt/chutney
+# Pin to the revision the simulator harness documents (pre-typing_extensions
+# churn); fall back to a dated checkout if that hash is unavailable.
+RUN cd /opt/chutney && (git checkout 3338f5c 2>/dev/null || git checkout "$(git rev-list -1 --before=2025-06-01 main)") && git log -1 --format='chutney %h %ci'
+ENV CHUTNEY_PATH=/opt/chutney PYTHONPATH=/opt/chutney/lib

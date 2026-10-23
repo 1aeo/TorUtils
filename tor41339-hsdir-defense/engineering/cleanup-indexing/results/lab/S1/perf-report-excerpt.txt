@@ -1,0 +1,92 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 122  of event 'task-clock:ppp'
+# Event count (approx.): 122367098
+#
+# Children      Self  Command  Shared Object          Symbol                                           
+# ........  ........  .......  .....................  .................................................
+#
+   100.00%     0.00%  tor   tor                 [.] _start
+   100.00%     0.00%  tor   libc.so.6              [.] __libc_start_main
+   100.00%     0.00%  tor   libc.so.6              [.] 0x0000f62b924d84c4
+   100.00%     0.00%  tor   tor                 [.] main
+   100.00%     0.00%  tor   tor                 [.] tor_main
+   100.00%     0.00%  tor   tor                 [.] tor_run_main
+   100.00%     0.00%  tor   tor                 [.] do_main_loop
+   100.00%     0.00%  tor   libevent-2.1.so.7.0.1  [.] event_base_loop
+    66.39%     0.00%  tor   libevent-2.1.so.7.0.1  [.] 0x0000f62b92d7138c
+    51.64%     0.82%  tor   tor                 [.] conn_read_callback
+    50.82%     0.00%  tor   tor                 [.] connection_handle_read_impl
+    38.52%     0.00%  tor   [kernel.kallsyms]      [k] el0t_64_sync
+    38.52%     0.00%  tor   [kernel.kallsyms]      [k] el0t_64_sync_handler
+    36.89%     0.82%  tor   [kernel.kallsyms]      [k] el0_svc
+    36.07%     0.00%  tor   [kernel.kallsyms]      [k] do_el0_svc
+    36.07%     0.00%  tor   [kernel.kallsyms]      [k] el0_svc_common.constprop.0
+    35.25%     0.82%  tor   [kernel.kallsyms]      [k] invoke_syscall
+    27.05%     0.00%  tor   libevent-2.1.so.7.0.1  [.] 0x0000f62b92d70ffc
+    20.49%     0.00%  tor   tor                 [.] scheduler_evt_callback
+    20.49%     0.82%  tor   tor                 [.] kist_scheduler_run
+    20.49%     0.82%  tor   libc.so.6              [.] write
+    18.85%     0.00%  tor   tor                 [.] connection_handle_write
+    18.85%     0.00%  tor   tor                 [.] connection_handle_write_impl
+    18.85%     0.82%  tor   [kernel.kallsyms]      [k] __arm64_sys_write
+    18.03%     0.00%  tor   [kernel.kallsyms]      [k] ksys_write
+    17.21%     0.00%  tor   tor                 [.] buf_flush_to_tls
+    17.21%     0.00%  tor   tor                 [.] tor_tls_write
+    17.21%     0.00%  tor   libssl.so.3            [.] SSL_write
+    17.21%     0.00%  tor   [kernel.kallsyms]      [k] vfs_write
+    17.21%     0.00%  tor   tor                 [.] relay_send_command_from_edge_
+    16.39%     0.00%  tor   libssl.so.3            [.] 0x0000f62b92cd81a0
+    16.39%     0.00%  tor   tor                 [.] connection_or_process_cells_from_inbuf
+    15.57%     0.00%  tor   tor                 [.] connection_edge_process_inbuf
+    15.57%     0.00%  tor   tor                 [.] connection_edge_package_raw_inbuf
+    14.75%     0.00%  tor   tor                 [.] circuit_package_relay_cell
+    14.75%     0.00%  tor   tor                 [.] relay_encrypt_cell_inbound
+    10.66%     0.00%  tor   libssl.so.3            [.] 0x0000f62b92cd7e44
+    10.66%     0.00%  tor   libssl.so.3            [.] 0x0000f62b92cd6f64
+    10.66%     0.00%  tor   libcrypto.so.3         [.] BIO_write
+    10.66%     0.00%  tor   libcrypto.so.3         [.] 0x0000f62b928d2938
+    10.66%     0.00%  tor   libcrypto.so.3         [.] 0x0000f62b928d4a2c
+    10.66%     0.00%  tor   libcrypto.so.3         [.] 0x0000f62b928ded00
+     9.84%     0.82%  tor   tor                 [.] command_process_create_cell
+     9.02%     0.00%  tor   [kernel.kallsyms]      [k] sock_write_iter
+     9.02%     0.00%  tor   [kernel.kallsyms]      [k] __sock_sendmsg
+     9.02%     0.00%  tor   [kernel.kallsyms]      [k] inet_sendmsg
+     9.02%     1.64%  tor   [kernel.kallsyms]      [k] tcp_sendmsg_locked
+     9.02%     0.00%  tor   [kernel.kallsyms]      [k] tcp_sendmsg
+     9.02%     8.20%  tor   tor                 [.] pv_mul_y_h_ctmul64
+...
+665:               |           --3.28%--close_closeable_connections
+666:               |                     connection_free_minimal
+1671:               |           --3.28%--close_closeable_connections
+1672:               |                     connection_free_minimal
+2676:               |           --3.28%--close_closeable_connections
+2677:               |                     connection_free_minimal
+3680:               |           --3.28%--close_closeable_connections
+3681:               |                     connection_free_minimal
+4683:               |           --3.28%--close_closeable_connections
+4684:               |                     connection_free_minimal
+5685:               |           --3.28%--close_closeable_connections
+5686:               |                     connection_free_minimal
+6686:               |           --3.28%--close_closeable_connections
+6687:               |                     connection_free_minimal
+7686:               |           --3.28%--close_closeable_connections
+7687:               |                     connection_free_minimal
+8684:                --3.28%--close_closeable_connections
+8685:                          connection_free_minimal
+11127:                       close_closeable_connections
+11128:                       connection_free_minimal
+18274:     3.28%     0.00%  tor   tor                 [.] close_closeable_connections
+18276:            ---close_closeable_connections
+18277:               connection_free_minimal
+18352:     3.28%     0.00%  tor   tor                 [.] connection_free_minimal
+18354:            ---connection_free_minimal
+21368:               close_closeable_connections
+21369:               connection_free_minimal
+22381:               close_closeable_connections
+22382:               connection_free_minimal
+22645:               close_closeable_connections
+22646:               connection_free_minimal

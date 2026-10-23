@@ -1,0 +1,258 @@
+From e32850302a23c32fa5f253b1e9fcb705fbc8739b Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Thu, 22 Oct 2026 22:39:56 -0700
+Subject: [PATCH 1/3] mainloop: Check the array index, not the array, when
+ freeing a connection
+
+connection_free_() asserted !connection_in_array(conn), which scans the
+whole connection array. The connection has always been removed from the
+array by then, so every free paid for a full scan of every open
+connection. Each BEGIN_DIR stream adds and frees two connections, so
+under a flood of them this scan becomes a large part of the main
+thread's work: a profile of a relay under such a flood put about 40% of
+its main thread's user-space CPU in this one loop.
+
+connection_add() and connection_remove() already keep conn_array_index
+up to date for the connections in the array, and connection_remove()
+fixes the index of the connection it moves into the freed slot. But it
+left the removed connection's own index unchanged. Set it to -1, which
+is what connection_is_moribund() and connection_unlink() already take to
+mean "not in the array", and check that in connection_free_(). Also
+check in O(1) that a connection being removed is where its index says,
+since connection_free_() now trusts that index. A unit test cross-checks
+the indexes against a full scan of the array, including over an
+out-of-memory re-sort.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ changes/mainloop_array_index   |   6 ++
+ src/core/mainloop/connection.c |   4 +-
+ src/core/mainloop/mainloop.c   |   9 ++-
+ src/test/test_mainloop.c       | 125 +++++++++++++++++++++++++++++++++
+ 4 files changed, 141 insertions(+), 3 deletions(-)
+ create mode 100644 changes/mainloop_array_index
+
+diff --git a/changes/mainloop_array_index b/changes/mainloop_array_index
+new file mode 100644
+index 0000000..987bd7e
+--- /dev/null
++++ b/changes/mainloop_array_index
+@@ -0,0 +1,6 @@
++  o Minor features (performance, relay):
++    - Stop scanning the whole connection array each time we free a
++      connection, to check that it is no longer in the array. Instead,
++      reset a connection's array index when we remove it, and check that.
++      Under a flood of short-lived BEGIN_DIR streams, this scan took a
++      large share of a relay's main-thread CPU.
+diff --git a/src/core/mainloop/connection.c b/src/core/mainloop/connection.c
+index cd71bb8..cca6631 100644
+--- a/src/core/mainloop/connection.c
++++ b/src/core/mainloop/connection.c
+@@ -967,7 +967,9 @@ connection_free_,(connection_t *conn))
+   if (!conn)
+     return;
+   tor_assert(!connection_is_on_closeable_list(conn));
+-  tor_assert(!connection_in_array(conn));
++  /* connection_add() and connection_remove() keep conn_array_index up to
++   * date, so this confirms in O(1) that conn has left the array. */
++  tor_assert(conn->conn_array_index < 0);
+   /* Direct free can bypass normal closure. This releases the channel's guard
+    * attribution handle before cleanup callbacks can report another error.
+    * Destruction itself is not evidence of establishment failure; any eligible
+diff --git a/src/core/mainloop/mainloop.c b/src/core/mainloop/mainloop.c
+index 72bfc31..f930642 100644
+--- a/src/core/mainloop/mainloop.c
++++ b/src/core/mainloop/mainloop.c
+@@ -250,7 +250,7 @@ connection_add_impl(connection_t *conn, int is_connecting)
+              (conn->type == CONN_TYPE_AP &&
+               TO_EDGE_CONN(conn)->is_dns_request));
+ 
+-  tor_assert(conn->conn_array_index == -1); /* can only connection_add once */
++  tor_assert(conn->conn_array_index == -1); /* can only be in the array once */
+   conn->conn_array_index = smartlist_len(connection_array);
+   smartlist_add(connection_array, conn);
+ 
+@@ -284,7 +284,8 @@ connection_unregister_events(connection_t *conn)
+ 
+ /** Remove the connection from the global list, and remove the
+  * corresponding poll entry.  Calling this function will shift the last
+- * connection (if any) into the position occupied by conn.
++ * connection (if any) into the position occupied by conn, and set
++ * conn-\>conn_array_index to -1.
+  */
+ int
+ connection_remove(connection_t *conn)
+@@ -306,7 +307,11 @@ connection_remove(connection_t *conn)
+ 
+   tor_assert(conn->conn_array_index >= 0);
+   current_index = conn->conn_array_index;
++  tor_assert(current_index < smartlist_len(connection_array));
++  tor_assert(smartlist_get(connection_array, current_index) == conn);
+   connection_unregister_events(conn); /* This is redundant, but cheap. */
++  /* connection_free_() checks this to confirm conn has left the array. */
++  conn->conn_array_index = -1;
+   if (current_index == smartlist_len(connection_array)-1) { /* at the end */
+     smartlist_del(connection_array, current_index);
+     return 0;
+diff --git a/src/test/test_mainloop.c b/src/test/test_mainloop.c
+index ccd3378..12e3d64 100644
+--- a/src/test/test_mainloop.c
++++ b/src/test/test_mainloop.c
+@@ -16,12 +16,18 @@
+ #include "lib/confmgt/confmgt.h"
+ 
+ #include "core/or/or.h"
++#include "core/or/circuitlist.h"
++#include "core/or/connection_edge.h"
++#include "core/or/connection_or.h"
++#include "core/or/connection_st.h"
++#include "core/or/edge_connection_st.h"
+ #include "core/mainloop/connection.h"
+ #include "core/mainloop/mainloop.h"
+ #include "core/mainloop/mainloop_state_st.h"
+ #include "core/mainloop/mainloop_sys.h"
+ #include "core/mainloop/netstatus.h"
+ 
++#include "feature/dircommon/directory.h"
+ #include "feature/hs/hs_service.h"
+ 
+ #include "app/config/config.h"
+@@ -30,6 +36,10 @@
+ 
+ #include "app/main/subsysmgr.h"
+ 
++#include "lib/buf/buffers.h"
++#include "lib/net/socket.h"
++#include "lib/time/compat_time.h"
++
+ static const uint64_t BILLION = 1000000000;
+ 
+ static void
+@@ -369,6 +379,120 @@ test_mainloop_dormant_save_state(void *arg)
+   tor_free(state);
+ }
+ 
++/** Make a linked exit and directory connection pair like the one that
++ * connection_exit_connect_dir() makes for a BEGIN_DIR stream, without adding
++ * it to the connection array. */
++static void
++make_linked_pair(connection_t **exit_out, connection_t **dir_out)
++{
++  connection_t *exit_conn = connection_new(CONN_TYPE_EXIT, AF_INET);
++  connection_t *dir_conn = connection_new(CONN_TYPE_DIR, AF_INET);
++
++  exit_conn->state = EXIT_CONN_STATE_OPEN;
++  exit_conn->purpose = EXIT_PURPOSE_CONNECT;
++  exit_conn->address = tor_strdup("127.0.0.1");
++  /* We close it without a circuit: don't warn that it sent no END cell. */
++  TO_EDGE_CONN(exit_conn)->edge_has_sent_end = 1;
++  dir_conn->state = DIR_CONN_STATE_SERVER_COMMAND_WAIT;
++  dir_conn->purpose = DIR_PURPOSE_SERVER;
++  dir_conn->address = tor_strdup("127.0.0.1");
++  connection_link_connections(dir_conn, exit_conn);
++  *exit_out = exit_conn;
++  *dir_out = dir_conn;
++}
++
++/** Independent cross-check of the per-connection list indexes: scan each
++ * global list and confirm every connection's stored index points back to
++ * it. This is the O(len) check the indexes replace in production. */
++static void
++check_conn_lists(void)
++{
++  SMARTLIST_FOREACH_BEGIN(get_connection_array(), connection_t *, conn) {
++    tt_int_op(conn->conn_array_index, OP_EQ, conn_sl_idx);
++  } SMARTLIST_FOREACH_END(conn);
++ done:
++  ;
++}
++
++/** Test that connection_add() and connection_remove() keep every
++ * connection's conn_array_index, through an OOM re-sort of the array, so
++ * that connection_free_() can rely on it. */
++static void
++test_mainloop_conn_array_index(void *arg)
++{
++  connection_t *conns[6] = { NULL };
++  smartlist_t *array;
++  int i;
++  (void) arg;
++
++  tor_init_connection_lists();
++  array = get_connection_array();
++  monotime_enable_test_mocking();
++  monotime_coarse_set_mock_time_nsec(UINT64_C(1000000000));
++
++  for (i = 0; i < 6; i += 2) {
++    make_linked_pair(&conns[i], &conns[i + 1]);
++    tt_int_op(conns[i]->conn_array_index, OP_EQ, -1);
++    tt_int_op(connection_add(conns[i]), OP_EQ, 0);
++    tt_int_op(connection_add(conns[i + 1]), OP_EQ, 0);
++    check_conn_lists();
++  }
++  tt_int_op(smartlist_len(array), OP_EQ, 6);
++
++  /* Removing the last connection moves none. */
++  connection_remove(conns[5]);
++  tt_int_op(conns[5]->conn_array_index, OP_EQ, -1);
++  tt_int_op(connection_is_moribund(conns[5]), OP_EQ, 1);
++  check_conn_lists();
++  /* Removing the head moves the last connection into its place. */
++  connection_remove(conns[0]);
++  tt_int_op(conns[0]->conn_array_index, OP_EQ, -1);
++  tt_ptr_op(smartlist_get(array, 0), OP_EQ, conns[4]);
++  check_conn_lists();
++  /* So does removing one in the middle. */
++  connection_remove(conns[2]);
++  tt_int_op(conns[2]->conn_array_index, OP_EQ, -1);
++  tt_ptr_op(smartlist_get(array, 2), OP_EQ, conns[3]);
++  check_conn_lists();
++  tt_int_op(smartlist_len(array), OP_EQ, 3);
++
++  /* A removed connection can be freed (its index says it is out). */
++  connection_free(conns[5]);
++  connection_free(conns[0]);
++  connection_free(conns[2]);
++
++  /* The OOM handler sorts the array by buffer age, oldest first, and
++   * rewrites every index. Stage buffer ages so the sort reverses the
++   * current order, and check the indexes still match afterwards. */
++  for (i = 0; i < smartlist_len(array); ++i) {
++    connection_t *conn = smartlist_get(array, i);
++    monotime_coarse_set_mock_time_nsec(UINT64_C(1000000000) * (10 - i));
++    buf_add(conn->outbuf, "x", 1);
++  }
++  monotime_coarse_set_mock_time_nsec(UINT64_C(20000000000));
++  get_options_mutable()->MaxMemInQueues = 1000;
++  circuits_handle_oom(2000);
++  tt_ptr_op(smartlist_get(array, 0), OP_EQ, conns[3]);
++  tt_ptr_op(smartlist_get(array, 2), OP_EQ, conns[4]);
++  check_conn_lists();
++
++  while (smartlist_len(array)) {
++    connection_t *conn = smartlist_get(array, 0);
++    connection_remove(conn);
++    check_conn_lists();
++    tt_int_op(conn->conn_array_index, OP_EQ, -1);
++    for (i = 0; i < 6; ++i)
++      if (conns[i] == conn) conns[i] = NULL;
++    connection_free(conn);
++  }
++
++ done:
++  for (i = 0; i < 6; ++i)
++    if (conns[i] && conns[i]->conn_array_index >= 0)
++      connection_remove(conns[i]);
++  monotime_disable_test_mocking();
++}
++
+ #define MAINLOOP_TEST(name) \
+   { #name, test_mainloop_## name , TT_FORK, NULL, NULL }
+ 
+@@ -379,5 +503,6 @@ struct testcase_t mainloop_tests[] = {
+   MAINLOOP_TEST(check_participation),
+   MAINLOOP_TEST(dormant_load_state),
+   MAINLOOP_TEST(dormant_save_state),
++  MAINLOOP_TEST(conn_array_index),
+   END_OF_TESTCASES
+ };
