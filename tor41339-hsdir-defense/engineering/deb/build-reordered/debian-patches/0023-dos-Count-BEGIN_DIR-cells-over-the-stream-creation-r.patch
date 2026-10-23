@@ -1,0 +1,224 @@
+From 2e1f99fe6b1df67edaa31486b9b55ec81f5ecc06 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Fri, 23 Oct 2026 05:35:00 +0000
+Subject: [PATCH 23/23] dos: Count BEGIN_DIR cells over the stream creation
+ rate
+
+The stream creation limit (DoSStreamCreationEnabled, Rate and Burst)
+applies a per-circuit token bucket to RELAY_BEGIN and RELAY_RESOLVE
+cells, but connection_exit_begin_conn() hands BEGIN_DIR cells off before
+it gets there. One way to defend against a BEGIN_DIR flood is to apply
+the same limit to them; before choosing it over DoSBeginDirMaxStreams's
+limit on open streams, we need to know what it would refuse.
+
+Give each OR circuit a second bucket at the same rate and burst, for
+BEGIN_DIR cells only, and count the cells that find it empty as
+tor_relay_dos_total{type="begindir_over_stream_rate"}, whether or not
+DoSStreamCreationEnabled is set. It never refuses anything, and leaves
+the RELAY_BEGIN bucket alone. The check runs in
+dos_should_refuse_begindir(), where stock tor would check a RELAY_BEGIN
+cell: after the directory and hibernation checks. or_circuit_t grows by
+one token_bucket_ctr_t. Only the MetricsPort shows this count, so a
+relay without one leaves the bucket alone.
+
+Part of #41339.
+---
+ changes/ticket41339_metrics       |  5 +++
+ src/core/or/dos.c                 | 24 ++++++++++++-
+ src/core/or/dos.h                 |  5 ++-
+ src/core/or/or_circuit_st.h       |  2 ++
+ src/feature/relay/relay_metrics.c |  2 ++
+ src/test/test_dos.c               | 56 +++++++++++++++++++++++++++++++
+ 6 files changed, 92 insertions(+), 2 deletions(-)
+
+diff --git a/changes/ticket41339_metrics b/changes/ticket41339_metrics
+index 1674c8d332..d31cc23c86 100644
+--- a/changes/ticket41339_metrics
++++ b/changes/ticket41339_metrics
+@@ -67,3 +67,8 @@
+       HSDirRefuseUnknownPrevHop treats these as known: the count shows how much
+       traffic comes from relays that recently left the consensus. Part of
+       ticket 41339.
++    - Count the BEGIN_DIR cells that DoSStreamCreationRate and
++      DoSStreamCreationBurst would refuse on their circuit if they applied to
++      BEGIN_DIR cells as they do to BEGIN and RESOLVE cells, as
++      tor_relay_dos_total{type="begindir_over_stream_rate"}, while a
++      MetricsPort is configured. Nothing is refused. Part of ticket 41339.
+diff --git a/src/core/or/dos.c b/src/core/or/dos.c
+index 052f310911..a5323ae7c4 100644
+--- a/src/core/or/dos.c
++++ b/src/core/or/dos.c
+@@ -1101,17 +1101,36 @@ dos_stream_new_begin_or_resolve_cell(or_circuit_t *circ)
+   return dos_stream_defense_type;
+ }
+ 
++/** Count a BEGIN_DIR cell on <b>circ</b> that DoSStreamCreationRate and
++ * Burst would refuse if they limited BEGIN_DIR cells as they do RELAY_BEGIN
++ * and RELAY_RESOLVE cells, whether or not DoSStreamCreationEnabled is set.
++ * Only the MetricsPort shows this count, so we keep it only with one. */
++static void
++dos_note_begindir_stream_rate(or_circuit_t *circ)
++{
++  if (!get_options()->MetricsPort_set)
++    return;
++  token_bucket_ctr_refill(&circ->begindir_limiter,
++                          (uint32_t) monotime_coarse_absolute_sec());
++  if (token_bucket_ctr_get(&circ->begindir_limiter) > 0)
++    token_bucket_ctr_dec(&circ->begindir_limiter, 1);
++  else
++    dos_note_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE);
++}
++
+ /** Return true iff we should refuse a BEGIN_DIR cell on <b>circ</b> because it
+  * already has DoSBeginDirMaxStreams open directory streams. We count such
+  * cells, and mark their <b>stream</b> if not NULL, even when
+  * DoSBeginDirLimitEnabled is off. */
+ bool
+-dos_should_refuse_begindir(const or_circuit_t *circ, edge_connection_t *stream)
++dos_should_refuse_begindir(or_circuit_t *circ, edge_connection_t *stream)
+ {
+   const dos_options_t *options = dos_get_options();
+   int max = options->DoSBeginDirMaxStreams;
+   int n = 0;
+ 
++  dos_note_begindir_stream_rate(circ);
++
+   if (!max) {
+     max = networkstatus_get_param(NULL, "DoSBeginDirMaxStreams",
+                                   DOS_BEGINDIR_MAX_STREAMS_DEFAULT,
+@@ -1138,6 +1157,9 @@ dos_stream_init_circ_tbf(or_circuit_t *circ)
+   token_bucket_ctr_init(&circ->stream_limiter, dos_stream_rate,
+                         dos_stream_burst,
+                         (uint32_t) monotime_coarse_absolute_sec());
++  token_bucket_ctr_init(&circ->begindir_limiter, dos_stream_rate,
++                        dos_stream_burst,
++                        (uint32_t) monotime_coarse_absolute_sec());
+ }
+ 
+ /* General API */
+diff --git a/src/core/or/dos.h b/src/core/or/dos.h
+index 3b1e141255..9912f27f18 100644
+--- a/src/core/or/dos.h
++++ b/src/core/or/dos.h
+@@ -102,6 +102,9 @@ typedef enum dos_dir_stat_t {
+   /** BEGIN_DIR cells on a circuit with DoSBeginDirMaxStreams open directory
+    * streams. */
+   DOS_DIR_BEGINDIR_OVER_MAX,
++  /** BEGIN_DIR cells over their circuit's DoSStreamCreationRate and Burst,
++   * which only limit RELAY_BEGIN and RELAY_RESOLVE cells. */
++  DOS_DIR_BEGINDIR_OVER_STREAM_RATE,
+   /** Fetches of a cached onion service descriptor over
+    * HSDirDescriptorFetchRate. */
+   DOS_DIR_HSDIR_FETCH_OVER_RATE,
+@@ -232,7 +235,7 @@ typedef enum dos_stream_defense_type_t {
+ dos_stream_defense_type_t dos_stream_new_begin_or_resolve_cell(
+                                                           or_circuit_t *circ);
+ void dos_stream_init_circ_tbf(or_circuit_t *circ);
+-bool dos_should_refuse_begindir(const or_circuit_t *circ,
++bool dos_should_refuse_begindir(or_circuit_t *circ,
+                                 edge_connection_t *stream);
+ 
+ #ifdef DOS_PRIVATE
+diff --git a/src/core/or/or_circuit_st.h b/src/core/or/or_circuit_st.h
+index 1952355fb6..f461e4a710 100644
+--- a/src/core/or/or_circuit_st.h
++++ b/src/core/or/or_circuit_st.h
+@@ -121,6 +121,8 @@ struct or_circuit_t {
+   /** RELAY_BEGIN and RELAY_RESOLVE cell bucket controlling how much can go on
+    * this circuit. Only used if this is the end of a circuit on an exit node.*/
+   token_bucket_ctr_t stream_limiter;
++  /** The same bucket for RELAY_BEGIN_DIR cells, which only counts. */
++  token_bucket_ctr_t begindir_limiter;
+ 
+   /** Format to use when exchanging relay cells with the client
+    * who built this circuit. */
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index cd28d39dcf..86e091b3cb 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -536,6 +536,8 @@ fill_dos_values(void)
+     { "hsdir_descriptor_only_prev_hop",
+       dos_get_dir_stat(DOS_DIR_HSDIR_DESCRIPTOR_ONLY_PREV_HOP) },
+     { "begindir_over_max", dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX) },
++    { "begindir_over_stream_rate",
++      dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE) },
+     { "hsdir_fetch_over_rate",
+       dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE) },
+     { "hsdir_fetch_pressure",
+diff --git a/src/test/test_dos.c b/src/test/test_dos.c
+index 2926a84ff5..e9df8030f5 100644
+--- a/src/test/test_dos.c
++++ b/src/test/test_dos.c
+@@ -803,6 +803,60 @@ test_dos_begindir_max_streams(void *arg)
+     connection_free_minimal(TO_CONN(stream));
+ }
+ 
++/** Test that BEGIN_DIR cells over their circuit's stream creation rate are
++ * counted, but never refused, whether or not the stream limit is on, and
++ * only with a MetricsPort. */
++static void
++test_dos_begindir_over_stream_rate(void *arg)
++{
++  dos_options_t *dos_opts = get_dos_options(get_options_mutable());
++  or_circuit_t *circ = NULL;
++  uint64_t over0 = dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE);
++  uint64_t max0 = dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX);
++  (void) arg;
++
++  monotime_enable_test_mocking();
++  monotime_coarse_set_mock_time_nsec(1000000000);
++  dos_opts->DoSStreamCreationRate = 1;
++  dos_opts->DoSStreamCreationBurst = 2;
++  dos_opts->DoSStreamCreationEnabled = 0;
++  dos_init();
++  circ = or_circuit_new(0, NULL);
++
++  /* Without a MetricsPort, the bucket is left alone. */
++  for (int i = 0; i < 3; i++)
++    tt_assert(!dos_should_refuse_begindir(circ, NULL));
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE), OP_EQ,
++            over0);
++  get_options_mutable()->MetricsPort_set = 1;
++  for (int i = 0; i < 3; i++)
++    tt_assert(!dos_should_refuse_begindir(circ, NULL));
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE), OP_EQ,
++            over0 + 1);
++  /* One more token a second later. */
++  monotime_coarse_set_mock_time_nsec(2000000000);
++  tt_assert(!dos_should_refuse_begindir(circ, NULL));
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE), OP_EQ,
++            over0 + 1);
++  tt_assert(!dos_should_refuse_begindir(circ, NULL));
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE), OP_EQ,
++            over0 + 2);
++  /* BEGIN_DIR cells leave the RELAY_BEGIN bucket alone. */
++  tt_int_op(token_bucket_ctr_get(&circ->stream_limiter), OP_EQ, 2);
++  /* They are counted apart from BEGIN_DIR cells over DoSBeginDirMaxStreams,
++   * and exported. */
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, max0);
++  tt_i64_op(get_dos_metric("begindir_over_stream_rate"), OP_EQ, over0 + 2);
++
++ done:
++  get_options_mutable()->MetricsPort_set = 0;
++  dos_opts->DoSStreamCreationRate = 0;
++  dos_opts->DoSStreamCreationBurst = 0;
++  dos_opts->DoSStreamCreationEnabled = -1;
++  circuit_free_all();
++  monotime_disable_test_mocking();
++}
++
+ static int n_connected = 0, n_end = 0, end_reason = 0;
+ static int
+ mock_relay_send_command_from_edge(streamid_t stream_id, circuit_t *circ,
+@@ -1449,6 +1503,8 @@ struct testcase_t dos_tests[] = {
+   { "begindir_max_streams", test_dos_begindir_max_streams, TT_FORK,
+     NULL, NULL },
+   { "begindir_refused", test_dos_begindir_refused, TT_FORK, NULL, NULL },
++  { "begindir_over_stream_rate", test_dos_begindir_over_stream_rate, TT_FORK,
++    NULL, NULL },
+   { "create_cell_prev_hop", test_dos_create_cell_prev_hop, TT_FORK,
+     NULL, NULL },
+   { "begindir_nth", test_dos_begindir_nth, TT_FORK, NULL, NULL },
+-- 
+2.43.0
+

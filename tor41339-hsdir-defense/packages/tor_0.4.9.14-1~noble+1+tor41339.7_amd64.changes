@@ -1,0 +1,41 @@
+Format: 1.8
+Date: Fri, 23 Oct 2026 17:40:31 +0000
+Source: tor
+Binary: tor tor-geoipdb
+Built-For-Profiles: noudeb
+Architecture: amd64 all
+Version: 0.4.9.14-1~noble+1+tor41339.7
+Distribution: noble
+Urgency: medium
+Maintainer: Peter Palfrader <weasel@debian.org>
+Changed-By: 1aeo <github@1aeo.com>
+Description:
+ tor        - anonymizing overlay network for TCP
+ tor-geoipdb - GeoIP database for Tor
+Changes:
+ tor (0.4.9.14-1~noble+1+tor41339.7) noble; urgency=medium
+ .
+   * Apply the tor#41339 HSDir defensive series (patches 0001-0023): HTTP
+     and onion service descriptor hardening; MetricsPort counters for
+     HSDir fetches and uploads, tunneled directory requests and response
+     bytes by type and previous hop, circuits and BEGIN_DIR cells by
+     previous hop and by source and descriptor per minute; HSDir and
+     BEGIN_DIR defenses and pressure-gated shedding of descriptor fetches
+     over a byte budget, all off by default; accept the .6 option name
+     HSDirDescriptorFetchLimit as a deprecated alias of
+     HSDirFetchShedding (0024); restore doc/nofooter.conf.
+Checksums-Sha1:
+ 10340e07cd15d381ac5cde605b19e4cbd35bc715 6954136 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.7_amd64.ddeb
+ 413c866688bced348be71f9044e070fec9d7e6f2 2823788 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.7_all.deb
+ 9928db063a170eec82a65c2328d4973c2e7ee874 8662 tor_0.4.9.14-1~noble+1+tor41339.7_amd64.buildinfo
+ ee11733f50eb9af7092f60b87b77ec406dd1a2d7 1764970 tor_0.4.9.14-1~noble+1+tor41339.7_amd64.deb
+Checksums-Sha256:
+ 972ac6d3d0b6c37d4ea02ec467d22298375b1d225faa504dc2df6db9a995e69e 6954136 tor-dbgsym_0.4.9.14-1~noble+1+tor41339.7_amd64.ddeb
+ 738b0aae0fd3fedc7ce3ae2baa7acdbdad55b7ee95c4945fdb2fc511ab883a8d 2823788 tor-geoipdb_0.4.9.14-1~noble+1+tor41339.7_all.deb
+ 2d122ad02afb66b3a41076a5646e99eb86cc9692b18615f8304621e64cada7a5 8662 tor_0.4.9.14-1~noble+1+tor41339.7_amd64.buildinfo
+ e727e80867214d00a70932d2495a3e0aeda7c8eac2e202c5b974d301f7187d4d 1764970 tor_0.4.9.14-1~noble+1+tor41339.7_amd64.deb
+Files:
+ ac296270c9666d7981dfcf811dacc94b 6954136 debug optional tor-dbgsym_0.4.9.14-1~noble+1+tor41339.7_amd64.ddeb
+ 9ae77172767882f559bc8e2fd76400e3 2823788 net optional tor-geoipdb_0.4.9.14-1~noble+1+tor41339.7_all.deb
+ 82a43a8ef6c018e62e685f19d6e179b0 8662 net optional tor_0.4.9.14-1~noble+1+tor41339.7_amd64.buildinfo
+ 5bdce5c1434082ca8d20f36727542d26 1764970 net optional tor_0.4.9.14-1~noble+1+tor41339.7_amd64.deb

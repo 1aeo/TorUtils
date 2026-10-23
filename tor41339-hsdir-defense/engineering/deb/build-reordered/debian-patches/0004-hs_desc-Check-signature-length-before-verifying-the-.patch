@@ -1,0 +1,154 @@
+From f9e3efc5776a94b90c685856a67b677205c37289 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Wed, 14 Oct 2026 01:49:22 +0000
+Subject: [PATCH 04/23] hs_desc: Check signature length before verifying the
+ signing cert
+
+desc_decode_plaintext_v3() verified the descriptor signing key
+certificate (one Ed25519 operation) before desc_sig_is_valid() checked
+the signature's length. Do that length check, with its existing
+rate-limited warning, before cert_parse_and_validate(), so that a
+wrong-length signature (for example base64 with "=" padding, 88
+characters) is rejected without any public key operation.
+
+The set of accepted descriptors is unchanged, since
+ed25519_signature_from_base64() already rejects other lengths. A
+valid-length forged signature still costs two verifications, and
+descriptor fetches are unaffected.
+
+Part of #41339.
+---
+ changes/ticket41339_hardening  |  5 ++++
+ src/feature/hs/hs_descriptor.c | 44 +++++++++++++++++++++-------------
+ src/test/test_hs_descriptor.c  | 14 ++++++++++-
+ 3 files changed, 46 insertions(+), 17 deletions(-)
+
+diff --git a/changes/ticket41339_hardening b/changes/ticket41339_hardening
+index 8df0b647fa..28843ed154 100644
+--- a/changes/ticket41339_hardening
++++ b/changes/ticket41339_hardening
+@@ -6,3 +6,8 @@
+     - Directory servers now discard anything a client sends after its request,
+       instead of buffering up to 10 MB of it per connection while they send
+       their answer. Part of ticket 41339.
++
++  o Minor features (onion service directory):
++    - Reject an onion service descriptor whose signature has the wrong length
++      before verifying its signing key certificate, which saves a public key
++      operation per such upload. Part of ticket 41339.
+diff --git a/src/feature/hs/hs_descriptor.c b/src/feature/hs/hs_descriptor.c
+index 87baf40efd..b6deec1ae5 100644
+--- a/src/feature/hs/hs_descriptor.c
++++ b/src/feature/hs/hs_descriptor.c
+@@ -2039,6 +2039,23 @@ decode_intro_points(const hs_descriptor_t *desc,
+   smartlist_free(intro_points);
+ }
+ 
++/** Return 1 iff the base64-encoded signature <b>b64_sig</b> has the expected
++ * Ed25519 signature length, or log a rate-limited warning and return 0. */
++static int
++desc_sig_len_is_valid(const char *b64_sig)
++{
++  size_t sig_len = strlen(b64_sig);
++  if (sig_len != ED25519_SIG_BASE64_LEN) {
++    static ratelim_t warning_limit = RATELIM_INIT(600);
++    log_fn_ratelim(&warning_limit, LOG_WARN, LD_REND,
++                   "Service descriptor has an invalid signature length. "
++                   "Expected %d but got %lu",
++                   ED25519_SIG_BASE64_LEN, (unsigned long) sig_len);
++    return 0;
++  }
++  return 1;
++}
++
+ /** Return 1 iff the given base64 encoded signature in b64_sig from the encoded
+  * descriptor in encoded_desc validates the descriptor content. */
+ STATIC int
+@@ -2056,17 +2073,6 @@ desc_sig_is_valid(const char *b64_sig,
+   /* Verifying nothing won't end well :). */
+   tor_assert(encoded_len > 0);
+ 
+-  /* Signature length check. */
+-  if (strlen(b64_sig) != ED25519_SIG_BASE64_LEN) {
+-    static ratelim_t warning_limit = RATELIM_INIT(600);
+-    log_fn_ratelim(&warning_limit, LOG_WARN, LD_REND,
+-                   "Service descriptor has an invalid signature length. "
+-                   "Expected %d but got %lu",
+-                   ED25519_SIG_BASE64_LEN,
+-                   (unsigned long) strlen(b64_sig));
+-    goto err;
+-  }
+-
+   /* First, convert base64 blob to an ed25519 signature. */
+   if (ed25519_signature_from_base64(&sig, b64_sig) != 0) {
+     log_warn(LD_REND, "Service descriptor does not contain a valid "
+@@ -2225,6 +2231,15 @@ desc_decode_plaintext_v3(smartlist_t *tokens,
+     goto err;
+   }
+ 
++  /* Check the signature length before any public key operation, so a
++   * descriptor with a wrong-length signature is rejected without one. */
++  tok = find_by_keyword(tokens, R3_SIGNATURE);
++  tor_assert(tok->n_args == 1);
++  const char *b64_sig = tok->args[0];
++  if (!desc_sig_len_is_valid(b64_sig)) {
++    goto err;
++  }
++
+   /* Descriptor signing certificate. */
+   tok = find_by_keyword(tokens, R3_DESC_SIGNING_CERT);
+   tor_assert(tok->object_body);
+@@ -2274,11 +2289,8 @@ desc_decode_plaintext_v3(smartlist_t *tokens,
+   desc->superencrypted_blob = tor_memdup(tok->object_body, tok->object_size);
+   desc->superencrypted_blob_size = tok->object_size;
+ 
+-  /* Extract signature and verify it. */
+-  tok = find_by_keyword(tokens, R3_SIGNATURE);
+-  tor_assert(tok->n_args == 1);
+-  /* First arg here is the actual encoded signature. */
+-  if (!desc_sig_is_valid(tok->args[0], &desc->signing_pubkey,
++  /* Verify the signature, whose length we checked above. */
++  if (!desc_sig_is_valid(b64_sig, &desc->signing_pubkey,
+                          encoded_desc, encoded_len)) {
+     goto err;
+   }
+diff --git a/src/test/test_hs_descriptor.c b/src/test/test_hs_descriptor.c
+index 89815f4858..2dd99e72fb 100644
+--- a/src/test/test_hs_descriptor.c
++++ b/src/test/test_hs_descriptor.c
+@@ -654,6 +654,7 @@ static void
+ test_decode_bad_signature(void *arg)
+ {
+   hs_desc_plaintext_data_t desc_plaintext;
++  char *padded = NULL;
+   int ret;
+ 
+   (void) arg;
+@@ -664,12 +665,23 @@ test_decode_bad_signature(void *arg)
+   update_approx_time(1502661599);
+ 
+   setup_full_capture_of_logs(LOG_WARN);
++  /* A padded (88-character) signature is rejected on its length, before the
++   * signing key certificate is parsed and verified. */
++  tor_asprintf(&padded, "%.*s==\n", (int) strlen(HS_DESC_BAD_SIG) - 1,
++               HS_DESC_BAD_SIG);
++  ret = hs_desc_decode_plaintext(padded, &desc_plaintext);
++  tt_int_op(ret, OP_EQ, HS_DESC_DECODE_PLAINTEXT_ERROR);
++  tt_ptr_op(desc_plaintext.signing_key_cert, OP_EQ, NULL);
++  expect_single_log_msg_containing("invalid signature length");
++  mock_clean_saved_logs();
++
+   ret = hs_desc_decode_plaintext(HS_DESC_BAD_SIG, &desc_plaintext);
+   tt_int_op(ret, OP_EQ, HS_DESC_DECODE_PLAINTEXT_ERROR);
+   expect_log_msg_containing("Malformed signature line. Rejecting.");
+-  teardown_capture_of_logs();
+ 
+  done:
++  teardown_capture_of_logs();
++  tor_free(padded);
+   hs_desc_plaintext_data_free_contents(&desc_plaintext);
+ }
+ 
+-- 
+2.43.0
+

@@ -1,0 +1,15 @@
+# SIGTERM-exit trials on Ubuntu 26.04.1 (glibc 2.43): engineering/seccomp/sigterm-repro.sh,
+# tor with DisableNetwork 1 in a fresh ubuntu:26.04 container; each package installed from its .deb.
+# Stock = deb.torproject.org tor_0.4.9.14-1~resolute+1 (sha256 61f382e6...fc41). STUCK = still alive 5 s after SIGTERM.
+
+0.4.9.14-1~resolute+1 on Ubuntu 26.04.1 LTS, glibc 2.43
+  trial 15 STUCK main_SigBlk=b6f5bbc06aaa4c00 Seccomp=2 ShdPnd=0000000000004000
+/ Sandbox=1: exited=9 stuck=6 of 15
+  trial 1 main_SigBlk=0000000000000000 Seccomp=2
+/ Sandbox=0: exited=5 stuck=0 of 5
+
+0.4.9.14-1~resolute+1+tor41339.3 on Ubuntu 26.04.1 LTS, glibc 2.43
+  trial 12 STUCK main_SigBlk=cfef681640c1d400 Seccomp=2 ShdPnd=0000000000004000
+/ Sandbox=1: exited=10 stuck=5 of 15
+  trial 1 main_SigBlk=0000000000000000 Seccomp=2
+/ Sandbox=0: exited=5 stuck=0 of 5

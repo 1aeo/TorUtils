@@ -1,0 +1,105 @@
+Provenance: tor 0.4.9.14 + the tor#41339 series, +tor41339.7, amd64, for
+  Ubuntu 24.04 (noble):    tor_0.4.9.14-1~noble+1+tor41339.7_amd64.deb
+  Ubuntu 26.04 (resolute): tor_0.4.9.14-1~resolute+1+tor41339.7_amd64.deb
+plus tor-geoipdb (all) for each. Checksums: SHA256SUMS. These replace
++tor41339.6, and any earlier +tor41339.7, on every relay. Against .6, .7
+renames most metric families (../analysis/v7-review.md has the table),
+counts an onion service request that reaches a closing circuit as the new
+action circuit_dead instead of single_hop, and renames the option
+HSDirDescriptorFetchLimit to HSDirFetchShedding; patch 0024 keeps the old
+option name working, with a deprecation warning. Dashboards should not mix
+.6 and .7 series. The version is still +tor41339.7: a relay that installed
+an earlier .7 build must reinstall to get this one.
+
+The two builds are the same code with the same features. They differ only in
+the system libraries each Ubuntu release ships (24.04: OpenSSL 3.0.13,
+zlib 1.3, liblzma 5.4.5, libzstd 1.5.5; 26.04: OpenSSL 3.5.5, zlib 1.3.1,
+liblzma 5.8.3, libzstd 1.5.7; libevent 2.1.12 on both) and the compiler
+(gcc 13.3 and gcc 15.2). Identical: configure line, the package file list,
+Depends, and the debian/patches series.
+
+Every defense is off: HSDirOneRequestPerCircuit, HSDirRefuseUnknownPrevHop,
+DoSBeginDirLimitEnabled and HSDirFetchShedding default to auto, and no
+consensus sets their parameters; HSDirFetchBudget defaults to 0 (automatic,
+used only once shedding is enabled). The hardening of 0001-0005 and 0015 is
+always active, and so are the MetricsPort counters of 0006-0010, 0013-0014
+and 0016-0023, except that those of 0020, 0021 and 0023 count only while a
+MetricsPort is configured; so the build is not equivalent to stock.
+0016-0023 only count.
+
+Source packages (deb.torproject.org; the Debian packaging of the two differs
+only in its changelog entry):
+  tor_0.4.9.14.orig.tar.gz             sha256 182449ac1c8ff43278da27b69b02040e11d03d0327db6d9126e4190ec6235e4a
+                                       (identical to dist.torproject.org tor-0.4.9.14.tar.gz)
+  tor_0.4.9.14-1~noble+1.diff.gz       sha256 5dd5dd368a96a26206e22f310d8d3c4cef8517d3cd2e87d72e3262969b3a1b2f
+  tor_0.4.9.14-1~resolute+1.diff.gz    sha256 3e9af7768b449c4808e8bfc504e66907c83e393c2e68e51cadc731c042f35804
+  tor_0.4.9.14-1~noble+1.dsc           sha256 b95a7c1ea1420e25846281ae0dc0e91c0087073dc4ef614f3ff1a0fbef28521c
+  tor_0.4.9.14-1~resolute+1.dsc        sha256 ac8614f4144d0bd50c8ba3e50b7431b0f29459b0c2c0e08087b71369f6248c51
+
+Quilt series applied (debian/patches), identical for both builds: 0000
+restoring doc/nofooter.conf, then tor41339-hsdir-defense/patches/0001-0023
+(byte-identical copies in ../engineering/deb/build-reordered/debian-patches/),
+then 0024, a Debian-only one-line alias of the .6 option name, not for
+upstream:
+  feac23ee1a832a71ae4e57b8f34cdaf43b024ec342764814b86e504bf2502e0d  0000-restore-doc-nofooter.conf.patch
+  ab3d8ed37cf910a4298258a51183f51bf19368ae61c3e2d758389f3d1065e543  0001-dirserv-Stop-unthrottled-warnings-on-malformed-HTTP-.patch
+  9af8043685c7f8944da5d45e661fcabd01fa786b97b179fa2b7201396a6fa515  0002-dirserv-Don-t-buffer-request-bodies-larger-than-an-H.patch
+  1b9e795d98e1281ddfe85a96662c07bbb42bb307bc6acf3655c32685c022746c  0003-dirserv-Discard-client-input-received-after-the-requ.patch
+  c1c3bfc82a0657068713127c6ba1b6dec0bd31146777b6f1782ae2aaae4fc073  0004-hs_desc-Check-signature-length-before-verifying-the-.patch
+  238eb5179e31e912f039542d1f400f05c8ce2eeea3112d2ae4a6942afeaec9ba  0005-hs_cache-Only-credit-HSDir-downloads-once-the-respon.patch
+  08c893fe60953a6aa31b3444e07cb1b1d692f1c618293b5037ee5df782908007  0006-relay_metrics-Count-onion-service-descriptor-fetches.patch
+  97fdb347e05f10997df58739da63ab788741e3486f35e2221a83ef8b14c2fb5e  0007-relay_metrics-Count-tunneled-directory-requests-and-.patch
+  b2fb8ced814fc67b4e0bf95d9ecc471429363653064313d69901a7a55c6b1afe  0008-relay_metrics-Add-a-gauge-of-tunneled-directory-serv.patch
+  4656a5edc2d28404cd9bf5e2be4e7c61812cbd27c9ad0a24a19b0014bae60658  0009-relay_metrics-Make-fill_dos_values-table-driven.patch
+  ecdf0dcbe94dd3dd9c217f3176cd73fa87976f68725ddfbba15932bba41cb15a  0010-dos-Count-repeated-and-unknown-previous-hop-HSDir-re.patch
+  3b65b56c12cb54c7e2cf816ab4fdaacaec0a42338216f5007df8b311c8fda34b  0011-dos-Add-off-by-default-HSDir-circuit-reuse-and-previ.patch
+  8d3d861c3fe28f3a502f2ddcf9624445d8ec44e2dcc00192f77891d6cabbdb4a  0012-dos-Add-an-off-by-default-limit-on-open-BEGIN_DIR-st.patch
+  341bc8a751bb6337a505e2e20fdf01fad22781f788504ce418c201738f4b17b4  0013-hs_cache-Count-fetches-of-each-descriptor-over-a-per.patch
+  323e407658ba95486acc90fec4ca0e1a3a2a8c483f9da23f87952e3c39d26e41  0014-dos-Shed-onion-service-descriptor-fetches-over-a-byt.patch
+  69f9fb01d533397355be20944762e56516f5bfb6cb3466d83d87c309c1793ed0  0015-proto_http-Reject-a-declared-body-that-can-never-fit.patch
+  7aee4909550edf9512fc5f1652f4fe9a81495a3b2226eb6d4afbeb0a91bc8d97  0016-relay_metrics-Count-circuits-and-directory-streams-b.patch
+  f2653783ff17c05c4fc784491486127c9333dc7d66df5a2482bc39958c50eca3  0017-dos-Count-client-CREATE-cells-over-the-circuit-creat.patch
+  f209c44ac1acb5645f3811d93b5df2462705b31ee0cca0df1c216198261e1850  0018-relay_metrics-Count-tunneled-directory-response-byte.patch
+  2389f008f3dd404d93008438dfad90f68b74df6a86925b244637a9ab300911ac  0019-dos-Count-what-BEGIN_DIR-streams-over-DoSBeginDirMax.patch
+  ca07c2c2bd06a667c307b2d31a0a948b4972fb328dbb24dff8f532a705a96dc5  0020-rephist-Count-CREATE-and-BEGIN_DIR-cells-per-source-.patch
+  162c3a95e7c7535a4c2aae8c7926d8621081f67aa380191a0ca190a56109b6a3  0021-relay_metrics-Count-HSDir-fetches-per-descriptor-and.patch
+  c26d18953641f5259e49165647776bd0a4b7bc9a7c51e03ebb495f2fece03ac7  0022-dos-Count-HSDir-requests-from-relays-known-only-by-d.patch
+  db327be55766bf4bd9a4a4b9e4cde59a4270a10c49f45cf664412730827b7c0b  0023-dos-Count-BEGIN_DIR-cells-over-the-stream-creation-r.patch
+  5ecbdc19bb113f97180fa393fa96f2e1ccd526178ce51af20fda612ebfac1a62  0024-config-Accept-HSDirDescriptorFetchLimit-as-a-depreca.patch
+  d9f0d761ce4ea7da19fa918de155fb712ba7d11cf590abbc172a76e835c5f32e  series
+
+Builders (driver ../engineering/deb/build-reordered/build-in-container-reordered.sh
+with SUITE=noble or resolute, REV=7, EXPECT_PATCHES=25; dpkg-buildpackage -b;
+set -o pipefail so a failed build cannot be masked):
+  noble:    fresh ubuntu:24.04 container (Canonical LTS image,
+            digest sha256:5ce7043d3beb84e91bfeecacb5fafc80602bf247a1dd6016bc0fe7d69d707eca), gcc 13
+  resolute: fresh ubuntu:26.04 container (Canonical LTS image,
+            digest sha256:51e35c02a42cf2a6646c5879f5752b38098ed0a20056a989f0af3a3c5e697c9a), gcc 15
+
+dh_auto_test (make test), both builds: 1643 tests ok, 24 skipped, 0 failed.
+Compiler warnings on lines the series adds: none in either build. The only
+warning in a file the series touches is in unchanged upstream test code:
+test_hs_descriptor.c:151 -Wmaybe-uninitialized (both builds) and
+test_dir_handle_get.c:2410 -Wmaybe-uninitialized (gcc 15 only).
+Each binary contains the 8 new option names and the 12 new metric family
+names, and none of the names .7 replaced; its manual has the 8 options and
+renders the metric selectors with braces.
+
+The same series, built from git with --enable-fatal-warnings, builds with no
+warning and passes the whole unit suite at each of the 23 commits (1596 to
+1636 tests), and passes check-spaces, check-includes, check-docs and
+lintChanges; practracker reports the same problem locations as stock
+0.4.9.14, and the man page renders with no asciidoc warning. At the tip it
+builds and passes with --disable-module-relay, and the series applies with
+git am onto tor-0.4.9.14 (giving the same tree) and onto tor main
+(8dbbbe6e86). ../engineering/v7-review/ has the records.
+
+Install: only the tor package is needed; tor-geoipdb is a Recommends
+(unchanged GeoIP data). Pick the package matching the host's release
+(. /etc/os-release; echo $VERSION_CODENAME -> noble or resolute).
+Install-and-run checks (private loopback lab): ../engineering/deb/install-run-reordered/
+(noble) and ../engineering/deb/resolute/ (resolute). Live controls with
+HS traffic, every defense switched on and off: ../engineering/deb/resolute/controls/.
+Stock C tor and Arti clients under shedding: ../engineering/client-lab/
+(+tor41339.6). ../engineering/deb/resolute/DELIVERY.md records the earlier
++tor41339.3 handoff and has not been redone for this build.

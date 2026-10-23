@@ -1,0 +1,211 @@
+INFO:chutney.TorNet:Loading network config from chutney network script path: '<work>'
+INFO:chutney.TorNet:creating '<work>/chutney-debtest/nodes.1792779154', linking to '<work>/chutney-debtest/nodes'
+INFO:chutney.TorNet:Loading network from nodes dir: '<work>/chutney-debtest/nodes'->'<work>/chutney-debtest/nodes.1792779154
+Starting configure-phase  1
+Creating identity key for test000a     with <work>
+Creating identity key for test001a     with <work>
+Creating identity key for test002a     with <work>
+WARNING:chutney.TorNet:Only configuring 3 dirauths; at least 4 recommended for reliable bootstrapping
+Starting launch-phase  1
+Starting nodes
+Waiting for nodes to bootstrap...
+
+Bootstrap in progress: 10 seconds
+Node status:
+test000a     :                   0, starting                 , Starting
+test001a     :                   0, starting                 , Starting
+test002a     :                   0, starting                 , Starting
+test003r     :                   0, starting                 , Starting
+test004r     :                   0, starting                 , Starting
+test005r     :                   0, starting                 , Starting
+Published dir info:
+test000a     : -400 (MISSING_FILE), all nodes                , all formats                   
+test001a     : -400 (MISSING_FILE), all nodes                , all formats                   
+test002a     : -400 (MISSING_FILE), all nodes                , all formats                   
+test003r     : -400 (MISSING_FILE), all nodes                , all formats                   
+test004r     : -400 (MISSING_FILE), all nodes                , all formats                   
+test005r     : -400 (MISSING_FILE), all nodes                , all formats                   
+
+Bootstrap in progress: 20 seconds
+Node status:
+test000a     :                   0, starting                 , Starting
+test001a     :                   0, starting                 , Starting
+test002a     :                   0, starting                 , Starting
+test003r     :                   0, starting                 , Starting
+test004r     :                   0, starting                 , Starting
+test005r     :                   0, starting                 , Starting
+Published dir info:
+test000a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test001a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test002a     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test003r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test004r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+test005r     : -400 (MISSING_FILE), caches and clients       , all formats                   
+
+Bootstrap in progress: 30 seconds
+Node status:
+test000a     :                   0, starting                 , Starting
+test001a     :                   0, starting                 , Starting
+test002a     :                   0, starting                 , Starting
+test003r     : 100 (SUCCESS)      , done                     , Done
+test004r     :                   0, starting                 , Starting
+test005r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, all formats                   
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, all formats                   
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, all formats                   
+test003r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, all formats                   
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, all formats                   
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, all formats                   
+
+Bootstrap in progress: 41 seconds
+Node status:
+test000a     :                   0, starting                 , Starting
+test001a     :                   0, starting                 , Starting
+test002a     :                   0, starting                 , Starting
+test003r     : 100 (SUCCESS)      , done                     , Done
+test004r     :                   0, starting                 , Starting
+test005r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test003r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+
+Bootstrap in progress: 51 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003r     : 100 (SUCCESS)      , done                     , Done
+test004r     :                   0, starting                 , Starting
+test005r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test003r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+
+Bootstrap in progress: 61 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003r     : 100 (SUCCESS)      , done                     , Done
+test004r     :                   0, starting                 , Starting
+test005r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test001a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test002a     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test003r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test004r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+test005r     : -400 (MISSING_FILE), 000a 001a 002a 003r 004r 005r, MD MD_CONS                    
+
+Bootstrap in progress: 72 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003r     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test001a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test002a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test003r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test004r     : 0 (NO_PROGRESS)    , all nodes                , DESC MD MD_CONS NS_CONS       
+test005r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+
+Bootstrap in progress: 82 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003r     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test001a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test002a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test003r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test004r     : 0 (NO_PROGRESS)    , all nodes                , DESC MD MD_CONS NS_CONS       
+test005r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+
+Bootstrap in progress: 93 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003r     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test001a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test002a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test003r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test004r     : 0 (NO_PROGRESS)    , all nodes                , DESC MD MD_CONS NS_CONS       
+test005r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+
+Bootstrap in progress: 103 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003r     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test001a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test002a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test003r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test004r     : 0 (NO_PROGRESS)    , all nodes                , DESC MD MD_CONS NS_CONS       
+test005r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+
+Bootstrap in progress: 114 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003r     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test001a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test002a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test003r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test004r     : 0 (NO_PROGRESS)    , all nodes                , DESC MD MD_CONS NS_CONS       
+test005r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+
+Bootstrap failed: 120 seconds
+Node status:
+test000a     : 100 (SUCCESS)      , done                     , Done
+test001a     : 100 (SUCCESS)      , done                     , Done
+test002a     : 100 (SUCCESS)      , done                     , Done
+test003r     : 100 (SUCCESS)      , done                     , Done
+test004r     : 100 (SUCCESS)      , done                     , Done
+test005r     : 100 (SUCCESS)      , done                     , Done
+Published dir info:
+test000a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test001a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test002a     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test003r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+test004r     : 0 (NO_PROGRESS)    , all nodes                , DESC MD MD_CONS NS_CONS       
+test005r     : 100 (SUCCESS)      , all nodes                , DESC MD MD_CONS NS_CONS       
+
+chutney.errors.ChutneyTimeoutError
+lab net bootstrap rc=1
+INFO:chutney.TorNet:Loading network from nodes dir: '<work>/chutney-debtest/nodes'->'<work>/chutney-debtest/nodes.1792779154
+Sending SIGINT to nodes
+Waiting for nodes to finish.
+.
+Waiting for nodes to cleanup and exit.
