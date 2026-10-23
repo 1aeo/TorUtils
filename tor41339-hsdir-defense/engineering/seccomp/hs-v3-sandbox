@@ -1,0 +1,12 @@
+# tor41339 seccomp check: private loopback chutney net.
+# Patched tor (env CHUTNEY_TOR) on authorities + relays, all with Sandbox 1.
+# Stock (unpatched) tor for the onion service and the client (env STOCK_TOR).
+import os
+STOCK = os.environ["STOCK_TOR"]
+RELAY_EXTRA = os.environ.get("RELAY_EXTRA", "").replace("\\n", "\n")
+Authority = Node(tag="a", authority=1, relay=1, extra_raw_torrc=RELAY_EXTRA)
+ExitRelay = Node(tag="r", relay=1, exit=1, extra_raw_torrc=RELAY_EXTRA)
+Client = Node(tag="c", client=1, launch_phase=2, tor=STOCK)
+HS = Node(tag="h", hs=1, launch_phase=2, tor=STOCK)
+NODES = Authority.getN(4) + ExitRelay.getN(5) + Client.getN(1) + HS.getN(1)
+ConfigureNodes(NODES)

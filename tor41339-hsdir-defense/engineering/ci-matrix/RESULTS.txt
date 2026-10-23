@@ -1,0 +1,30 @@
+patched minimal rc=1 secs=245 head=454d5e849e
+unpatched minimal rc=1 secs=239 head=8dbbbe6e86
+patched hardened rc=1 secs=299 head=013a67ab01
+unpatched hardened rc=1 secs=406 head=8dbbbe6e86
+patched distcheck rc=1 secs=450 head=080bcf973d
+unpatched distcheck rc=1 secs=403 head=8dbbbe6e86
+patched disable-relay rc=1 secs=270 head=c32ac345c6
+unpatched disable-relay rc=1 secs=265 head=8dbbbe6e86
+patched disable-dirauth rc=0 secs=256 head=b1bc7e209e
+unpatched disable-dirauth rc=0 secs=258 head=8dbbbe6e86
+patched gpl rc=0 secs=283 head=be04ff70c8
+unpatched gpl rc=0 secs=259 head=8dbbbe6e86
+patched nss rc=0 secs=258 head=5dcb0a387c
+unpatched nss rc=0 secs=323 head=8dbbbe6e86
+patched docs rc=0 secs=80 head=77a159ba98
+unpatched docs rc=0 secs=81 head=8dbbbe6e86
+patched tracing rc=0 secs=473 head=b4efcbea6f
+unpatched tracing rc=0 secs=323 head=8dbbbe6e86
+patched integration rc=1 secs=828 head=3bcdeaae26
+unpatched integration rc=1 secs=821 head=8dbbbe6e86
+MATRIX-DONE
+patched minimal rc=0 secs=253 head=81a97646fa
+unpatched minimal rc=0 secs=253 head=8dbbbe6e86
+patched hardened rc=1 secs=296 head=8f8ad836b0
+unpatched hardened rc=1 secs=287 head=8dbbbe6e86
+patched distcheck rc=0 secs=302 head=00ed3cb7ed
+unpatched distcheck rc=0 secs=307 head=8dbbbe6e86
+patched disable-relay rc=0 secs=237 head=3510f4510f
+unpatched disable-relay rc=1 secs=238 head=8dbbbe6e86
+RERUN-DONE
