@@ -26,6 +26,51 @@ HashedControlPassword password instead of `--cookie`. Without `--control`
 the connection snapshot is skipped. Run it during a flood and again on a
 quiet day for comparison.
 
+## What it concludes
+
+The output ends with "What this says": the numbers above as numbered
+sentences, each built from named counters, for `.7` or later:
+
+1. **What the BEGIN_DIR streams were.** The tool names the kind that is most
+   (over 50%) or nearly all (over 95%) of them, or else lists every kind
+   by its share.
+2. **Who sent that kind**, by previous hop. Through a relay we know means
+   other senders' multi-hop circuits, which no previous-hop rule refuses.
+3. **How deep their circuits went:** the shares of BEGIN_DIR cells past
+   their circuit's 10th, 100th and 1000th. For comparison, stock tor and
+   Arti send one cell per onion service circuit, and about 30 or fewer on a
+   directory circuit.
+4. **How many onion service requests reused a circuit.** Stock clients
+   never do.
+5. **What each rule refuses, or would refuse while off,** largest share
+   first. These are upper bounds on what a rule saves, because a refused
+   client can retry.
+6. **What the responses cost:**
+   - their bytes, and the bytes per descriptor served, in cells;
+   - the CONNECTED cell (514 bytes) that every accepted stream costs;
+   - about what share of the relay's written bytes that is.
+7. **The empty streams:**
+   - their rate;
+   - what their CONNECTED cells cost;
+   - an upper bound on their mean life, from the waiting-stream gauge
+     (Little's law). Below 10 s, it also gives the share that must have
+     closed within 10 s, before the stall timeout could close them
+     (Markov's inequality).
+8. **What these metrics can't say**, pointing to
+   `analysis/v8-metrics-proposal.md`.
+
+Where a relay exports the proposed families of that note (a prototype
+build, `engineering/v8-prototype/`), the tool prints them too:
+- requests by their BEGIN_DIR cell's place on the circuit;
+- circuits by the number of BEGIN_DIR cells they reached;
+- empty streams by how they ended, their circuit and their age;
+- response bytes by the rule that would refuse them;
+- descriptor bytes apart from not-found;
+- bytes dropped at close, and bytes waiting.
+
+The conclusions then use them as well: which kinds sit deep, how empty
+streams end, and the bytes each rule would avoid.
+
 ## What it answers
 
 The questions are the ones the Tor network team asked an operator under
@@ -136,7 +181,7 @@ below.
 | `tor_relay_begindir_request_over_max_total{type}` | requests on streams over `DoSBeginDirMaxStreams`: what `DoSBeginDirLimitEnabled` would refuse while it is off |
 | `tor_relay_create_cell_total{prev_hop}` | every CREATE cell, clients' included |
 | `tor_relay_create_cell_source_total{prev_hop,nth}`, `tor_relay_begindir_cell_source_total{prev_hop,nth}` | CREATE and BEGIN_DIR cells by their place among the cells of the same kind their source sent in the same minute (see below) |
-| `tor_relay_hsdir_fetch_descriptor_total{lookup,nth}` | onion service descriptor fetches that reached the cache, `found` or `missing`, by their place among the fetches of the same descriptor in the same minute |
+| `tor_relay_hsdir_fetch_descriptor_total{lookup,nth}` | onion service descriptor fetches that reached the cache, `found` or `not_found`, by their place among the fetches of the same descriptor in the same minute |
 | `tor_relay_dos_total{type="circuit_over_rate"}` | client CREATE cells that find their address's `DoSCircuitCreationRate`/`Burst` bucket empty, whether or not the address is marked. Counted only while `DoSCircuitCreationEnabled` is on |
 | `tor_relay_dos_total{type="circuit_untracked"}` | client CREATE cells from addresses tor no longer tracks (a day or two after their last new connection), which `DoSCircuitCreation` neither limits nor counts. Counted only while `DoSCircuitCreationEnabled` is on |
 | `tor_relay_dos_total{type="hsdir_descriptor_only_prev_hop"}` | anonymous onion service requests whose previous hop is a relay known only by its descriptor (it left the consensus in about the last two days). `HSDirRefuseUnknownPrevHop` treats these as known |
@@ -309,3 +354,17 @@ The same lab with the final `+tor41339.7` package
 - **Nothing else counted.** `circuit_over_rate`, `circuit_untracked`, the
   over-max requests and the stream-rate shadow stayed 0, as this load
   never reaches them.
+
+The conclusions, and the sections for the proposed families, ran in the same
+lab with two more load clients, which open BEGIN_DIR streams that never send
+a request. Two results files show them:
+- `engineering/v8-prototype/lab/results/v8-prototype-lab24v7.txt`: every
+  node runs the v8 prototype;
+- `engineering/v8-prototype/lab/results/v7-control-lab24v7.txt`: the same
+  load on `.7`.
+
+On `.7`, the conclusions name the fetches through relays we know, their
+reuse (95.6% of onion service requests on a circuit that had already made
+one), what each rule would refuse, and the empty streams' cost. They end
+with what `.7` can't say. On the prototype, they add how the empty streams
+ended and on which circuits, and the response bytes each rule would avoid.

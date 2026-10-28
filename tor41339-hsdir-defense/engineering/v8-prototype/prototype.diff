@@ -1,0 +1,1458 @@
+diff --git a/src/core/mainloop/mainloop.c b/src/core/mainloop/mainloop.c
+index 72bfc312e2..18098ce48e 100644
+--- a/src/core/mainloop/mainloop.c
++++ b/src/core/mainloop/mainloop.c
+@@ -88,6 +88,7 @@
+ #include "feature/nodelist/nodelist.h"
+ #include "feature/nodelist/routerlist.h"
+ #include "feature/relay/dns.h"
++#include "feature/relay/relay_metrics.h"
+ #include "feature/relay/routerkeys.h"
+ #include "feature/relay/routermode.h"
+ #include "feature/relay/selftest.h"
+@@ -1012,6 +1013,9 @@ conn_close_if_marked(int i)
+                conn->marked_for_close_file, conn->marked_for_close);
+     if (conn->linked_conn) {
+       retval = (int) buf_move_all(conn->linked_conn->inbuf, conn->outbuf);
++      if (retval > 0 && conn->type == CONN_TYPE_DIR &&
++          conn->purpose == DIR_PURPOSE_SERVER)
++        relay_note_dir_response_bytes(TO_DIR_CONN(conn), retval);
+       if (retval >= 0) {
+         /* The linked conn will notice that it has data when it notices that
+          * we're gone. */
+diff --git a/src/core/or/connection_edge.c b/src/core/or/connection_edge.c
+index 961fda0766..b590f35d3c 100644
+--- a/src/core/or/connection_edge.c
++++ b/src/core/or/connection_edge.c
+@@ -98,6 +98,7 @@
+ #include "feature/nodelist/routerlist.h"
+ #include "feature/nodelist/routerset.h"
+ #include "feature/relay/dns.h"
++#include "feature/relay/relay_metrics.h"
+ #include "feature/relay/router.h"
+ #include "feature/relay/routermode.h"
+ #include "feature/rend/rendcommon.h"
+@@ -1142,6 +1143,17 @@ connection_ap_about_to_close(entry_connection_t *entry_conn)
+     circuit_detach_stream(circ, edge_conn);
+ }
+ 
++/** Return how a BEGIN_DIR stream that closes with <b>end_reason</b> ended. */
++static begindir_stream_end_t
++begindir_stream_end_of(uint16_t end_reason)
++{
++  if (end_reason & END_STREAM_REASON_FLAG_REMOTE)
++    return BEGINDIR_STREAM_END_CLIENT;
++  if ((end_reason & END_STREAM_REASON_MASK) == END_STREAM_REASON_DESTROY)
++    return BEGINDIR_STREAM_END_CIRCUIT;
++  return BEGINDIR_STREAM_END_RELAY;
++}
++
+ /** Called when we're about to finally unlink and free an exit
+  * connection: perform necessary accounting and cleanup */
+ void
+@@ -1151,6 +1163,14 @@ connection_exit_about_to_close(edge_connection_t *edge_conn)
+   connection_t *conn = TO_CONN(edge_conn);
+ 
+   connection_edge_about_to_close(edge_conn);
++  /* A BEGIN_DIR stream: tell its directory connection, if still there, how
++   * the stream ended, and count what it read from it but never sent. */
++  if (conn->linked) {
++    if (conn->linked_conn && conn->linked_conn->type == CONN_TYPE_DIR)
++      TO_DIR_CONN(conn->linked_conn)->stream_end =
++        begindir_stream_end_of(edge_conn->end_reason);
++    relay_note_dir_discarded_bytes(true, connection_get_inbuf_len(conn));
++  }
+ 
+   circ = circuit_get_by_edge_conn(edge_conn);
+   if (circ)
+@@ -4715,6 +4735,9 @@ connection_exit_connect_dir(edge_connection_t *exitconn)
+   dirconn->base_.state = DIR_CONN_STATE_SERVER_COMMAND_WAIT;
+   dirconn->prev_hop = circ->prev_hop;
+   dirconn->begindir_over_max = exitconn->begindir_over_max;
++  dirconn->begindir_over_stream_rate = exitconn->begindir_over_stream_rate;
++  dirconn->nth = nth_band_of(circ->n_begindir);
++  dirconn->hs_circuit = circ->n_hsdir_requests > 0;
+ 
+   /* Note that the new dir conn belongs to the same tunneled request as
+    * the edge conn, so that we can measure download times. */
+diff --git a/src/core/or/dos.c b/src/core/or/dos.c
+index a5323ae7c4..ef28f3b710 100644
+--- a/src/core/or/dos.c
++++ b/src/core/or/dos.c
+@@ -894,9 +894,11 @@ hsdir_desc_fetch_within_rate(token_bucket_ctr_t *bucket, uint32_t now)
+  * of a few descriptors is shed before the fetches of the others. In no second
+  * do we answer more than one and a half times the budget, unless a single
+  * descriptor is larger than that. We count the fetches we would shed, and
+- * only refuse them if HSDirFetchShedding is enabled. */
++ * only refuse them if HSDirFetchShedding is enabled; we set *<b>shed</b>, if
++ * not NULL, to whether we would. */
+ bool
+-dos_hsdir_desc_fetch_allowed(token_bucket_ctr_t *bucket, size_t len)
++dos_hsdir_desc_fetch_allowed(token_bucket_ctr_t *bucket, size_t len,
++                             bool *shed)
+ {
+   const uint32_t now = (uint32_t) monotime_coarse_absolute_sec();
+   const bool light = hsdir_desc_fetch_within_rate(bucket, now);
+@@ -923,8 +925,12 @@ dos_hsdir_desc_fetch_allowed(token_bucket_ctr_t *bucket, size_t len)
+ 
+  shed:
+   dos_note_dir_stat(DOS_DIR_HSDIR_FETCH_SHED);
++  if (shed)
++    *shed = true;
+   return !dos_should_shed_hsdir_fetches();
+  answer:
++  if (shed)
++    *shed = false;
+   hsdir_fetch.answered += len;
+   return true;
+ }
+@@ -1103,25 +1109,28 @@ dos_stream_new_begin_or_resolve_cell(or_circuit_t *circ)
+ 
+ /** Count a BEGIN_DIR cell on <b>circ</b> that DoSStreamCreationRate and
+  * Burst would refuse if they limited BEGIN_DIR cells as they do RELAY_BEGIN
+- * and RELAY_RESOLVE cells, whether or not DoSStreamCreationEnabled is set.
+- * Only the MetricsPort shows this count, so we keep it only with one. */
+-static void
++ * and RELAY_RESOLVE cells, whether or not DoSStreamCreationEnabled is set,
++ * and return whether they would. Only the MetricsPort shows this count, so
++ * we keep it only with one. */
++static bool
+ dos_note_begindir_stream_rate(or_circuit_t *circ)
+ {
+   if (!get_options()->MetricsPort_set)
+-    return;
++    return false;
+   token_bucket_ctr_refill(&circ->begindir_limiter,
+                           (uint32_t) monotime_coarse_absolute_sec());
+-  if (token_bucket_ctr_get(&circ->begindir_limiter) > 0)
++  if (token_bucket_ctr_get(&circ->begindir_limiter) > 0) {
+     token_bucket_ctr_dec(&circ->begindir_limiter, 1);
+-  else
+-    dos_note_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE);
++    return false;
++  }
++  dos_note_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE);
++  return true;
+ }
+ 
+ /** Return true iff we should refuse a BEGIN_DIR cell on <b>circ</b> because it
+  * already has DoSBeginDirMaxStreams open directory streams. We count such
+- * cells, and mark their <b>stream</b> if not NULL, even when
+- * DoSBeginDirLimitEnabled is off. */
++ * cells, and those over the stream creation rate, and mark their
++ * <b>stream</b> if not NULL, even when DoSBeginDirLimitEnabled is off. */
+ bool
+ dos_should_refuse_begindir(or_circuit_t *circ, edge_connection_t *stream)
+ {
+@@ -1129,7 +1138,8 @@ dos_should_refuse_begindir(or_circuit_t *circ, edge_connection_t *stream)
+   int max = options->DoSBeginDirMaxStreams;
+   int n = 0;
+ 
+-  dos_note_begindir_stream_rate(circ);
++  if (dos_note_begindir_stream_rate(circ) && stream)
++    stream->begindir_over_stream_rate = 1;
+ 
+   if (!max) {
+     max = networkstatus_get_param(NULL, "DoSBeginDirMaxStreams",
+diff --git a/src/core/or/dos.h b/src/core/or/dos.h
+index 9912f27f18..51ee0b11b3 100644
+--- a/src/core/or/dos.h
++++ b/src/core/or/dos.h
+@@ -122,7 +122,8 @@ void dos_note_dir_stat(dos_dir_stat_t stat);
+ uint64_t dos_get_dir_stat(dos_dir_stat_t stat);
+ int dos_should_close_reused_hsdir_circ(void);
+ int dos_should_refuse_unknown_hsdir_prev_hop(void);
+-bool dos_hsdir_desc_fetch_allowed(token_bucket_ctr_t *bucket, size_t len);
++bool dos_hsdir_desc_fetch_allowed(token_bucket_ctr_t *bucket, size_t len,
++                                  bool *shed);
+ void dos_note_circ_max_outq(const channel_t *chan);
+ 
+ uint32_t dos_get_num_cc_marked_addr(void);
+diff --git a/src/core/or/edge_connection_st.h b/src/core/or/edge_connection_st.h
+index e4a061083a..bf3e97e1d2 100644
+--- a/src/core/or/edge_connection_st.h
++++ b/src/core/or/edge_connection_st.h
+@@ -73,6 +73,9 @@ struct edge_connection_t {
+   /** For a BEGIN_DIR stream: true iff its circuit already had
+    * DoSBeginDirMaxStreams open directory streams when it arrived. */
+   unsigned int begindir_over_max:1;
++  /** For a BEGIN_DIR stream: true iff it was over its circuit's BEGIN_DIR
++   * stream creation rate when it arrived. */
++  unsigned int begindir_over_stream_rate:1;
+ 
+   /** Unique ID for directory requests; this used to be in connection_t, but
+    * that's going away and being used on channels instead.  We still tag
+diff --git a/src/core/or/or.h b/src/core/or/or.h
+index d7975bd13f..039704077e 100644
+--- a/src/core/or/or.h
++++ b/src/core/or/or.h
+@@ -450,6 +450,14 @@ typedef enum channel_prev_hop_t {
+ } channel_prev_hop_t;
+ #define CHANNEL_PREV_HOP_COUNT (CHANNEL_PREV_HOP_UNKNOWN_RELAY + 1)
+ 
++/** How a BEGIN_DIR stream ended, as its directory connection learns it. */
++typedef enum begindir_stream_end_t {
++  BEGINDIR_STREAM_END_RELAY = 0, /**< We closed it, or not yet. */
++  BEGINDIR_STREAM_END_CLIENT = 1, /**< The client sent a RELAY_END. */
++  BEGINDIR_STREAM_END_CIRCUIT = 2, /**< Its circuit closed. */
++} begindir_stream_end_t;
++#define BEGINDIR_STREAM_END_COUNT (BEGINDIR_STREAM_END_CIRCUIT + 1)
++
+ /** Initial value for both sides of a circuit transmission window when the
+  * circuit is initialized.  Measured in cells. */
+ #define CIRCWINDOW_START 1000
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index e63bccd624..cfc34f2eea 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1370,7 +1370,9 @@ handle_get_keys(dir_connection_t *conn, const get_handler_args_t *args)
+  * connection_dir_is_anonymous() accepted: every request, every repeat on the
+  * same circuit and each such circuit once, and every request whose previous
+  * hop is not a known relay. Stock tor and Arti make each of these requests on
+- * its own circuit, through a relay in the consensus. */
++ * its own circuit, through a relay in the consensus. Mark <b>conn</b> with
++ * the rules that would refuse it, and the circuit's directory streams as on
++ * a circuit that made one. */
+ static void
+ note_hs_dir_request(dir_connection_t *conn)
+ {
+@@ -1378,17 +1380,27 @@ note_hs_dir_request(dir_connection_t *conn)
+     TO_OR_CIRCUIT(TO_EDGE_CONN(TO_CONN(conn)->linked_conn)->on_circuit);
+   const unsigned int prev_reqs = circ->n_hsdir_requests;
+ 
+-  if (prev_reqs >= 1)
++  if (prev_reqs >= 1) {
+     dos_note_dir_stat(DOS_DIR_HSDIR_REQ_REUSED);
++    conn->hsdir_reused = 1;
++  } else {
++    for (edge_connection_t *s = circ->n_streams; s; s = s->next_stream) {
++      if (s->base_.linked_conn && s->base_.linked_conn->type == CONN_TYPE_DIR)
++        TO_DIR_CONN(s->base_.linked_conn)->hs_circuit = 1;
++    }
++  }
+   if (prev_reqs == 1)
+     dos_note_dir_stat(DOS_DIR_HSDIR_CIRC_REUSED);
+   if (prev_reqs < 2)
+     circ->n_hsdir_requests = prev_reqs + 1;
+   /* connection_or_digest_is_known_relay(), with its two cases apart. */
+   if (!router_get_consensus_status_by_id(circ->p_chan->identity_digest)) {
+-    dos_note_dir_stat(router_get_by_id_digest(circ->p_chan->identity_digest) ?
+-                      DOS_DIR_HSDIR_DESCRIPTOR_ONLY_PREV_HOP :
+-                      DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
++    if (router_get_by_id_digest(circ->p_chan->identity_digest)) {
++      dos_note_dir_stat(DOS_DIR_HSDIR_DESCRIPTOR_ONLY_PREV_HOP);
++    } else {
++      dos_note_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
++      conn->hsdir_unknown_prev_hop = 1;
++    }
+   }
+ }
+ 
+@@ -1437,7 +1449,7 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+   const char *pubkey_str = NULL;
+   const char *url = args->url;
+   ed25519_public_key_t blinded_key;
+-  bool key_ok;
++  bool key_ok, shed;
+ 
+   /* Reject non anonymous dir connections (which also tests if encrypted). We
+    * do not allow single hop clients to query an HSDir. */
+@@ -1474,7 +1486,7 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+ 
+   if (!dos_hsdir_desc_fetch_allowed(
+                         hs_cache_get_dir_fetch_limiter(&blinded_key),
+-                        strlen(desc_str))) {
++                        strlen(desc_str), &shed)) {
+     static ratelim_t fetch_lim = RATELIM_INIT(600);
+     log_fn_ratelim(&fetch_lim, LOG_PROTOCOL_WARN, LD_REND,
+                    "Closing a circuit that fetched an onion service "
+@@ -1486,6 +1498,8 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+     goto done;
+   }
+ 
++  conn->hsdir_fetch_shed = shed;
++
+   /* Found requested descriptor! Pass it to this nice client. */
+   relay_increment_hsdir_get_action(HSDIR_GET_SUCCESS);
+   write_http_response_header(conn, strlen(desc_str), NO_METHOD, 0);
+diff --git a/src/feature/dircommon/dir_connection_st.h b/src/feature/dircommon/dir_connection_st.h
+index 7700008fec..d203d73367 100644
+--- a/src/feature/dircommon/dir_connection_st.h
++++ b/src/feature/dircommon/dir_connection_st.h
+@@ -40,6 +40,27 @@ struct dir_connection_t {
+   /** For a tunneled server connection: true iff its stream was over
+    * DoSBeginDirMaxStreams (see edge_connection_t.begindir_over_max). */
+   unsigned int begindir_over_max:1;
++  /** For a tunneled server connection: true iff its stream was over the
++   * BEGIN_DIR stream creation rate (see edge_connection_t). */
++  unsigned int begindir_over_stream_rate:1;
++  /** For a tunneled server connection: the nth_band_t of its stream's
++   * BEGIN_DIR cell among the BEGIN_DIR cells of its circuit. */
++  unsigned int nth:3;
++  /** For a tunneled server connection: a begindir_stream_end_t, set if its
++   * stream closes first. */
++  unsigned int stream_end:2;
++  /** For a tunneled server connection: true iff its circuit has made an
++   * onion service directory request. */
++  unsigned int hs_circuit:1;
++  /** For a tunneled server connection: true iff HSDirOneRequestPerCircuit
++   * would refuse its onion service directory request. */
++  unsigned int hsdir_reused:1;
++  /** For a tunneled server connection: true iff HSDirRefuseUnknownPrevHop
++   * would refuse its onion service directory request. */
++  unsigned int hsdir_unknown_prev_hop:1;
++  /** For a tunneled server connection: true iff HSDirFetchShedding would
++   * refuse its onion service descriptor fetch. */
++  unsigned int hsdir_fetch_shed:1;
+ 
+   /** If we're fetching descriptors, what router purpose shall we assign
+    * to them? */
+diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
+index c078664480..71bb96a1f6 100644
+--- a/src/feature/dircommon/directory.c
++++ b/src/feature/dircommon/directory.c
+@@ -545,6 +545,9 @@ connection_dir_about_to_close(dir_connection_t *dir_conn)
+         !connection_get_inbuf_len(conn))
+       type = DIR_REQUEST_NO_REQUEST;
+     relay_note_dir_request(dir_conn, type);
++    /* conn_close_if_marked() moved what it could to the stream: nothing
++     * will take what is left. */
++    relay_note_dir_discarded_bytes(false, connection_get_outbuf_len(conn));
+   }
+ 
+   if (conn->state < DIR_CONN_STATE_CLIENT_FINISHED) {
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index 86e091b3cb..2df1868d10 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -86,6 +86,13 @@ static void fill_begindir_request_over_max_values(void);
+ static void fill_create_cell_source_values(void);
+ static void fill_begindir_cell_source_values(void);
+ static void fill_hsdir_fetch_descriptor_values(void);
++static void fill_begindir_request_position_values(void);
++static void fill_begindir_empty_stream_values(void);
++static void fill_dos_response_bytes_values(void);
++static void fill_hsdir_descriptor_bytes_values(void);
++static void fill_begindir_circuit_values(void);
++static void fill_begindir_discarded_bytes_values(void);
++static void fill_begindir_pending_bytes_values(void);
+ 
+ /** The base metrics that is a static array of metrics added to the metrics
+  * store.
+@@ -351,6 +358,63 @@ static const relay_metrics_entry_t base_metrics[] =
+             "minute",
+     .fill_fn = fill_hsdir_fetch_descriptor_values,
+   },
++  {
++    .key = RELAY_METRICS_NUM_BEGINDIR_REQUEST_POSITIONS,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_begindir_request_position_total),
++    .help = "Total number of tunneled directory requests, by the place of "
++            "their BEGIN_DIR cell among those of their circuit",
++    .fill_fn = fill_begindir_request_position_values,
++  },
++  {
++    .key = RELAY_METRICS_NUM_BEGINDIR_EMPTY_STREAMS,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_begindir_empty_stream_total),
++    .help = "Total number of tunneled directory streams that made no "
++            "request, by how they ended, their age in seconds and their "
++            "circuit",
++    .fill_fn = fill_begindir_empty_stream_values,
++  },
++  {
++    .key = RELAY_METRICS_NUM_DOS_RESPONSE_BYTES,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_dos_response_bytes_total),
++    .help = "Total number of tunneled directory response bytes read by "
++            "their stream, by the DoS rule that would refuse their request",
++    .fill_fn = fill_dos_response_bytes_values,
++  },
++  {
++    .key = RELAY_METRICS_NUM_HSDIR_DESCRIPTOR_BYTES,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_hsdir_descriptor_bytes_total),
++    .help = "Total number of onion service descriptor response bytes read "
++            "by their stream",
++    .fill_fn = fill_hsdir_descriptor_bytes_values,
++  },
++  {
++    .key = RELAY_METRICS_NUM_BEGINDIR_CIRCUITS,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_begindir_circuit_total),
++    .help = "Total number of circuits that reached each number of BEGIN_DIR "
++            "cells",
++    .fill_fn = fill_begindir_circuit_values,
++  },
++  {
++    .key = RELAY_METRICS_NUM_BEGINDIR_DISCARDED_BYTES,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_begindir_discarded_bytes_total),
++    .help = "Total number of tunneled directory response bytes dropped "
++            "when their connection or stream closed",
++    .fill_fn = fill_begindir_discarded_bytes_values,
++  },
++  {
++    .key = RELAY_METRICS_BEGINDIR_PENDING_BYTES,
++    .type = METRICS_TYPE_GAUGE,
++    .name = METRICS_NAME(relay_begindir_pending_bytes),
++    .help = "Tunneled directory response bytes waiting in their connection "
++            "or stream",
++    .fill_fn = fill_begindir_pending_bytes_values,
++  },
+ };
+ static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
+ 
+@@ -1466,6 +1530,42 @@ static const char *const dir_request_names[] = {
+ /** Tunneled directory requests on streams over DoSBeginDirMaxStreams: what
+  * DoSBeginDirLimitEnabled refuses, while it is off. */
+ static uint64_t dir_over_max_requests[DIR_REQUEST_TYPE_COUNT];
++/** Tunneled directory requests, by type and by the nth_band_t of their
++ * stream's BEGIN_DIR cell among those of its circuit. */
++static uint64_t dir_request_positions[DIR_REQUEST_TYPE_COUNT][NTH_BAND_COUNT];
++/* A directory connection keeps its nth_band_t in three bits, and its
++ * begindir_stream_end_t in two. */
++CTASSERT(NTH_BAND_COUNT <= 8);
++CTASSERT(BEGINDIR_STREAM_END_COUNT <= 4);
++
++/** Bands of the age in seconds of a tunneled directory stream that made no
++ * request, when its directory connection closes. */
++typedef enum {
++  EMPTY_AGE_0,
++  EMPTY_AGE_1_9,
++  EMPTY_AGE_10_59,
++  EMPTY_AGE_60_PLUS,
++
++  EMPTY_AGE_COUNT
++} empty_age_t;
++/** Tunneled directory streams that made no request, by how they ended (a
++ * begindir_stream_end_t), by empty_age_t, and by whether their circuit made
++ * an onion service directory request. */
++static uint64_t
++  empty_streams[BEGINDIR_STREAM_END_COUNT][EMPTY_AGE_COUNT][2];
++
++/** Return the empty_age_t of a stream <b>age</b> seconds old. */
++static empty_age_t
++empty_age_of(time_t age)
++{
++  if (age < 1)
++    return EMPTY_AGE_0;
++  if (age < 10)
++    return EMPTY_AGE_1_9;
++  if (age < 60)
++    return EMPTY_AGE_10_59;
++  return EMPTY_AGE_60_PLUS;
++}
+ 
+ /** Count the request on the tunneled directory server connection <b>conn</b>
+  * as <b>type</b>, once: later calls for <b>conn</b> do nothing. DirPort
+@@ -1477,8 +1577,62 @@ relay_note_dir_request(dir_connection_t *conn, dir_request_type_t type)
+     return;
+   conn->request_type = type + 1;
+   dir_requests[type][conn->prev_hop]++;
++  dir_request_positions[type][conn->nth]++;
+   if (conn->begindir_over_max)
+     dir_over_max_requests[type]++;
++  if (type == DIR_REQUEST_NO_REQUEST) {
++    empty_age_t age =
++      empty_age_of(approx_time() - TO_CONN(conn)->timestamp_created);
++    empty_streams[conn->stream_end][age][conn->hs_circuit]++;
++  }
++}
++
++/** Fill function for the RELAY_METRICS_NUM_BEGINDIR_REQUEST_POSITIONS
++ * metric. */
++static void
++fill_begindir_request_position_values(void)
++{
++  for (int t = 0; t < DIR_REQUEST_TYPE_COUNT; t++)
++    fill_labeled_values(
++               &base_metrics[RELAY_METRICS_NUM_BEGINDIR_REQUEST_POSITIONS],
++               "type", dir_request_names[t], "nth", nth_band_names,
++               dir_request_positions[t], NTH_BAND_COUNT);
++}
++
++/** Fill function for the RELAY_METRICS_NUM_BEGINDIR_EMPTY_STREAMS metric. */
++static void
++fill_begindir_empty_stream_values(void)
++{
++  const relay_metrics_entry_t *rentry =
++    &base_metrics[RELAY_METRICS_NUM_BEGINDIR_EMPTY_STREAMS];
++  static const char *const ended_names[] = {
++    [BEGINDIR_STREAM_END_RELAY] = "relay",
++    [BEGINDIR_STREAM_END_CLIENT] = "client",
++    [BEGINDIR_STREAM_END_CIRCUIT] = "circuit",
++  };
++  static const char *const age_names[] = {
++    [EMPTY_AGE_0] = "0",
++    [EMPTY_AGE_1_9] = "1_9",
++    [EMPTY_AGE_10_59] = "10_59",
++    [EMPTY_AGE_60_PLUS] = "60_plus",
++  };
++  static const char *const circuit_names[] = { "other", "hsdir" };
++
++  for (int e = 0; e < BEGINDIR_STREAM_END_COUNT; e++) {
++    for (int a = 0; a < EMPTY_AGE_COUNT; a++) {
++      for (int h = 0; h < 2; h++) {
++        metrics_store_entry_t *sentry = metrics_store_add(
++            the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
++        metrics_store_entry_add_label(sentry,
++                metrics_format_label("ended", ended_names[e]));
++        metrics_store_entry_add_label(sentry,
++                metrics_format_label("age", age_names[a]));
++        metrics_store_entry_add_label(sentry,
++                metrics_format_label("circuit", circuit_names[h]));
++        metrics_store_entry_update(sentry, empty_streams[e][a][h]);
++      }
++    }
++  }
+ }
+ 
+ /** Fill function for the RELAY_METRICS_NUM_BEGINDIR_REQUESTS_OVER_MAX
+@@ -1493,22 +1647,130 @@ fill_begindir_request_over_max_values(void)
+ }
+ 
+ /** Tunneled directory response bytes their stream read, by the type of their
+- * request. Bytes still queued when the directory connection closes, which
+- * conn_close_if_marked() moves to the stream unread, aren't counted. */
++ * request, including those conn_close_if_marked() moves to it when the
++ * directory connection closes. */
+ static uint64_t dir_response_bytes[DIR_REQUEST_TYPE_COUNT];
+ /* A directory connection keeps one more than its request type in four
+  * bits. */
+ CTASSERT(DIR_REQUEST_TYPE_COUNT < 16);
+ 
++/** DoS rules that can refuse a tunneled directory request, named as in
++ * relay_dos_total. */
++typedef enum {
++  DOS_RULE_HSDIR_REQ_REUSED,
++  DOS_RULE_HSDIR_UNKNOWN_PREV_HOP,
++  DOS_RULE_HSDIR_FETCH_SHED,
++  DOS_RULE_BEGINDIR_OVER_MAX,
++  DOS_RULE_BEGINDIR_OVER_STREAM_RATE,
++
++  DOS_RULE_COUNT
++} dos_rule_t;
++/** Label values for a dos_rule_t. */
++static const char *const dos_rule_names[] = {
++  [DOS_RULE_HSDIR_REQ_REUSED] = "hsdir_req_reused",
++  [DOS_RULE_HSDIR_UNKNOWN_PREV_HOP] = "hsdir_unknown_prev_hop",
++  [DOS_RULE_HSDIR_FETCH_SHED] = "hsdir_fetch_shed",
++  [DOS_RULE_BEGINDIR_OVER_MAX] = "begindir_over_max",
++  [DOS_RULE_BEGINDIR_OVER_STREAM_RATE] = "begindir_over_stream_rate",
++};
++/** Tunneled directory response bytes their stream read, by the DoS rule
++ * that would have refused their request; a response counts under each rule
++ * that would. A rule that is on leaves little or nothing to count. */
++static uint64_t dos_response_bytes[DOS_RULE_COUNT];
++/** Onion service descriptor response bytes their stream read. */
++static uint64_t hsdir_descriptor_bytes;
++
+ /** Count <b>n</b> bytes of the response on the tunneled directory server
+  * connection <b>conn</b> that its stream has just taken, by the type of its
+- * request. DirPort connections aren't counted. */
++ * request, and by the DoS rules that would refuse it. DirPort connections
++ * aren't counted. */
+ void
+ relay_note_dir_response_bytes(const dir_connection_t *conn, size_t n)
+ {
+   if (!conn->base_.linked || !conn->request_type)
+     return;
+   dir_response_bytes[conn->request_type - 1] += n;
++  if (conn->hs_ident)
++    hsdir_descriptor_bytes += n;
++
++  const bool refused_by[DOS_RULE_COUNT] = {
++    [DOS_RULE_HSDIR_REQ_REUSED] = conn->hsdir_reused,
++    [DOS_RULE_HSDIR_UNKNOWN_PREV_HOP] = conn->hsdir_unknown_prev_hop,
++    [DOS_RULE_HSDIR_FETCH_SHED] = conn->hsdir_fetch_shed,
++    [DOS_RULE_BEGINDIR_OVER_MAX] = conn->begindir_over_max,
++    [DOS_RULE_BEGINDIR_OVER_STREAM_RATE] = conn->begindir_over_stream_rate,
++  };
++  for (int r = 0; r < DOS_RULE_COUNT; r++) {
++    if (refused_by[r])
++      dos_response_bytes[r] += n;
++  }
++}
++
++/** Fill function for the RELAY_METRICS_NUM_DOS_RESPONSE_BYTES metric. */
++static void
++fill_dos_response_bytes_values(void)
++{
++  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_DOS_RESPONSE_BYTES],
++                      NULL, NULL, "type", dos_rule_names, dos_response_bytes,
++                      DOS_RULE_COUNT);
++}
++
++/** Fill function for the RELAY_METRICS_NUM_HSDIR_DESCRIPTOR_BYTES metric. */
++static void
++fill_hsdir_descriptor_bytes_values(void)
++{
++  const relay_metrics_entry_t *rentry =
++    &base_metrics[RELAY_METRICS_NUM_HSDIR_DESCRIPTOR_BYTES];
++  metrics_store_entry_t *sentry = metrics_store_add(
++      the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
++  metrics_store_entry_update(sentry, hsdir_descriptor_bytes);
++}
++
++/** Label values for where tunneled directory response bytes wait: in the
++ * directory connection's outbuf, or in its stream's inbuf. */
++static const char *const dir_bytes_where_names[] = { "directory", "stream" };
++/** Tunneled directory response bytes dropped at close: left in a directory
++ * connection whose stream had closed, or taken by a stream that closed
++ * before it sent them. */
++static uint64_t dir_discarded_bytes[2];
++
++/** Count <b>n</b> tunneled directory response bytes dropped when a BEGIN_DIR
++ * stream, if <b>stream</b>, or else its directory connection, closed. */
++void
++relay_note_dir_discarded_bytes(bool stream, size_t n)
++{
++  dir_discarded_bytes[stream] += n;
++}
++
++/** Fill function for the RELAY_METRICS_NUM_BEGINDIR_DISCARDED_BYTES
++ * metric. */
++static void
++fill_begindir_discarded_bytes_values(void)
++{
++  fill_labeled_values(
++               &base_metrics[RELAY_METRICS_NUM_BEGINDIR_DISCARDED_BYTES],
++               NULL, NULL, "where", dir_bytes_where_names,
++               dir_discarded_bytes, 2);
++}
++
++/** Fill the RELAY_METRICS_BEGINDIR_PENDING_BYTES gauge: the response bytes
++ * that tunneled directory connections and BEGIN_DIR streams hold. */
++static void
++fill_begindir_pending_bytes_values(void)
++{
++  uint64_t pending[2] = {0};
++
++  SMARTLIST_FOREACH_BEGIN(get_connection_array(), const connection_t *, c) {
++    if (!c->linked)
++      continue;
++    if (c->type == CONN_TYPE_DIR && DIR_CONN_IS_SERVER(c))
++      pending[0] += connection_get_outbuf_len(c);
++    else if (c->type == CONN_TYPE_EXIT)
++      pending[1] += connection_get_inbuf_len(c);
++  } SMARTLIST_FOREACH_END(c);
++
++  fill_labeled_values(&base_metrics[RELAY_METRICS_BEGINDIR_PENDING_BYTES],
++                      NULL, NULL, "where", dir_bytes_where_names, pending, 2);
+ }
+ 
+ /** Fill function for the RELAY_METRICS_NUM_BEGINDIR_RESPONSE_BYTES metric. */
+@@ -1551,6 +1813,22 @@ fill_begindir_cell_values(void)
+                         rep_hist_get_begindir_cells(p), NTH_BAND_COUNT);
+ }
+ 
++/** Fill function for the RELAY_METRICS_NUM_BEGINDIR_CIRCUITS metric. */
++static void
++fill_begindir_circuit_values(void)
++{
++  /* The numbers rep_hist_get_begindir_circuits() counts. */
++  static const char *const reached_names[BEGINDIR_REACH_COUNT] = {
++    "1", "2", "4", "11", "31", "101", "301", "1001",
++  };
++
++  for (int p = CHANNEL_PREV_HOP_CLIENT; p < CHANNEL_PREV_HOP_COUNT; p++)
++    fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_BEGINDIR_CIRCUITS],
++                        "prev_hop", prev_hop_names[p], "reached",
++                        reached_names, rep_hist_get_begindir_circuits(p),
++                        BEGINDIR_REACH_COUNT);
++}
++
+ /** Fill the per-source family of CREATE cells, or of BEGIN_DIR cells if
+  * <b>begindir</b>. */
+ static void
+diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
+index 39d2549ab8..20616b7ef4 100644
+--- a/src/feature/relay/relay_metrics.h
++++ b/src/feature/relay/relay_metrics.h
+@@ -91,6 +91,23 @@ typedef enum {
+   /** Onion service descriptor fetches, by whether we found the descriptor
+    * and place among the fetches of the same one in the same minute. */
+   RELAY_METRICS_NUM_HSDIR_FETCH_DESCRIPTORS,
++  /** Tunneled directory requests, by type and place of their stream's
++   * BEGIN_DIR cell among those of its circuit. */
++  RELAY_METRICS_NUM_BEGINDIR_REQUEST_POSITIONS,
++  /** Tunneled directory streams that made no request, by how they ended,
++   * their age and their circuit. */
++  RELAY_METRICS_NUM_BEGINDIR_EMPTY_STREAMS,
++  /** Tunneled directory response bytes their stream read, by the DoS rule
++   * that would refuse their request. */
++  RELAY_METRICS_NUM_DOS_RESPONSE_BYTES,
++  /** Onion service descriptor response bytes their stream read. */
++  RELAY_METRICS_NUM_HSDIR_DESCRIPTOR_BYTES,
++  /** Circuits, by previous hop and number of BEGIN_DIR cells reached. */
++  RELAY_METRICS_NUM_BEGINDIR_CIRCUITS,
++  /** Tunneled directory response bytes dropped at close, by where. */
++  RELAY_METRICS_NUM_BEGINDIR_DISCARDED_BYTES,
++  /** Tunneled directory response bytes not yet sent, by where. */
++  RELAY_METRICS_BEGINDIR_PENDING_BYTES,
+ } relay_metrics_key_t;
+ 
+ /** The metadata of a relay metric. */
+@@ -245,6 +262,7 @@ void relay_note_hsdir_not_anonymous(const struct dir_connection_t *conn,
+                                     bool is_post);
+ void relay_note_dir_response_bytes(const struct dir_connection_t *conn,
+                                    size_t n);
++void relay_note_dir_discarded_bytes(bool stream, size_t n);
+ void relay_note_hsdir_fetch_target(const struct ed25519_public_key_t *key,
+                                    bool found);
+ 
+diff --git a/src/feature/relay/relay_stub.c b/src/feature/relay/relay_stub.c
+index 875e9f9ac6..401f3b42ab 100644
+--- a/src/feature/relay/relay_stub.c
++++ b/src/feature/relay/relay_stub.c
+@@ -59,6 +59,13 @@ relay_note_dir_response_bytes(const struct dir_connection_t *conn, size_t n)
+   (void)n;
+ }
+ 
++void
++relay_note_dir_discarded_bytes(bool stream, size_t n)
++{
++  (void)stream;
++  (void)n;
++}
++
+ void
+ relay_increment_dir_response(dir_response_type_t type)
+ {
+diff --git a/src/feature/stats/rephist.c b/src/feature/stats/rephist.c
+index dca0b6b8cf..b72fbff640 100644
+--- a/src/feature/stats/rephist.c
++++ b/src/feature/stats/rephist.c
+@@ -1692,6 +1692,15 @@ static uint64_t begindir_cells[CHANNEL_PREV_HOP_COUNT][NTH_BAND_COUNT];
+ /** CREATE and BEGIN_DIR cells, by previous hop and by place among those their
+  * source sent in the same minute. */
+ static uint64_t source_cells[2][CHANNEL_PREV_HOP_COUNT][NTH_BAND_COUNT];
++/** Numbers of BEGIN_DIR cells that a circuit can reach, for
++ * begindir_circuits. The last is NTH_BAND_MAX, where its count stops. */
++static const uint16_t begindir_reach[BEGINDIR_REACH_COUNT] = {
++  1, 2, 4, 11, 31, 101, 301, NTH_BAND_MAX,
++};
++/** Circuits, by previous hop, that have carried at least each number of
++ * BEGIN_DIR cells in begindir_reach. */
++static uint64_t
++  begindir_circuits[CHANNEL_PREV_HOP_COUNT][BEGINDIR_REACH_COUNT];
+ 
+ /** Return the source of the circuits that <b>chan</b>, whose peer identified
+  * itself as <b>prev_hop</b>, carries: every client channel from one address
+@@ -1757,8 +1766,13 @@ rep_hist_note_begindir_cell(or_circuit_t *circ)
+ {
+   if (!circ)
+     return;
+-  if (circ->n_begindir < NTH_BAND_MAX)
++  if (circ->n_begindir < NTH_BAND_MAX) {
+     circ->n_begindir++;
++    for (int i = 0; i < BEGINDIR_REACH_COUNT; i++) {
++      if (circ->n_begindir == begindir_reach[i])
++        begindir_circuits[circ->prev_hop][i]++;
++    }
++  }
+   begindir_cells[circ->prev_hop][nth_band_of(circ->n_begindir)]++;
+   rep_hist_note_source_cell(circ->p_chan, circ->prev_hop, true);
+ }
+@@ -1779,6 +1793,15 @@ rep_hist_get_begindir_cells(channel_prev_hop_t prev_hop)
+   return begindir_cells[prev_hop];
+ }
+ 
++/** Return the numbers of circuits from previous hops of kind <b>prev_hop</b>
++ * that have carried 1, 2, 4, 11, 31, 101, 301 and NTH_BAND_MAX BEGIN_DIR
++ * cells. */
++const uint64_t *
++rep_hist_get_begindir_circuits(channel_prev_hop_t prev_hop)
++{
++  return begindir_circuits[prev_hop];
++}
++
+ /** Return the numbers of BEGIN_DIR cells if <b>begindir</b>, else CREATE
+  * cells, from previous hops of kind <b>prev_hop</b>, indexed by their
+  * nth_band_t among those their source sent in the same minute. */
+diff --git a/src/feature/stats/rephist.h b/src/feature/stats/rephist.h
+index 76efffdc52..57c2f967a2 100644
+--- a/src/feature/stats/rephist.h
++++ b/src/feature/stats/rephist.h
+@@ -68,6 +68,9 @@ typedef enum nth_band_t {
+ } nth_band_t;
+ /** Counts for nth_band_of() may stop here, where the last band starts. */
+ #define NTH_BAND_MAX 1001
++/** How many numbers of BEGIN_DIR cells rep_hist_get_begindir_circuits()
++ * counts the circuits reaching. */
++#define BEGINDIR_REACH_COUNT 8
+ 
+ /** Return the band of the <b>n</b>th of something. */
+ static inline nth_band_t
+@@ -88,6 +91,7 @@ void rep_hist_note_create_cell(channel_t *chan, channel_prev_hop_t prev_hop);
+ void rep_hist_note_begindir_cell(or_circuit_t *circ);
+ const uint64_t *rep_hist_get_create_cells(void);
+ const uint64_t *rep_hist_get_begindir_cells(channel_prev_hop_t prev_hop);
++const uint64_t *rep_hist_get_begindir_circuits(channel_prev_hop_t prev_hop);
+ 
+ const uint64_t *rep_hist_get_source_cells(bool begindir,
+                                           channel_prev_hop_t prev_hop);
+diff --git a/src/test/test_dos.c b/src/test/test_dos.c
+index e9df8030f5..79769e0bfe 100644
+--- a/src/test/test_dos.c
++++ b/src/test/test_dos.c
+@@ -811,6 +811,7 @@ test_dos_begindir_over_stream_rate(void *arg)
+ {
+   dos_options_t *dos_opts = get_dos_options(get_options_mutable());
+   or_circuit_t *circ = NULL;
++  edge_connection_t *stream = NULL;
+   uint64_t over0 = dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_STREAM_RATE);
+   uint64_t max0 = dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX);
+   (void) arg;
+@@ -848,7 +849,18 @@ test_dos_begindir_over_stream_rate(void *arg)
+   tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, max0);
+   tt_i64_op(get_dos_metric("begindir_over_stream_rate"), OP_EQ, over0 + 2);
+ 
++  /* A stream is marked only when its cell is over the rate. */
++  monotime_coarse_set_mock_time_nsec(3000000000);
++  stream = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
++  tt_assert(!dos_should_refuse_begindir(circ, stream));
++  tt_assert(!stream->begindir_over_stream_rate);
++  tt_assert(!dos_should_refuse_begindir(circ, stream));
++  tt_assert(stream->begindir_over_stream_rate);
++  tt_assert(!stream->begindir_over_max);
++
+  done:
++  if (stream)
++    connection_free_minimal(TO_CONN(stream));
+   get_options_mutable()->MetricsPort_set = 0;
+   dos_opts->DoSStreamCreationRate = 0;
+   dos_opts->DoSStreamCreationBurst = 0;
+@@ -970,12 +982,14 @@ test_dos_begindir_refused(void *arg)
+   relay_msg_t msg;
+   const channel_prev_hop_t hop = CHANNEL_PREV_HOP_UNKNOWN_RELAY;
+   uint64_t first0, later0;
+-  int n_over;
++  int n_over, n_first, n_hs, n_rate;
+   (void) arg;
+ 
+   first0 = rep_hist_get_begindir_cells(hop)[NTH_BAND_1];
+   later0 = rep_hist_get_begindir_cells(hop)[NTH_BAND_2_10];
+   circ->prev_hop = hop;
++  monotime_enable_test_mocking();
++  monotime_coarse_set_mock_time_nsec(1000000000);
+   tor_init_connection_lists();
+   MOCK(relay_send_command_from_edge_, mock_relay_send_command_from_edge);
+   MOCK(we_are_hibernating, mock_we_are_hibernating);
+@@ -994,12 +1008,19 @@ test_dos_begindir_refused(void *arg)
+   tt_int_op(n_connected, OP_EQ, 2);
+   tt_int_op(n_end, OP_EQ, 1);
+   tt_int_op(end_reason, OP_EQ, END_STREAM_REASON_MISC);
+-  /* Two linked pairs, whose directory connections know the previous hop. */
++  /* Two linked pairs, whose directory connections know the previous hop,
++   * and the place of their stream's BEGIN_DIR cell on the circuit. */
+   tt_int_op(smartlist_len(get_connection_array()), OP_EQ, 4);
++  n_first = 0;
+   SMARTLIST_FOREACH(get_connection_array(), connection_t *, c, {
+-    if (c->type == CONN_TYPE_DIR)
++    if (c->type == CONN_TYPE_DIR) {
+       tt_int_op(TO_DIR_CONN(c)->prev_hop, OP_EQ, hop);
++      tt_int_op(TO_DIR_CONN(c)->hs_circuit, OP_EQ, 0);
++      n_first += TO_DIR_CONN(c)->nth == NTH_BAND_1;
++      tt_int_op(TO_DIR_CONN(c)->nth, OP_LE, NTH_BAND_2_10);
++    }
+   });
++  tt_int_op(n_first, OP_EQ, 1);
+   tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, 1);
+   /* Every cell is counted. */
+   tt_u64_op(rep_hist_get_begindir_cells(hop)[NTH_BAND_1], OP_EQ,
+@@ -1025,18 +1046,41 @@ test_dos_begindir_refused(void *arg)
+   tt_int_op(n_connected, OP_EQ, 2);
+ 
+   /* With the limit off, the stream is accepted, and only its directory
+-   * connection is marked as over the limit. */
++   * connection is marked as over the limit; it is also the only one opened
++   * after the circuit's first onion service directory request. */
+   dos_opts->DoSBeginDirLimitEnabled = 0;
++  circ->n_hsdir_requests = 1;
+   msg.stream_id++;
+   tt_int_op(connection_exit_begin_conn(&msg, TO_CIRCUIT(circ)), OP_EQ, 0);
+   tt_int_op(n_connected, OP_EQ, 3);
+   tt_u64_op(dos_get_dir_stat(DOS_DIR_BEGINDIR_OVER_MAX), OP_EQ, 2);
+-  n_over = 0;
++  n_over = n_hs = 0;
+   SMARTLIST_FOREACH(get_connection_array(), connection_t *, c, {
+-    if (c->type == CONN_TYPE_DIR)
++    if (c->type == CONN_TYPE_DIR) {
+       n_over += TO_DIR_CONN(c)->begindir_over_max;
++      n_hs += TO_DIR_CONN(c)->hs_circuit;
++    }
+   });
+   tt_int_op(n_over, OP_EQ, 1);
++  tt_int_op(n_hs, OP_EQ, 1);
++
++  /* With a MetricsPort, a stream over the stream creation rate is marked
++   * as such. */
++  get_options_mutable()->MetricsPort_set = 1;
++  dos_opts->DoSStreamCreationRate = 1;
++  dos_opts->DoSStreamCreationBurst = 1;
++  dos_init();
++  dos_stream_init_circ_tbf(circ);
++  for (int i = 0; i < 2; i++) {
++    msg.stream_id++;
++    tt_int_op(connection_exit_begin_conn(&msg, TO_CIRCUIT(circ)), OP_EQ, 0);
++  }
++  n_rate = 0;
++  SMARTLIST_FOREACH(get_connection_array(), connection_t *, c, {
++    if (c->type == CONN_TYPE_DIR)
++      n_rate += TO_DIR_CONN(c)->begindir_over_stream_rate;
++  });
++  tt_int_op(n_rate, OP_EQ, 1);
+ 
+  done:
+   UNMOCK(relay_send_command_from_edge_);
+@@ -1057,8 +1101,12 @@ test_dos_begindir_refused(void *arg)
+   circuit_free_all();
+   get_options_mutable()->ORPort_set = 0;
+   get_options_mutable()->DirPort_set = 0;
++  get_options_mutable()->MetricsPort_set = 0;
+   dos_opts->DoSBeginDirLimitEnabled = -1;
+   dos_opts->DoSBeginDirMaxStreams = 0;
++  dos_opts->DoSStreamCreationRate = 0;
++  dos_opts->DoSStreamCreationBurst = 0;
++  monotime_disable_test_mocking();
+ }
+ 
+ /** Test that the heartbeat shows the directory request counts of each
+@@ -1112,7 +1160,7 @@ hsdir_fetches(token_bucket_ctr_t *bucket, int n, size_t len)
+ {
+   int answered = 0;
+   for (int i = 0; i < n; i++)
+-    answered += dos_hsdir_desc_fetch_allowed(bucket, len);
++    answered += dos_hsdir_desc_fetch_allowed(bucket, len, NULL);
+   return answered;
+ }
+ 
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index 6a0573fd88..9f7f328957 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -7,6 +7,7 @@
+  */
+ 
+ #define CONNECTION_PRIVATE
++#define MAINLOOP_PRIVATE
+ #define DIRCACHE_PRIVATE
+ #define DIRCLIENT_PRIVATE
+ #define HS_CACHE_PRIVATE
+@@ -27,6 +28,7 @@
+ #include "core/proto/proto_http.h"
+ #include "app/config/config.h"
+ #include "core/or/circuitlist.h"
++#include "core/or/circuituse.h"
+ #include "core/or/connection_edge.h"
+ #include "core/or/channel.h"
+ #include "core/or/dos.h"
+@@ -365,29 +367,41 @@ helper_fetch_desc_from_hsdir(const ed25519_public_key_t *blinded_key)
+ }
+ 
+ /* Return the value of <b>name</b>{<b>key1</b>="<b>value1</b>",
+- * <b>key2</b>="<b>value2</b>"} in the relay metrics store. If there is no
+- * such entry, fail the test and return -1, so that a series that vanished
+- * never compares equal to a baseline. */
++ * <b>key2</b>="<b>value2</b>",<b>key3</b>="<b>value3</b>"} in the relay
++ * metrics store. If there is no such entry, fail the test and return -1, so
++ * that a series that vanished never compares equal to a baseline. */
+ static int64_t
+-get_metric2(const char *name, const char *key1, const char *value1,
+-            const char *key2, const char *value2)
++get_metric3(const char *name, const char *key1, const char *value1,
++            const char *key2, const char *value2, const char *key3,
++            const char *value3)
+ {
+   const smartlist_t *entries =
+     metrics_store_get_all(smartlist_get(relay_metrics_get_stores(), 0), name);
+   char *label1 = tor_strdup(metrics_format_label(key1, value1));
++  char *label2 = tor_strdup(metrics_format_label(key2, value2));
+   int64_t value = -1;
+ 
+   SMARTLIST_FOREACH_BEGIN(entries, const metrics_store_entry_t *, e) {
+     if (metrics_store_entry_has_label(e, label1) &&
+-        metrics_store_entry_has_label(e, metrics_format_label(key2, value2)))
++        metrics_store_entry_has_label(e, label2) &&
++        metrics_store_entry_has_label(e, metrics_format_label(key3, value3)))
+       value = metrics_store_entry_get_value(e);
+   } SMARTLIST_FOREACH_END(e);
+   tor_free(label1);
++  tor_free(label2);
+   if (value == -1)
+-    TT_FAIL(("no series %s{%s=\"%s\",%s=\"%s\"}", name, key1, value1,
+-             key2, value2));
++    TT_FAIL(("no series %s{%s=\"%s\",%s=\"%s\",%s=\"%s\"}", name, key1,
++             value1, key2, value2, key3, value3));
+   return value;
+ }
++/* As get_metric3(), for <b>name</b>{<b>key1</b>="<b>value1</b>",
++ * <b>key2</b>="<b>value2</b>"}. */
++static int64_t
++get_metric2(const char *name, const char *key1, const char *value1,
++            const char *key2, const char *value2)
++{
++  return get_metric3(name, key1, value1, key2, value2, key2, value2);
++}
+ /* As get_metric2(), for <b>name</b>{<b>key</b>="<b>value</b>"}. */
+ static int64_t
+ get_metric(const char *name, const char *key, const char *value)
+@@ -470,10 +484,14 @@ hsdir_request_on_circ(or_circuit_t *circ, const char *req, const char *body)
+     circ->prev_hop = channel_get_prev_hop(circ->p_chan);
+   rep_hist_note_begindir_cell(circ);
+   conn->prev_hop = circ->prev_hop;
++  conn->nth = nth_band_of(circ->n_begindir);
++  conn->hs_circuit = circ->n_hsdir_requests > 0;
+   if (body)
+     directory_handle_command_post(conn, req, body, strlen(body));
+   else
+     directory_handle_command_get(conn, req, NULL, 0);
++  /* As the stream takes the reply. */
++  relay_note_dir_response_bytes(conn, buf_datalen(TO_CONN(conn)->outbuf));
+   tor_free(hsdir_reply);
+   hsdir_reply = buf_extract(TO_CONN(conn)->outbuf, NULL);
+   connection_free_minimal(TO_CONN(edge_conn));
+@@ -1549,6 +1567,12 @@ test_prev_hop_metric_series(void *arg)
+     { METRICS_NAME(relay_create_cell_source_total), 15 },
+     { METRICS_NAME(relay_begindir_cell_source_total), 15 },
+     { METRICS_NAME(relay_hsdir_fetch_descriptor_total), 10 },
++    { METRICS_NAME(relay_begindir_request_position_total), 45 },
++    { METRICS_NAME(relay_begindir_empty_stream_total), 24 },
++    { METRICS_NAME(relay_dos_response_bytes_total), 5 },
++    { METRICS_NAME(relay_hsdir_descriptor_bytes_total), 1 },
++    { METRICS_NAME(relay_begindir_circuit_total), 24 },
++    { METRICS_NAME(relay_begindir_discarded_bytes_total), 2 },
+   };
+   or_circuit_t *circ = or_circuit_new(0, NULL);
+   int64_t create0, first0, later0, tenth0;
+@@ -1588,6 +1612,389 @@ test_prev_hop_metric_series(void *arg)
+   circuit_free_all();
+ }
+ 
++/* tor_relay_begindir_request_position_total{type, nth} */
++#define POSITION_METRIC(type, nth) \
++  get_metric2(METRICS_NAME(relay_begindir_request_position_total), "type", \
++              (type), "nth", (nth))
++/* tor_relay_begindir_circuit_total{prev_hop, reached} */
++#define REACHED_METRIC(hop, reached) \
++  get_metric2(METRICS_NAME(relay_begindir_circuit_total), "prev_hop", \
++              (hop), "reached", (reached))
++
++/* Requests are counted by type and by the place of their stream's BEGIN_DIR
++ * cell on its circuit. Circuits are counted once at each number of BEGIN_DIR
++ * cells they reach, however many more they carry. */
++static void
++test_request_position_metrics(void *arg)
++{
++  channel_t *chan = new_fake_channel();
++  or_circuit_t *circ = or_circuit_new(0, NULL);
++  const char *reached[] = { "1", "2", "4", "11", "31", "101", "301", "1001" };
++  /* A circuit one cell short of each number, and one far past the last. */
++  const int cells[] = { 1, 3, 10, 30, 100, 300, 1000, NTH_BAND_MAX + 100 };
++  int64_t first0, later0, tenth0, other0, reached0[ARRAY_LENGTH(reached)];
++  int64_t client0;
++  (void) arg;
++
++  init_test();
++  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
++  first0 = POSITION_METRIC("hs_get", "1");
++  later0 = POSITION_METRIC("hs_get", "2_10");
++  tenth0 = POSITION_METRIC("hs_get", "11_100");
++  other0 = POSITION_METRIC("other_get", "11_100");
++  for (size_t i = 0; i < ARRAY_LENGTH(reached); i++)
++    reached0[i] = REACHED_METRIC("unknown_relay", reached[i]);
++  client0 = REACHED_METRIC("client", "1");
++
++  /* Twelve descriptor fetches and a robots.txt on one circuit. */
++  circ->p_chan = chan;
++  circ->prev_hop = CHANNEL_PREV_HOP_KNOWN_RELAY;
++  for (int i = 0; i < 12; i++)
++    hsdir_request_on_circ(circ, GET("/tor/hs/3/x"), NULL);
++  hsdir_request_on_circ(circ, GET("/tor/robots.txt"), NULL);
++  tt_i64_op(POSITION_METRIC("hs_get", "1"), OP_EQ, first0 + 1);
++  tt_i64_op(POSITION_METRIC("hs_get", "2_10"), OP_EQ, later0 + 9);
++  tt_i64_op(POSITION_METRIC("hs_get", "11_100"), OP_EQ, tenth0 + 2);
++  tt_i64_op(POSITION_METRIC("other_get", "11_100"), OP_EQ, other0 + 1);
++
++  /* The circuit one cell short of the ith number reaches the i before. */
++  for (size_t i = 0; i < ARRAY_LENGTH(cells); i++) {
++    or_circuit_t *c = or_circuit_new(0, NULL);
++    c->prev_hop = CHANNEL_PREV_HOP_UNKNOWN_RELAY;
++    for (int n = 0; n < cells[i]; n++)
++      rep_hist_note_begindir_cell(c);
++  }
++  for (size_t i = 0; i < ARRAY_LENGTH(reached); i++)
++    tt_i64_op(REACHED_METRIC("unknown_relay", reached[i]), OP_EQ,
++              reached0[i] + (int64_t) (ARRAY_LENGTH(cells) - i));
++  tt_i64_op(REACHED_METRIC("client", "1"), OP_EQ, client0);
++
++ done:
++  UNMOCK(connection_write_to_buf_impl_);
++  SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
++                    TO_OR_CIRCUIT(c)->p_chan = NULL);
++  circuit_free_all();
++  free_fake_channel(chan);
++  tor_free(hsdir_reply);
++}
++
++/* tor_relay_begindir_empty_stream_total{ended, age, circuit} */
++#define EMPTY_METRIC(ended, age, circuit) \
++  get_metric3(METRICS_NAME(relay_begindir_empty_stream_total), "ended", \
++              (ended), "age", (age), "circuit", (circuit))
++
++/* Make a BEGIN_DIR stream on <b>circ</b>, as connection_exit_connect_dir()
++ * does, whose directory connection is waiting for a request and was created
++ * <b>age</b> seconds ago. Return that connection. */
++static dir_connection_t *
++new_dir_stream(or_circuit_t *circ, time_t age)
++{
++  dir_connection_t *conn = new_waiting_dir_conn(circ->prev_hop, NULL);
++  edge_connection_t *edge = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
++
++  edge->on_circuit = TO_CIRCUIT(circ);
++  edge->next_stream = circ->n_streams;
++  circ->n_streams = edge;
++  connection_link_connections(TO_CONN(conn), TO_CONN(edge));
++  TO_CONN(conn)->timestamp_created = approx_time() - age;
++  conn->hs_circuit = circ->n_hsdir_requests > 0;
++  return conn;
++}
++
++/* Close the BEGIN_DIR stream of <b>conn</b> and then <b>conn</b>, as
++ * connection_unlink() would, the stream first with <b>end_reason</b> unless
++ * it is -1; if it is, close <b>conn</b> first. */
++static void
++close_dir_stream(dir_connection_t *conn, int end_reason)
++{
++  edge_connection_t *edge = TO_EDGE_CONN(TO_CONN(conn)->linked_conn);
++
++  edge->edge_has_sent_end = 1;
++  if (end_reason == -1) {
++    connection_dir_about_to_close(conn);
++    TO_CONN(conn)->linked_conn = TO_CONN(edge)->linked_conn = NULL;
++    connection_exit_about_to_close(edge);
++  } else {
++    if ((end_reason & END_STREAM_REASON_MASK) == END_STREAM_REASON_DESTROY) {
++      /* As circuit_about_to_free(). */
++      circuit_detach_stream(edge->on_circuit, edge);
++      connection_edge_destroy(0, edge);
++    } else {
++      edge->end_reason = end_reason;
++    }
++    connection_exit_about_to_close(edge);
++    TO_CONN(conn)->linked_conn = TO_CONN(edge)->linked_conn = NULL;
++    connection_dir_about_to_close(conn);
++  }
++  connection_free_minimal(TO_CONN(edge));
++  connection_free_minimal(TO_CONN(conn));
++}
++
++/* Streams that make no request are counted by who ended them, how long they
++ * lived, and whether their circuit made an onion service directory request,
++ * before or after they opened. */
++static void
++test_empty_stream_metrics(void *arg)
++{
++  channel_t *chan = new_fake_channel();
++  or_circuit_t *circ = or_circuit_new(0, NULL);
++  dir_connection_t *early, *late;
++  const time_t t0 = 1800000000;
++  const struct {
++    time_t age;
++    const char *band;
++  } ages[] = {
++    { -1, "0" }, { 1, "1_9" }, { 9, "1_9" }, { 10, "10_59" },
++    { 59, "10_59" }, { 60, "60_plus" },
++  };
++  int64_t client0, circuit0, relay0, early0, late0, none0;
++  (void) arg;
++
++  init_test();
++  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
++  MOCK(connection_mark_for_close_internal_, hsdir_mock_mark_for_close);
++  update_approx_time(t0);
++  client0 = EMPTY_METRIC("client", "0", "other");
++  circuit0 = EMPTY_METRIC("circuit", "1_9", "other");
++  relay0 = EMPTY_METRIC("relay", "60_plus", "other");
++  early0 = EMPTY_METRIC("client", "10_59", "hsdir");
++  late0 = EMPTY_METRIC("circuit", "10_59", "hsdir");
++  none0 = REQ_SUM("no_request");
++  circ->p_chan = chan;
++  circ->prev_hop = CHANNEL_PREV_HOP_KNOWN_RELAY;
++
++  /* Ended by a client END, by the circuit, and by us, at different ages. */
++  close_dir_stream(new_dir_stream(circ, 0),
++                   END_STREAM_REASON_DONE | END_STREAM_REASON_FLAG_REMOTE);
++  close_dir_stream(new_dir_stream(circ, 5), END_STREAM_REASON_DESTROY);
++  close_dir_stream(new_dir_stream(circ, 400), -1);
++  tt_i64_op(EMPTY_METRIC("client", "0", "other"), OP_EQ, client0 + 1);
++  tt_i64_op(EMPTY_METRIC("circuit", "1_9", "other"), OP_EQ, circuit0 + 1);
++  tt_i64_op(EMPTY_METRIC("relay", "60_plus", "other"), OP_EQ, relay0 + 1);
++  tt_ptr_op(circ->n_streams, OP_EQ, NULL);
++  /* The age bands start at 1, 10 and 60 seconds. */
++  for (size_t i = 0; i < ARRAY_LENGTH(ages); i++) {
++    const int64_t n0 = EMPTY_METRIC("relay", ages[i].band, "other");
++    close_dir_stream(new_dir_stream(circ, ages[i].age), -1);
++    tt_i64_op(EMPTY_METRIC("relay", ages[i].band, "other"), OP_EQ, n0 + 1);
++  }
++
++  /* A stream opened before the circuit's first onion service request counts
++   * as on such a circuit, as does one opened after. */
++  early = new_dir_stream(circ, 30);
++  hsdir_request_on_circ(circ, GET("/tor/hs/3/x"), NULL);
++  late = new_dir_stream(circ, 30);
++  close_dir_stream(early,
++                   END_STREAM_REASON_DONE | END_STREAM_REASON_FLAG_REMOTE);
++  close_dir_stream(late, END_STREAM_REASON_DESTROY);
++  tt_i64_op(EMPTY_METRIC("client", "10_59", "hsdir"), OP_EQ, early0 + 1);
++  tt_i64_op(EMPTY_METRIC("circuit", "10_59", "hsdir"), OP_EQ, late0 + 1);
++  tt_i64_op(REQ_SUM("no_request"), OP_EQ,
++            none0 + 5 + (int64_t) ARRAY_LENGTH(ages));
++
++ done:
++  UNMOCK(connection_write_to_buf_impl_);
++  UNMOCK(connection_mark_for_close_internal_);
++  SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
++                    TO_OR_CIRCUIT(c)->p_chan = NULL);
++  circuit_free_all();
++  free_fake_channel(chan);
++  tor_free(hsdir_reply);
++}
++
++static uint32_t mock_hsdir_fetch_lottery_draw(void);
++
++/* tor_relay_dos_response_bytes_total{type} */
++#define DOS_BYTES_METRIC(type) \
++  get_metric(METRICS_NAME(relay_dos_response_bytes_total), "type", (type))
++#define DESCRIPTOR_BYTES_METRIC() \
++  metrics_store_entry_get_value(smartlist_get(metrics_store_get_all( \
++      smartlist_get(relay_metrics_get_stores(), 0), \
++      METRICS_NAME(relay_hsdir_descriptor_bytes_total)), 0))
++
++/* The bytes of each response are counted under each DoS rule that would
++ * refuse its request while the rule is off, and those of descriptors apart. */
++static void
++test_dos_response_bytes_metrics(void *arg)
++{
++  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
++  ed25519_keypair_t kp;
++  hs_descriptor_t *desc = NULL;
++  char *str = NULL, *get = NULL;
++  char key[ED25519_BASE64_LEN+1];
++  dos_options_t *dos_opts;
++  dir_connection_t *conn = NULL;
++  or_circuit_t *circ;
++  const char *rules[] = { "hsdir_req_reused", "hsdir_unknown_prev_hop",
++                          "hsdir_fetch_shed", "begindir_over_max",
++                          "begindir_over_stream_rate" };
++  int64_t bytes0[ARRAY_LENGTH(rules)], want[ARRAY_LENGTH(rules)] = {0};
++  int64_t desc0, desc_bytes = 0;
++  size_t reply_len;
++  (void) arg;
++
++  init_test();
++  monotime_enable_test_mocking();
++  monotime_coarse_set_mock_time_nsec(100 * 1000000000ULL);
++  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
++  MOCK(hsdir_fetch_lottery_draw, mock_hsdir_fetch_lottery_draw);
++  get_options_mutable()->ORPort_set = 1; /* Accept uploads. */
++  tt_int_op(ed25519_keypair_generate(&kp, 0), OP_EQ, 0);
++  desc = hs_helper_build_hs_desc_with_ip(&kp);
++  tt_int_op(hs_desc_encode_descriptor(desc, &kp, NULL, &str), OP_EQ, 0);
++  tt_int_op(hs_cache_store_as_dir(str), OP_EQ, 0);
++  ed25519_public_to_base64(key, &desc->plaintext_data.blinded_pubkey);
++  tor_asprintf(&get, GET("/tor/hs/3/%s"), key);
++  dos_opts = get_dos_options(get_options_mutable());
++  dos_opts->HSDirDescriptorFetchRate = 1;
++  dos_opts->HSDirDescriptorFetchBurst = 1;
++  dos_opts->HSDirFetchBudget = 4 * strlen(str);
++  for (size_t i = 0; i < ARRAY_LENGTH(rules); i++)
++    bytes0[i] = DOS_BYTES_METRIC(rules[i]);
++  desc0 = DESCRIPTOR_BYTES_METRIC();
++
++  /* Seven fetches on new circuits from a previous hop we don't know: all
++   * answered, the seventh one that HSDirFetchShedding would refuse. */
++  for (int i = 0; i < 7; i++) {
++    hsdir_request_on_new_circ(chan, get, NULL);
++    tt_assert(!strcmpstart(hsdir_reply, "HTTP/1.0 200 "));
++    reply_len = strlen(hsdir_reply);
++    desc_bytes += reply_len;
++    want[1] += reply_len;
++    if (i == 6)
++      want[2] += reply_len;
++  }
++  tt_i64_op(DOS_BYTES_METRIC("hsdir_fetch_shed"), OP_EQ,
++            bytes0[2] + want[2]);
++  tt_i64_op(get_metric(METRICS_NAME(relay_dos_total), "type",
++                       "hsdir_fetch_shed"), OP_EQ, 1);
++
++  /* A second request on one circuit, answered 404. */
++  circ = or_circuit_new(0, NULL);
++  circ->p_chan = chan;
++  hsdir_request_on_circ(circ, GET("/tor/hs/3/x"), NULL);
++  want[1] += strlen(hsdir_reply);
++  hsdir_request_on_circ(circ, GET("/tor/hs/3/x"), NULL);
++  tt_assert(!strcmpstart(hsdir_reply, "HTTP/1.0 404 "));
++  want[0] += strlen(hsdir_reply);
++  want[1] += strlen(hsdir_reply);
++
++  /* Streams over DoSBeginDirMaxStreams and the stream creation rate. */
++  conn = new_waiting_dir_conn(CHANNEL_PREV_HOP_CLIENT, NULL);
++  conn->begindir_over_max = 1;
++  conn->begindir_over_stream_rate = 1;
++  relay_note_dir_request(conn, DIR_REQUEST_MICRODESC);
++  relay_note_dir_response_bytes(conn, 1000);
++  want[3] += 1000;
++  want[4] += 1000;
++  for (size_t i = 0; i < ARRAY_LENGTH(rules); i++)
++    tt_i64_op(DOS_BYTES_METRIC(rules[i]), OP_EQ, bytes0[i] + want[i]);
++  tt_i64_op(DESCRIPTOR_BYTES_METRIC(), OP_EQ, desc0 + desc_bytes);
++
++ done:
++  monotime_disable_test_mocking();
++  UNMOCK(connection_write_to_buf_impl_);
++  UNMOCK(hsdir_fetch_lottery_draw);
++  SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
++                    TO_OR_CIRCUIT(c)->p_chan = NULL);
++  circuit_free_all();
++  if (conn)
++    connection_free_minimal(TO_CONN(conn));
++  tor_free(hsdir_reply);
++  tor_free(chan);
++  hs_descriptor_free(desc);
++  tor_free(str);
++  tor_free(get);
++}
++
++/* tor_relay_begindir_discarded_bytes_total{where} and
++ * tor_relay_begindir_pending_bytes{where} */
++#define DISCARDED_METRIC(where) \
++  get_metric(METRICS_NAME(relay_begindir_discarded_bytes_total), "where", \
++             (where))
++#define PENDING_METRIC(where) \
++  get_metric(METRICS_NAME(relay_begindir_pending_bytes), "where", (where))
++
++/* Link a new tunneled directory server connection, writing a microdesc
++ * response, to a new exit edge that keeps what it reads on its inbuf, and
++ * add both to the connection array. Return the directory connection. */
++static dir_connection_t *
++new_writing_dir_stream(void)
++{
++  dir_connection_t *conn = new_waiting_dir_conn(CHANNEL_PREV_HOP_CLIENT,
++                                                NULL);
++  edge_connection_t *edge = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
++
++  relay_note_dir_request(conn, DIR_REQUEST_MICRODESC);
++  TO_CONN(conn)->state = DIR_CONN_STATE_SERVER_WRITING;
++  TO_CONN(edge)->state = EXIT_CONN_STATE_CONNECTING;
++  TO_CONN(edge)->purpose = EXIT_PURPOSE_CONNECT;
++  TO_CONN(edge)->address = tor_strdup("127.0.0.1");
++  edge->edge_has_sent_end = 1;
++  connection_link_connections(TO_CONN(conn), TO_CONN(edge));
++  connection_add(TO_CONN(conn));
++  connection_add(TO_CONN(edge));
++  return conn;
++}
++
++/* Every response byte is taken by its stream, dropped, or still pending:
++ * bytes left when the directory connection closes first are taken, those
++ * left when the stream closes first are dropped, and so are those the
++ * stream took but never sent. */
++static void
++test_dir_close_path_bytes(void *arg)
++{
++  dir_connection_t *conn;
++  connection_t *edge;
++  char body[700];
++  int64_t taken0, dir0, stream0;
++  (void) arg;
++
++  tor_init_connection_lists();
++  connection_bucket_init();
++  memset(body, 'x', sizeof(body));
++  taken0 = RESPONSE_BYTES_METRIC("microdesc");
++  dir0 = DISCARDED_METRIC("directory");
++  stream0 = DISCARDED_METRIC("stream");
++
++  /* The directory connection closes first: its stream takes what is left,
++   * then closes without sending it. */
++  conn = new_writing_dir_stream();
++  edge = TO_CONN(conn)->linked_conn;
++  buf_add(TO_CONN(conn)->outbuf, body, 300);
++  buf_add(edge->inbuf, body, 200);
++  tt_i64_op(PENDING_METRIC("directory"), OP_EQ, 300);
++  tt_i64_op(PENDING_METRIC("stream"), OP_EQ, 200);
++  connection_mark_for_close(TO_CONN(conn));
++  close_closeable_connections();
++  tt_i64_op(RESPONSE_BYTES_METRIC("microdesc"), OP_EQ, taken0 + 300);
++  tt_int_op(connection_get_inbuf_len(edge), OP_EQ, 500);
++  tt_i64_op(PENDING_METRIC("directory"), OP_EQ, 0);
++  tt_i64_op(PENDING_METRIC("stream"), OP_EQ, 500);
++  connection_mark_for_close(edge);
++  close_closeable_connections();
++  tt_i64_op(DISCARDED_METRIC("stream"), OP_EQ, stream0 + 500);
++  tt_i64_op(DISCARDED_METRIC("directory"), OP_EQ, dir0);
++  tt_int_op(smartlist_len(get_connection_array()), OP_EQ, 0);
++
++  /* The stream closes first: what its directory connection held is
++   * dropped. */
++  conn = new_writing_dir_stream();
++  edge = TO_CONN(conn)->linked_conn;
++  buf_add(TO_CONN(conn)->outbuf, body, sizeof(body));
++  connection_mark_for_close(edge);
++  close_closeable_connections();
++  tt_i64_op(DISCARDED_METRIC("stream"), OP_EQ, stream0 + 500);
++  connection_mark_for_close(TO_CONN(conn));
++  close_closeable_connections();
++  tt_i64_op(DISCARDED_METRIC("directory"), OP_EQ, dir0 + sizeof(body));
++  tt_i64_op(RESPONSE_BYTES_METRIC("microdesc"), OP_EQ, taken0 + 300);
++  tt_int_op(smartlist_len(get_connection_array()), OP_EQ, 0);
++
++ done:
++  ;
++}
++
+ #define DIR_CONN_GAUGE(state) \
+   get_metric(METRICS_NAME(relay_begindir_connections), "state", (state))
+ 
+@@ -2226,6 +2633,9 @@ test_metric_types(void *arg)
+   tt_assert(relay_metrics_export("# TYPE "
+                                  METRICS_NAME(relay_begindir_connections)
+                                  " gauge\n"));
++  tt_assert(relay_metrics_export("# TYPE "
++                                 METRICS_NAME(relay_begindir_pending_bytes)
++                                 " gauge\n"));
+ 
+  done:
+   ;
+@@ -2249,6 +2659,15 @@ test_metric_single_labels(void *arg)
+                            "type=\"hs_get\""));
+   tt_assert(EXPORTS_SERIES(relay_begindir_response_bytes_total,
+                            "type=\"hs_get\""));
++  tt_assert(EXPORTS_SERIES(relay_dos_response_bytes_total,
++                           "type=\"hsdir_req_reused\""));
++  tt_assert(EXPORTS_SERIES(relay_begindir_discarded_bytes_total,
++                           "where=\"stream\""));
++  tt_assert(EXPORTS_SERIES(relay_begindir_pending_bytes,
++                           "where=\"directory\""));
++  tt_assert(relay_metrics_export("\n"
++                         METRICS_NAME(relay_hsdir_descriptor_bytes_total)
++                         " 0\n"));
+ 
+  done:
+   ;
+@@ -2572,6 +2991,12 @@ struct testcase_t hs_cache[] = {
+     NULL, NULL },
+   { "dir_server_conns_gauge", test_dir_server_conns_gauge, TT_FORK,
+     NULL, NULL },
++  { "request_position_metrics", test_request_position_metrics, TT_FORK,
++    NULL, NULL },
++  { "empty_stream_metrics", test_empty_stream_metrics, TT_FORK, NULL, NULL },
++  { "dos_response_bytes_metrics", test_dos_response_bytes_metrics, TT_FORK,
++    NULL, NULL },
++  { "dir_close_path_bytes", test_dir_close_path_bytes, TT_FORK, NULL, NULL },
+   { "hsdir_reuse_and_prev_hop_counters",
+     test_hsdir_reuse_and_prev_hop_counters, TT_FORK, NULL, NULL },
+   { "hsdir_reuse_and_prev_hop_defenses",

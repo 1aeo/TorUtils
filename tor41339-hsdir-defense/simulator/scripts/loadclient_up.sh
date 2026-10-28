@@ -1,7 +1,8 @@
 #!/bin/bash
 # Launch a manual load-client tor joined to the private chutney net (loopback).
-# tor-loadclient = v3 series + loadclient-testonly.diff. EVIL_ISO_SESSIONGRP /
-# EVIL_ONEHOP are read from this process's environment if exported by caller.
+# tor-loadclient = v3 series + loadclient-testonly.diff. EVIL_ISO_SESSIONGRP,
+# EVIL_ONEHOP and EVIL_EMPTY_BEGINDIR are read from this process's environment
+# if exported by caller.
 # usage: loadclient_up.sh <net_nodes_dir> <lc_dir> <ctlport> <socksport> <bin> [role:client|onehop]
 set -euo pipefail
 NET_NODES="$1"; LC_DIR="$2"; CTLPORT="$3"; SOCKSPORT="$4"; BIN="$5"; ROLE="${6:-client}"
@@ -41,4 +42,4 @@ TORRC="$LC_DIR/torrc"
 } > "$TORRC"
 nohup "$BIN" -f "$TORRC" > "$LC_DIR/stdout.log" 2>&1 &
 echo "LOADCLIENT_PID=$!"
-echo "torrc=$TORRC ctl=$CTLPORT role=$ROLE bin=$BIN EVIL_ISO_SESSIONGRP=${EVIL_ISO_SESSIONGRP:-unset} EVIL_ONEHOP=${EVIL_ONEHOP:-unset}"
+echo "torrc=$TORRC ctl=$CTLPORT role=$ROLE bin=$BIN EVIL_ISO_SESSIONGRP=${EVIL_ISO_SESSIONGRP:-unset} EVIL_ONEHOP=${EVIL_ONEHOP:-unset}${EVIL_EMPTY_BEGINDIR:+ EVIL_EMPTY_BEGINDIR=$EVIL_EMPTY_BEGINDIR}"

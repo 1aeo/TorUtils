@@ -28,6 +28,7 @@ import math
 import re
 import socket
 import sys
+import textwrap
 import time
 import urllib.request
 
@@ -194,6 +195,293 @@ REQUEST_TYPES = (('hs_get', 'onion service descriptor fetches'),
 # Bands of the per-minute families: a cell's or fetch's place among its
 # source's, or its descriptor's, in the same minute.
 BANDS = ('1', '2_10', '11_100', '101_1000', '1001_plus')
+HOPS = ('client', 'known_relay', 'unknown_relay')
+# The kinds of request the conclusions name, as groups of
+# tor_relay_begindir_request_total types: a short name, what they were, and
+# their types.
+GROUPS = (('descriptor fetches', 'onion service descriptor fetches',
+           ('hs_get',)),
+          ('descriptor uploads', 'onion service descriptor uploads',
+           ('hs_post',)),
+          ('other directory requests', 'other directory requests',
+           ('consensus', 'microdesc', 'descriptor', 'other_get',
+            'other_post', 'other')),
+          ('unparsable requests', 'unparsable or incomplete requests',
+           ('unparsed',)),
+          ('empty streams', 'empty: they never sent a request',
+           ('no_request',)))
+HOP_WORDS = {'client': 'one hop from a client or bridge (never '
+                       'authenticated)',
+             'known_relay': 'through a relay we know',
+             'unknown_relay': 'from a relay identity we do not know'}
+# A cell on the wire, with a 4-byte circuit ID, and the response bytes a
+# DATA cell carries.
+CELL_BYTES = 514
+DATA_BYTES = 498
+# TestingDirConnectionMaxStall's default: we close a directory connection
+# that has written nothing for this long.
+STALL_SECONDS = 300
+# Labels of the families in the proposed metrics (analysis/
+# v8-metrics-proposal.md), shown when a relay exports them.
+REACHED = ('1', '2', '4', '11', '31', '101', '301', '1001')
+AGES = ('0', '1_9', '10_59', '60_plus')
+ENDED = (('client', 'by the client (END)'),
+         ('circuit', 'with their circuit'),
+         ('relay', 'by us (our stall timeout, mostly)'))
+# The DoS rules that can refuse a tunneled directory request: their
+# tor_relay_dos_total type, the option, and what they refuse.
+RULES = (('hsdir_req_reused', 'HSDirOneRequestPerCircuit',
+          'onion service requests'),
+         ('hsdir_unknown_prev_hop', 'HSDirRefuseUnknownPrevHop',
+          'onion service requests'),
+         ('hsdir_fetch_shed', 'HSDirFetchShedding', 'descriptor fetches'),
+         ('begindir_over_max', 'DoSBeginDirLimitEnabled', 'BEGIN_DIR cells'),
+         ('begindir_over_stream_rate', 'a BEGIN_DIR stream rate',
+          'BEGIN_DIR cells'))
+
+
+def mean_gauge(a, b, name, **labels):
+    """The mean of gauge <name> over an interval, from its two samples."""
+    return (get(a, name, **labels) + get(b, name, **labels)) / 2.0
+
+
+def pct(part, whole):
+    return 100.0 * part / whole if whole else 0.0
+
+
+def size(v, rate):
+    """Bytes, as a rate or a total."""
+    if rate:
+        return '%.1f KB/s' % (v / 1000.0)
+    return '%.1f MB' % (v / 1e6)
+
+
+def conclude(d, a, b, rate, elapsed, streams, anon):
+    """Print, in sentences, what the counts above say."""
+    says = []
+    say = says.append
+
+    def r(v):
+        return fmt(v, rate)
+
+    req = 'tor_relay_begindir_request_total'
+    if not has(b, req, type='no_request'):
+        print('What this says: the conclusions need +tor41339.7 or later.')
+        return
+    groups = [(short, what, types, sum(d(req, type=t) for t in types))
+              for short, what, types in GROUPS]
+    total = sum(g[3] for g in groups)
+    if total <= 0:
+        print('What this says: no tunneled directory requests %s.'
+              % ('in this interval' if rate else 'since the relay started'))
+        return
+    proposed = has(b, 'tor_relay_begindir_empty_stream_total')
+
+    # What the streams asked for, and who sent them.
+    ranked = sorted(groups, key=lambda g: -g[3])
+    _, top_what, top_types, top_v = ranked[0]
+    share = pct(top_v, total)
+    if share >= 50:
+        say('%s BEGIN_DIR streams (%.1f%%, %s) were %s.'
+            % ('Nearly all' if share >= 95 else 'Most', share, r(top_v),
+               top_what))
+    else:
+        say('No kind of BEGIN_DIR stream dominated: %s.'
+            % '; '.join('%s %.1f%%' % (short, pct(v, total))
+                        for short, _, _, v in ranked if v > 0))
+    by_hop = {h: sum(d(req, type=t, prev_hop=h) for t in top_types)
+              for h in HOPS}
+    parts = ['%.0f%% came %s' % (pct(v, top_v), HOP_WORDS[h])
+             for h, v in sorted(by_hop.items(), key=lambda x: -x[1])
+             if v > 0]
+    if parts:
+        line = 'Of those, %s.' % '; '.join(parts)
+        main_hop = max(by_hop, key=by_hop.get)
+        if pct(by_hop[main_hop], top_v) >= 50:
+            if main_hop == 'known_relay':
+                line += (' That previous hop relays circuits of other '
+                         'senders: no rule on previous hops refuses them.')
+            elif main_hop == 'unknown_relay' and top_types[0] in (
+                    'hs_get', 'hs_post'):
+                line += ' HSDirRefuseUnknownPrevHop refuses those.'
+            elif main_hop == 'client':
+                line += (' Their senders connect to us directly.' +
+                         (' Stock tor already refuses such onion service '
+                          'requests (503).'
+                          if top_types[0] in ('hs_get', 'hs_post') else ''))
+        say(line)
+
+    # How deep their circuits go.
+    cells = {h: [d('tor_relay_begindir_cell_total', prev_hop=h, nth=n)
+                 for n in BANDS] for h in HOPS}
+    all_cells = sum(sum(v) for v in cells.values())
+    if all_cells > 0:
+        h = max(cells, key=lambda x: sum(cells[x]))
+        v = cells[h]
+        line = ('%.0f%% of BEGIN_DIR cells came %s; %.1f%% of those were '
+                "past their circuit's 10th, %.1f%% past its 100th and %.1f%% "
+                'past its 1000th. Stock tor and Arti send one per onion '
+                'service circuit, and about 30 or fewer on a directory '
+                'circuit.' % (pct(sum(v), all_cells), HOP_WORDS[h],
+                              pct(sum(v[2:]), sum(v)),
+                              pct(sum(v[3:]), sum(v)), pct(v[4], sum(v))))
+        if has(b, 'tor_relay_begindir_circuit_total'):
+            def reached(x):
+                return d('tor_relay_begindir_circuit_total', prev_hop=h,
+                         reached=x)
+            if rate:
+                # A circuit is counted when it reaches each number, maybe
+                # before this interval began.
+                line += (' Their circuits passing 30 BEGIN_DIR cells: %s; '
+                         'passing 1000: %s.' % (r(reached('31')),
+                                                r(reached('1001'))))
+            else:
+                line += (' Of their %s circuits, %s carried more than 30, '
+                         'and %s more than 1000.'
+                         % (r(reached('1')), r(reached('31')),
+                            r(reached('1001'))))
+        say(line)
+    if has(b, 'tor_relay_begindir_request_position_total'):
+        deep = []
+        for short, _, types, v in ranked[:2]:
+            past10 = sum(d('tor_relay_begindir_request_position_total',
+                           type=t, nth=n) for t in types for n in BANDS[2:])
+            if v > 0:
+                deep.append('%.1f%% of %s' % (pct(past10, v), short))
+        if deep:
+            say("By kind, %s were past their circuit's 10th BEGIN_DIR cell."
+                % ' and '.join(deep))
+    reused = d('tor_relay_dos_total', type='hsdir_req_reused')
+    if anon > 0:
+        say('%.1f%% of onion service requests (%s) came on a circuit that '
+            'had already made one; stock clients make one per circuit.'
+            % (pct(reused, anon), r(reused)))
+
+    # What each rule refuses, or would.
+    of = {'onion service requests': anon,
+          'descriptor fetches': d('tor_relay_hsdir_fetch_total'),
+          'BEGIN_DIR cells': all_cells}
+    rules = [(pct(d('tor_relay_dos_total', type=t), of[what]), t, option,
+              what) for t, option, what in RULES if of[what] > 0]
+    if rules:
+        line = ('Each rule counts what it refuses, or would refuse while '
+                'off (a BEGIN_DIR stream rate has no option yet):')
+        bytes_too = has(b, 'tor_relay_dos_response_bytes_total')
+        if bytes_too:
+            line += '\n|%-59s %s' % ('', 'responses')
+        for p, t, option, what in sorted(rules, reverse=True):
+            line += '\n|%-26s %5.1f%% of %-22s' % (option, p, what)
+            if bytes_too:
+                line += ' %s' % size(
+                    d('tor_relay_dos_response_bytes_total', type=t), rate)
+        line += ('\nA client refused can retry on a new circuit: refusing a '
+                 'share of requests saves less than that share of '
+                 'bandwidth.')
+        say(line)
+
+    # What they cost.
+    rb = 'tor_relay_begindir_response_bytes_total'
+    by = {t: d(rb, type=t) for t, _ in REQUEST_TYPES if has(b, rb, type=t)}
+    sent = sum(by.values())
+    if by:
+        line = 'Responses took %s, read by their streams' % size(sent, rate)
+        t = max(by, key=by.get)
+        # Per descriptor served, for fetches: their 404s and 503s are small.
+        n = (d('tor_relay_hsdir_fetch_total', action='success')
+             if t == 'hs_get' else d(req, type=t))
+        if by[t] > 0 and n > 0:
+            per = by[t] / n
+            line += ('; %.0f%% of it for %s, %.0f bytes per %s, about %d '
+                     'cells with their CONNECTED and END cells'
+                     % (pct(by[t], sent), dict(REQUEST_TYPES)[t], per,
+                        'descriptor served' if t == 'hs_get' else 'request',
+                        math.ceil(per / DATA_BYTES) + 2))
+        line += ('. Each accepted stream also cost a CONNECTED cell of %d '
+                 'bytes: %s.' % (CELL_BYTES, size(streams * CELL_BYTES, rate)))
+        written = d('tor_relay_traffic_bytes', direction='written')
+        if written > 0:
+            wire = sent * CELL_BYTES / DATA_BYTES + streams * CELL_BYTES
+            line += (' As cells, that is about %.0f%% of the bytes the '
+                     'relay wrote.' % pct(wire, written))
+        if has(b, 'tor_relay_hsdir_descriptor_bytes_total') and by.get(
+                'hs_get'):
+            found = pct(d('tor_relay_hsdir_descriptor_bytes_total'),
+                        by['hs_get'])
+            line += (' Of the descriptor fetches\' %s, %.0f%% carried a '
+                     'descriptor%s' % (size(by['hs_get'], rate), found,
+                                       '.' if found >= 99.5 else
+                                       '; the rest were not found or '
+                                       'refused.'))
+        if has(b, 'tor_relay_begindir_discarded_bytes_total'):
+            dropped = d('tor_relay_begindir_discarded_bytes_total')
+            if dropped > 0:
+                line += (' %s (%.1f%% of what was produced) was dropped when '
+                         'its stream or connection closed, never sent.'
+                         % (size(dropped, rate),
+                            pct(dropped, sent + d(
+                                'tor_relay_begindir_discarded_bytes_total',
+                                where='directory'))))
+            else:
+                line += ' No response bytes were dropped at close.'
+        say(line)
+
+    # Streams that sent nothing.
+    empty = d(req, type='no_request')
+    if empty > 0:
+        line = ('Empty streams: %s (%.1f%% of BEGIN_DIR streams); their '
+                'CONNECTED cells alone cost %s.'
+                % (r(empty), pct(empty, total),
+                   size(empty * CELL_BYTES, rate)))
+        if rate:
+            life = mean_gauge(a, b, 'tor_relay_begindir_connections',
+                              state='command_wait') / empty
+            # The gauge also holds streams about to send a request, so
+            # this is an upper bound on their mean life.
+            line += (' Their mean life was at most %.0f s (from the gauge of '
+                     'streams waiting for a request)' % life)
+            if life < 10:
+                # Markov's inequality.
+                line += (', so at least %.0f%% closed within 10 s, before '
+                         'our stall timeout could close them.'
+                         % (100 * (1 - life / 10.0)))
+            elif life >= 0.8 * STALL_SECONDS:
+                line += (': near our stall timeout (TestingDirConnection'
+                         'MaxStall, 5 minutes by default), as when streams '
+                         'are held open until we close them.')
+            else:
+                line += '.'
+        if proposed:
+            es = 'tor_relay_begindir_empty_stream_total'
+            line += ' They ended: %s.' % '; '.join(
+                '%.0f%% %s' % (pct(d(es, ended=e), empty), words)
+                for e, words in ENDED)
+            line += (' Ages: %s seconds. %.0f%% were on a circuit that made '
+                     'an onion service request.'
+                     % (', '.join('%.0f%% %s' % (pct(d(es, age=x), empty),
+                                                 x.replace('_plus', '+')
+                                                 .replace('_', '-'))
+                                  for x in AGES),
+                        pct(d(es, circuit='hsdir'), empty)))
+        say(line)
+
+    if not proposed:
+        say('Not in these metrics (see analysis/v8-metrics-proposal.md): '
+            'which kinds of request sit deep in their circuits, how empty '
+            'streams end and on which circuits, the response bytes each '
+            'rule would avoid, descriptor and not-found bytes apart, and '
+            'bytes dropped at close.')
+
+    print('What this says (%s):' % ('rates over %.1f s' % elapsed if rate
+                                    else 'since the relay started'))
+    for i, text in enumerate(says, 1):
+        for j, para in enumerate(text.split('\n')):
+            if para.startswith('|'):    # a table row, as it is
+                print(('       ' + para[1:]).rstrip())
+                continue
+            lines = textwrap.wrap(para, 73)
+            print((('  %d. ' % i) if j == 0 else '     ') + lines[0])
+            for l in lines[1:]:
+                print('     ' + l)
 
 
 def main():
@@ -312,7 +600,7 @@ def main():
               % fmt(max(anon - unlisted, 0), rate))
     print('    authenticated, relay identity we do not know: %s'
           % fmt(unlisted, rate))
-    hops = ('client', 'known_relay', 'unknown_relay')
+    hops = HOPS
     if has(b, 'tor_relay_begindir_cell_total'):
         print('  Q1 x Q4: all BEGIN_DIR by previous hop: client (never '
               'authenticated: one hop from a client or bridge), relay we '
@@ -363,6 +651,67 @@ def main():
                   % (what, ('%.1f KB/s' % (by / 1000.0)) if rate else
                      ('%d bytes' % by),
                      ('%.0f bytes' % (by / n)) if n else '-'))
+
+    if has(b, 'tor_relay_begindir_request_position_total'):
+        print("  Q1 x place: requests by their BEGIN_DIR cell's place on its "
+              'circuit')
+        row = '    %-38s' + ' %10s' * len(BANDS)
+        print(row % (('',) + BANDS))
+        for t, what in REQUEST_TYPES:
+            v = [d('tor_relay_begindir_request_position_total', type=t, nth=n)
+                 for n in BANDS]
+            if any(v):
+                print(row % ((what,) + tuple(fmt(x, rate) for x in v)))
+    if has(b, 'tor_relay_begindir_circuit_total'):
+        print('  circuits that reached each number of BEGIN_DIR cells')
+        row = '    %-14s' + ' %9s' * len(REACHED)
+        print(row % (('',) + REACHED))
+        for h in hops:
+            print(row % ((h,) + tuple(
+                fmt(d('tor_relay_begindir_circuit_total', prev_hop=h,
+                      reached=x), rate) for x in REACHED)))
+    if has(b, 'tor_relay_begindir_empty_stream_total'):
+        print('  empty streams, by how they ended, their circuit, and their '
+              'age in seconds')
+        row = '    %-36s' + ' %10s' * len(AGES)
+        print(row % (('',) + AGES))
+        for e, words in ENDED:
+            for c, cwords in (('hsdir', 'onion service'), ('other', 'other')):
+                v = [d('tor_relay_begindir_empty_stream_total', ended=e,
+                       circuit=c, age=x) for x in AGES]
+                if any(v):
+                    print(row % (('ended %s, %s circuit'
+                                  % (e, cwords),) +
+                                 tuple(fmt(x, rate) for x in v)))
+    if has(b, 'tor_relay_dos_response_bytes_total'):
+        print('  Q6 x rules: response bytes of requests each rule refuses, or '
+              'would refuse while off')
+        for t, option, _ in RULES:
+            if not has(b, 'tor_relay_dos_response_bytes_total', type=t):
+                continue
+            by = d('tor_relay_dos_response_bytes_total', type=t)
+            n = d('tor_relay_dos_total', type=t)
+            print('    %-40s %s  (%s per request counted)'
+                  % (option, size(by, rate),
+                     ('%.0f bytes' % (by / n)) if n else '-'))
+    if has(b, 'tor_relay_hsdir_descriptor_bytes_total'):
+        found = d('tor_relay_hsdir_descriptor_bytes_total')
+        print('    descriptor fetch responses that carried a descriptor: %s; '
+              'not found or refused: %s'
+              % (size(found, rate),
+                 size(d('tor_relay_begindir_response_bytes_total',
+                        type='hs_get') - found, rate)))
+    if has(b, 'tor_relay_begindir_discarded_bytes_total'):
+        print('  response bytes dropped at close, never sent: left in the '
+              'directory connection %s, taken by the stream %s; waiting now: '
+              '%d and %d bytes'
+              % (size(d('tor_relay_begindir_discarded_bytes_total',
+                        where='directory'), rate),
+                 size(d('tor_relay_begindir_discarded_bytes_total',
+                        where='stream'), rate),
+                 get(b, 'tor_relay_begindir_pending_bytes',
+                     where='directory'),
+                 get(b, 'tor_relay_begindir_pending_bytes', where='stream')))
 
     print('  Q2: requests per circuit')
     # The anonymous onion service requests, which earlier builds also
@@ -474,19 +823,18 @@ def main():
 
     if rate:
         # Little's law: mean number in a state / the rate of entering it.
-        def mean_gauge(state):
-            return (get(a, 'tor_relay_begindir_connections', state=state) +
-                    get(b, 'tor_relay_begindir_connections',
-                        state=state)) / 2.0
+        def conns(state):
+            return mean_gauge(a, b, 'tor_relay_begindir_connections',
+                              state=state)
         hs_ok = get_a['success']
         print('  mean time per directory stream (from the state gauge, '
               'over this interval):')
         if streams:
             print('    waiting for a request: %.1f s'
-                  % (mean_gauge('command_wait') / streams))
+                  % (conns('command_wait') / streams))
         if hs_ok:
             print('    writing an onion service descriptor: %.1f s'
-                  % (mean_gauge('writing_hs_descriptor') / hs_ok))
+                  % (conns('writing_hs_descriptor') / hs_ok))
             gone = hs_ok - d('tor_relay_begindir_response_total',
                              type='hs_descriptor') - (
                 get(b, 'tor_relay_begindir_connections',
@@ -505,33 +853,38 @@ def main():
                  fmt(get_a['refused'], rate)))
 
     if args.control or args.control_socket:
-        try:
-            ctl = Control(args)
-            lines = ctl.getinfo('orconn-status')
-            if lines is None:
-                raise RuntimeError('GETINFO orconn-status failed')
-            kinds, per_ip, unnamed = classify_orconns(lines)
-            # The HSDir check: in our consensus, or a descriptor we have.
-            # Done in memory; identities are never printed.
-            known = sum(1 for fp in unnamed
-                        if ctl.getinfo('ns/id/' + fp) is not None or
-                        ctl.getinfo('desc/id/' + fp) is not None)
-            ctl.close()
-        except Exception as e:  # noqa: BLE001 - report and carry on
-            print('  open OR connections: ControlPort query failed: %s' % e)
-            return
-        print('  open OR connections by peer (GETINFO orconn-status), now')
-        print('    relay named in our node list            %d'
-              % kinds['named'])
-        print('    authenticated identity with no name     %d'
-              % kinds['unnamed'])
-        print('      of their %d identities, in our consensus or '
-              'descriptors: %d' % (len(unnamed), known))
-        print('    client (never authenticated)            %d'
-              % kinds['client'])
-        if per_ip:
-            print('    distinct client addresses: %d, most connections from '
-                  'one address: %d' % (len(per_ip), max(per_ip.values())))
+        print_orconns(args)
+    print()
+    conclude(d, a, b, rate, elapsed, streams, anon)
+
+
+def print_orconns(args):
+    """Print the open OR connections by kind of peer, from the ControlPort."""
+    try:
+        ctl = Control(args)
+        lines = ctl.getinfo('orconn-status')
+        if lines is None:
+            raise RuntimeError('GETINFO orconn-status failed')
+        kinds, per_ip, unnamed = classify_orconns(lines)
+        # The HSDir check: in our consensus, or a descriptor we have.
+        # Done in memory; identities are never printed.
+        known = sum(1 for fp in unnamed
+                    if ctl.getinfo('ns/id/' + fp) is not None or
+                    ctl.getinfo('desc/id/' + fp) is not None)
+        ctl.close()
+    except Exception as e:  # noqa: BLE001 - report and carry on
+        print('  open OR connections: ControlPort query failed: %s' % e)
+        return
+    print('  open OR connections by peer (GETINFO orconn-status), now')
+    print('    relay named in our node list            %d' % kinds['named'])
+    print('    authenticated identity with no name     %d'
+          % kinds['unnamed'])
+    print('      of their %d identities, in our consensus or '
+          'descriptors: %d' % (len(unnamed), known))
+    print('    client (never authenticated)            %d' % kinds['client'])
+    if per_ip:
+        print('    distinct client addresses: %d, most connections from '
+              'one address: %d' % (len(per_ip), max(per_ip.values())))
 
 
 if __name__ == '__main__':

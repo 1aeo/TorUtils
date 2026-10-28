@@ -267,6 +267,11 @@ questions about the flood to the metrics that answer them.
 to add next, and records which parts `.7` built.
 [`analysis/v7-review.md`](analysis/v7-review.md) is the two-round adversarial
 review of `.7`: what it found, what changed, and the mutation testing.
+[`analysis/v8-metrics-proposal.md`](analysis/v8-metrics-proposal.md) reads
+four production floods on `.7` relays. It says what `.7` shows, which the
+breakdown tool now prints as plain conclusions, and what `.7` can't show. It
+then proposes seven more families and one fix, prototyped on `.7` in
+`engineering/v8-prototype/`.
 
 ## Live capture (`data/`)
 
@@ -286,13 +291,15 @@ operator/      count-only canary + capture playbook + crash-at-scale review,
 analysis/      claim ledger, previous-hop FP measurement, live-capture interpretation,
                flood cost on an HSDir and constrained hosts, the network team's
                BEGIN_DIR questions, metrics proposal and coverage, the series
-               reviews (.6 and .7), what .7 means for the cleanup-indexing work
+               reviews (.6 and .7), what .7 means for the cleanup-indexing work,
+               the v8 metrics proposal
 data/          de-identified live-relay flood capture (JSON)
 engineering/   amd64 build-check, CI matrix, seccomp audit, .deb build + install,
                client-lab/ (C tor and Arti clients under shedding),
                breakdown-lab/ (checks the BEGIN_DIR breakdown tool),
                v7-review/ (per-commit results and mutation testing of .7's
-               two review rounds; fixes for two stock tor bugs they found)
+               two review rounds; fixes for two stock tor bugs they found),
+               v8-prototype/ (the proposed metrics on .7: diff, mutants, lab)
 packages/      the built .debs for Ubuntu 24.04 and 26.04 (+ geoipdb), SHA256SUMS, buildinfo/changes
 ```
 

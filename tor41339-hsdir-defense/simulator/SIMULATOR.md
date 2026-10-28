@@ -35,5 +35,5 @@ Parameterize target rate (requests/s), concurrency, and total duration. Drive it
 ---
 
 ## Harness pieces in this directory
-- `loadclient-testonly.diff` — test-only client change: `EVIL_ISO_SESSIONGRP` makes a client reuse one circuit for several HS fetches; `EVIL_ONEHOP` makes an unpublished relay do one-hop fetches. Throwaway; never for upstream.
+- `loadclient-testonly.diff` — test-only client change: `EVIL_ISO_SESSIONGRP` makes a client reuse one circuit for several HS fetches; `EVIL_ONEHOP` makes an unpublished relay do one-hop fetches; `EVIL_EMPTY_BEGINDIR=N` makes every Nth HS fetch open its BEGIN_DIR stream and never send its request (empty streams). Throwaway; never for upstream.
 - `ctl.py` — control-port driver starting point (HSFETCH loop with cache purge).
