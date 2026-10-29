@@ -1,0 +1,15 @@
+sizeof() on x86-64 (gcc 13.3), from gdb on the built src/app/tor:
+
+struct                      stock 0.4.9.15   .8 (and .9 before the review)   .9
+dos_client_stats_t                      64                              72   64
+clientmap_entry_t                      120                             128  120
+channel_t                              528                             536  528
+or_circuit_t                           528                             528  528
+dir_connection_t                       248                             248  248
+hs_cache_dir_descriptor_t               40                              56   56
+
+0018's per-source state (the minute modulo 4096 and two 10-bit counts) is 32
+bits, after num_circ_max_cell_queue_size in dos_client_stats_t and after
+is_local in channel_t, both in what was padding. hs_cache_dir_descriptor_t
+grows by 0005's download credit flag and 0012's fetch token bucket; the cache
+counts that size in its allocation total.

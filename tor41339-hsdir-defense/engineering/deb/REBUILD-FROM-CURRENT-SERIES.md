@@ -1,9 +1,9 @@
 # Rebuild the `.deb`s (24.04 noble, 26.04 resolute) from the current series
 
-The attached packages in `../../packages/` are `+tor41339.8` for Ubuntu 24.04
+The attached packages in `../../packages/` are `+tor41339.9` for Ubuntu 24.04
 (`~noble+1`) and 26.04 (`~resolute+1`), built on tor 0.4.9.15 from
 `../../patches/0001`–`0020` (provenance: `../../packages/BUILD-INFO.txt`). Use
-this runbook whenever `patches/` changes, bumping the suffix (`+tor41339.8`,
+this runbook whenever `patches/` changes, bumping the suffix (`+tor41339.9`,
 …) so `dpkg` sees the new build as newer. Rebuild **both** releases from the same
 series, and regenerate every artifact below together, so the binaries, the
 `debian-patches/` build copy and the docs never diverge.
@@ -45,8 +45,8 @@ series, and regenerate every artifact below together, so the binaries, the
    `EXPECT_PATCHES` (21 for `0000`–`0020`), and `VER` (default 0.4.9.15).
 2. Run once per release (the driver runs with `set -o pipefail`, so a failed
    `dpkg-buildpackage` fails the run):
-   - `docker run --rm --network host -e SUITE=noble -e REV=8 -e EXPECT_PATCHES=21 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-noble:/out ubuntu:24.04 bash /in/build-in-container-reordered.sh`
-   - `docker run --rm --network host -e SUITE=resolute -e REV=8 -e EXPECT_PATCHES=21 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-resolute:/out ubuntu:26.04 bash /in/build-in-container-reordered.sh`
+   - `docker run --rm --network host -e SUITE=noble -e REV=9 -e EXPECT_PATCHES=21 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-noble:/out ubuntu:24.04 bash /in/build-in-container-reordered.sh`
+   - `docker run --rm --network host -e SUITE=resolute -e REV=9 -e EXPECT_PATCHES=21 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-resolute:/out ubuntu:26.04 bash /in/build-in-container-reordered.sh`
 
    Expect `dh_auto_test` green in both (see `BUILD-INFO.txt` for the counts).
 3. Check: no compiler warning on any line the series adds (warnings in

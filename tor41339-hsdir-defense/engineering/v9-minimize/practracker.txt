@@ -1,0 +1,26 @@
+Per commit (1-20): practracker's problem count and exit code (stock tor-0.4.9.15: 98),
+checkSpace.pl -C on the C files the commit changes (lines of output),
+lintChanges.py on the changes files it changes (lines of output), and lines it adds
+over 79 columns (only practracker exception lines and man page option headers).
+The set of problems practracker reports is stock's after every commit.
+
+fd6966b381 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+0ca736187a practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+3f97b2c844 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+61734845a5 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+91a261e3ad practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+6f063586eb practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+a07c77010a practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=1
+3ef3e1df19 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+fc31006752 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+3515631840 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=1
+6b4e3cd11c practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=1
+6445c569d6 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+8accd6adc7 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=1
+c39a3f1e4e practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+ee2a1126c9 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+4910c8b969 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+9c10c892b3 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+7c6f39db4c practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+d8bb41b719 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0
+40a20c40e8 practracker=98 rc=98 checkSpace=0 lintChanges=0 wide=0

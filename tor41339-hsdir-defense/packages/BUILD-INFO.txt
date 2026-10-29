@@ -1,19 +1,27 @@
-Provenance: tor 0.4.9.15 + the tor#41339 series, +tor41339.8, amd64, for
-  Ubuntu 24.04 (noble):    tor_0.4.9.15-1~noble+1+tor41339.8_amd64.deb
-  Ubuntu 26.04 (resolute): tor_0.4.9.15-1~resolute+1+tor41339.8_amd64.deb
+Provenance: tor 0.4.9.15 + the tor#41339 series, +tor41339.9, amd64, for
+  Ubuntu 24.04 (noble):    tor_0.4.9.15-1~noble+1+tor41339.9_amd64.deb
+  Ubuntu 26.04 (resolute): tor_0.4.9.15-1~resolute+1+tor41339.9_amd64.deb
 plus tor-geoipdb (all) for each. Checksums: SHA256SUMS. These replace
-+tor41339.7 on every relay. Against .7, .8 is rebased onto tor 0.4.9.15,
-whose own BEGIN_DIR defenses replace three of .7's rules, and drops .7's
-cap on open directory streams per circuit, which never fired in .7's
-floods (../engineering/v8-rebase/README.md). A torrc that sets one of the
-dropped options fails with "Unknown option": HSDirOneRequestPerCircuit,
++tor41339.8 on every relay. .9 is .8 with 790 fewer changed lines and the
+fixes of a review of the smaller series (../engineering/v9-minimize/), with
+.8's options, defaults and metric names, so a torrc that works with .8 works
+with .9. What changes: a stream closed before it sent anything counts as the
+request type no_request (.8: circuit_dead); HSDirRefuseUnknownPrevHop refuses
+by closing the circuit instead of answering 503; while shedding, fetches
+within their descriptor's rate are answered first whenever they arrive;
+0003 discards trailing input only on tunneled connections, so DirPort
+connections keep tor's 10 MB limit; and 0018's per-source state takes what
+was padding, so no client address entry or channel grows.
+
+From .7 (../engineering/v8-rebase/README.md): a torrc that sets one of the
+options .8 dropped fails with "Unknown option": HSDirOneRequestPerCircuit,
 DoSBeginDirLimitEnabled, DoSBeginDirMaxStreams, and .6's
 HSDirDescriptorFetchLimit, which .7 kept as an alias. The counters
 hsdir_req_reused, hsdir_circ_reused, begindir_over_max,
 begindir_over_stream_rate, the HSDir action circuit_dead and
 tor_relay_begindir_request_over_max_total are gone; the request type
 circuit_dead and tor 0.4.9.15's begindir_* counts are new, and
-hsdir_unknown_prev_hop now leaves out a circuit's second request.
+hsdir_unknown_prev_hop leaves out a circuit's second request.
 
 The two builds are the same code with the same features. They differ only in
 the system libraries each Ubuntu release ships (24.04: OpenSSL 3.0.13,
@@ -45,41 +53,41 @@ restoring doc/nofooter.conf, which the 0.4.9.15 tarball still omits, then
 tor41339-hsdir-defense/patches/0001-0020 (byte-identical copies in
 ../engineering/deb/build-reordered/debian-patches/):
   feac23ee1a832a71ae4e57b8f34cdaf43b024ec342764814b86e504bf2502e0d  0000-restore-doc-nofooter.conf.patch
-  06bdef1a11310000c4c6ac723fde9d491e3da516b39a3d7dd3e537645d74de93  0001-dirserv-Stop-unthrottled-warnings-on-malformed-HTTP-.patch
-  027a1edd9b0aad04911851acd100dcfe6a7c1bb940ffeb13476d6e55af1a816b  0002-dirserv-Don-t-buffer-request-bodies-larger-than-an-H.patch
-  da1ecff2d75fe8f84f5d661824014f98950436ba15ab7bf66ad0c968ada8070d  0003-dirserv-Discard-client-input-received-after-the-requ.patch
-  e5864d8cf508cf76401f27c0841c4fd18271a005ac2fadfba938646771d8d100  0004-hs_desc-Check-signature-length-before-verifying-the-.patch
-  9e451277beb9ad32e934bd1a94a58d2cc30040025941b1ec099d8611901e7c0b  0005-hs_cache-Only-credit-HSDir-downloads-once-the-respon.patch
-  677f46d9cb92c44aba1617ceac2bcb61eb01baf05dedd53b12b2362e2e2f467e  0006-relay_metrics-Count-onion-service-descriptor-fetches.patch
-  332c1883c5cb6b59f8fb313378dc74a4d59b196b722a6b05555b6a51055d5c0b  0007-relay_metrics-Count-tunneled-directory-requests-and-.patch
-  ac055011345d7f6c2712d541a0e2549e3a78525557598c5475541c78a7809ee8  0008-relay_metrics-Add-a-gauge-of-tunneled-directory-serv.patch
-  9a14d39286db376b0954fdbe83d4466ce9a4d451b4b76e079876b6f9ca0d3b9e  0009-relay_metrics-Make-fill_dos_values-table-driven.patch
-  e6ebedac18704b498b39d4553d8d9ff9af6d59f30107a5aeed66cad4b65f781d  0010-dos-Count-HSDir-requests-from-unknown-previous-hops.patch
-  adfbbdc3908967e8586b5fe680119cac16b02dbeed2e37e271c64381ab98277a  0011-dos-Add-an-off-by-default-HSDir-defense-against-unkn.patch
-  66dcce95291e2a5d20cefaf5608da4dfe58331b703f76cc7ee1dc9c1f2e345e1  0012-hs_cache-Count-fetches-of-each-descriptor-over-a-per.patch
-  5def7db01a3e3c6d5dfcc755e72927d09d07d4bda3587897920a2d9a8d1ac1eb  0013-dos-Shed-onion-service-descriptor-fetches-over-a-byt.patch
-  75c63c318bd41b46b93ddfd8b5dfb5cbe598e9a7e822ad502fda03ac81944557  0014-proto_http-Reject-a-declared-body-that-can-never-fit.patch
-  1adc689e79d3b39070c51922638a3bf37755302adc81461dae4e020b5bdc23d4  0015-relay_metrics-Count-circuits-and-directory-streams-b.patch
-  19bc7fab4590b3ccbb15a7d0c7609c15a074f8c0f94a0670ef0776981ed51027  0016-dos-Count-client-CREATE-cells-over-the-circuit-creat.patch
-  be3811afd4cb3fee055af9fe7b47860cef7d9adb08338323f166254e156a07df  0017-relay_metrics-Count-tunneled-directory-response-byte.patch
-  5c694d108ba1148d27a61d9649606791cedc1a8b9b01facc0fdb1d54bb865151  0018-rephist-Count-CREATE-and-BEGIN_DIR-cells-per-source-.patch
-  6c9081fc54bf18ee111442b930e357cb99d580df65d5166c00b7fb089f686c65  0019-relay_metrics-Count-HSDir-fetches-per-descriptor-and.patch
-  4bdd3ce395635901a3e7a463c74218bcca5b5c231419edb92725c4be71a743d9  0020-dos-Count-HSDir-requests-from-relays-known-only-by-d.patch
+  d3dfba8f223ef6a9486ba1a7e9aef51fa18e5c20ea8c0109493915177eff2f0f  0001-dirserv-Stop-unthrottled-warnings-on-malformed-HTTP-.patch
+  bfca88f4d082d7c701c08021dfdd30e413b2c197407fadf22483290ad7a2261d  0002-dirserv-Don-t-buffer-request-bodies-larger-than-an-H.patch
+  a910e0cb977cc071799b900161e3263bce46879190e918796e14bcea462d5c32  0003-dirserv-Discard-client-input-received-after-the-requ.patch
+  17f17f7ca02467fafa90fedb87ae37c8327ad8c16ca30491bd6b38223b80dabd  0004-hs_desc-Check-signature-length-before-verifying-the-.patch
+  d9e1dc736aa3d29c38e5af17ccf6eec3be2f5616f4126667a0baac5b9333ea90  0005-hs_cache-Only-credit-HSDir-downloads-once-the-respon.patch
+  51256573a2c7e4f398bce074bd424300e1218ee2210aedaad027a9958b6e2be4  0006-relay_metrics-Count-onion-service-descriptor-fetches.patch
+  8f8dfa1f6786edc5e8c67370a58ede364187df6728f367d784bc1f422e37715a  0007-relay_metrics-Count-tunneled-directory-requests-and-.patch
+  a9b881da9da85c3b73023e1b1e313906a70298fbba687562d2d769c0a4c6f8a0  0008-relay_metrics-Add-a-gauge-of-tunneled-directory-serv.patch
+  e757956138c8c04ff1d33cc327a0de1ee946752219a6ed7427a049b64c9b9a81  0009-relay_metrics-Make-fill_dos_values-table-driven.patch
+  67676a10b63f42f6581784366e9b46e2e707b10d60802230ca66cdfbe60c1ec1  0010-dos-Count-HSDir-requests-from-unknown-previous-hops.patch
+  aefd47fe0e6a04b57a16f9da12eb2af48000c952139b91e1623feb61c3bd441b  0011-dos-Add-an-off-by-default-HSDir-defense-against-unkn.patch
+  f55ad661fb6f49aa7809a39f4a8c5d18193926f544c33633174f590cf1beb9c1  0012-hs_cache-Count-fetches-of-each-descriptor-over-a-per.patch
+  c8bb6a0eba801729cf5aef52f567fe1a627e7ed08446bffe63ee1c53cc34bb1f  0013-dos-Shed-onion-service-descriptor-fetches-over-a-byt.patch
+  9aafd3f480df271fa74ac5c9eecbd5bb4b7c69ab62d6857655fff1b4180cb705  0014-proto_http-Reject-a-declared-body-that-can-never-fit.patch
+  fb0a897a270d4ae4e41bf7c5beab2f7568828395c7f270aea145ac061299dd5a  0015-relay_metrics-Count-circuits-and-directory-streams-b.patch
+  df828997081f0b501b7030a8c6d87668e1cac2947c7dbf4f36585ba3c1242612  0016-dos-Count-client-CREATE-cells-over-the-circuit-creat.patch
+  6d8cb2d1aa079b8523cf591c1f556af572732c7c0bcde29166bda86c520537a8  0017-relay_metrics-Count-tunneled-directory-response-byte.patch
+  7d91db41153fab034d664646572c77ab2bc3cfc277c22a8700ea3f8f023e77f7  0018-rephist-Count-CREATE-and-BEGIN_DIR-cells-per-source-.patch
+  039be15aff63dbbfb4fd5a166619b8e9b322ff7ea1ab872a0c0441725b920dd5  0019-relay_metrics-Count-HSDir-fetches-per-descriptor-and.patch
+  daaf12d55a80371ba9c57b2fec384dca2962ee6fdeb613722e2c7494b0965816  0020-dos-Count-HSDir-requests-from-relays-known-only-by-d.patch
   3d3640d556a337e06eb89c69c7a4cb344271ac8d16b533eaf092c64a5e1b3b3b  series
 
 Builders (driver ../engineering/deb/build-reordered/build-in-container-reordered.sh
-with SUITE=noble or resolute, VER=0.4.9.15, REV=8, EXPECT_PATCHES=21;
+with SUITE=noble or resolute, VER=0.4.9.15, REV=9, EXPECT_PATCHES=21;
 dpkg-buildpackage -b; set -o pipefail so a failed build cannot be masked):
   noble:    fresh ubuntu:24.04 container (Canonical LTS image,
             digest sha256:5ce7043d3beb84e91bfeecacb5fafc80602bf247a1dd6016bc0fe7d69d707eca), gcc 13
   resolute: fresh ubuntu:26.04 container (Canonical LTS image,
             digest sha256:51e35c02a42cf2a6646c5879f5752b38098ed0a20056a989f0af3a3c5e697c9a), gcc 15
 
-dh_auto_test (make test), both builds: 1648 tests ok, 24 skipped, 0 failed.
+dh_auto_test (make test), both builds: 1639 tests ok, 24 skipped, 0 failed.
 Compiler warnings on lines the series adds: none in either build. The only
 warnings in files the series touches are in unchanged upstream test code:
 test_hs_descriptor.c:151 -Wmaybe-uninitialized (both builds) and
-test_dir_handle_get.c:2410 (upstream's 2409) -Wmaybe-uninitialized (gcc 15
+test_dir_handle_get.c:2413 (upstream's 2409) -Wmaybe-uninitialized (gcc 15
 only). asciidoc rendered the manual with no warning.
 Each binary contains the 5 new option names and the 11 new metric family
 names, and none of the names .7 replaced or .8 dropped; its manual has the
@@ -88,13 +96,14 @@ with braces.
 
 The same series, built from git with --enable-fatal-warnings, builds with no
 warning and passes the whole unit suite at each of the 20 commits (1605 to
-1641 tests), and passes check-spaces and lintChanges at each, and
+1632 tests), and passes check-spaces and lintChanges at each, and
 check-includes, check-docs, check-logs and check-changes at the tip;
 practracker reports the same problems as stock 0.4.9.15 after every commit.
 At the tip it builds and passes with --disable-module-relay, and the series
 applies with git am onto tor-0.4.9.15 (giving the same tree) and onto tor
-main (a0062a3e3e). ../engineering/v8-rebase/ has the records, with 19
-mutants, all killed.
+main (a0062a3e3e). ../engineering/v9-minimize/ has the records, with 31
+mutants, all killed, and the sizes of the structs tor allocates per client,
+channel, circuit and connection, none larger than in stock.
 
 Install: only the tor package is needed; tor-geoipdb is a Recommends
 (unchanged GeoIP data). Pick the package matching the host's release

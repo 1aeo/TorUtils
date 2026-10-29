@@ -1,0 +1,35 @@
+# Mutants of the lines the .9 minimization and the review's fixes changed,
+# each built at the tip and run with the hs_cache, dos, dir_handle_get,
+# hs_descriptor, dir, status and relay unit tests.
+id	patch	result	mutation
+m01	0007	killed	a request is counted again on every call
+m02	0007	killed	no_request and unparsed swapped at close
+m03	0007	killed	directory client connections counted at close
+m04	0007	killed	DirPort responses counted
+m05	0007	killed	response types swapped
+m06	0007	killed	GETs matched by the URL table not typed
+m07	0011	killed	HSDirRefuseUnknownPrevHop inverted
+m08	0011	killed	hsdir_unknown_prev_hop not counted
+m09	0011	killed	GET: previous hop counted before tor's per-circuit limit
+m10	0020	killed	relays known only by descriptor refused
+m11	0020	killed	descriptor-only relays counted as unknown
+m12	0012	killed	per-descriptor rate inverted
+m13	0012	killed	per-descriptor bucket not adjusted to new options
+m14	0013	killed	fetch accounting never starts a new second
+m15	0017	killed	untyped response bytes exported, every type shifted
+m16	0017	killed	response bytes of every typed request counted under one type
+m17	0015	killed	requests not counted by previous hop
+m18	0015	killed	BEGIN_DIR cells from clients not exported
+m19	0006	killed	invalid and not_newer uploads swapped
+m20	0002	killed	authorities limited to an HS descriptor's size
+m21	0003	killed	trailing client input kept
+m22	0004	killed	signature length checked only after the signing cert
+m23	0007	killed	dead stream: circuit_dead and no_request swapped
+m24	0007	killed	dead stream that sent nothing counted as circuit_dead
+m25	0013	killed	while shedding, the others not held to the budget
+m26	0013	killed	fetches within their rate answered first outside shedding
+m27	0011	killed	unknown previous hop refused without closing the circuit
+m28	0003	killed	DirPort input discarded too
+m29	0003	killed	partial tunneled request discarded
+m30	0018	killed	per-source CREATE count doesn't stop at the last band
+m31	0018	killed	per-source counts reset every second

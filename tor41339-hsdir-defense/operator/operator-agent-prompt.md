@@ -166,7 +166,8 @@ circuits. Same-host members are not independent-host replications.
 
 Under continuous isolated reuse enforcement, report delta R as inferred close
 decisions; K can miss circuits reused before the toggle. With previous-hop-only
-enforcement, delta U counts 503-refusal decisions, not delivered responses.
+enforcement, delta U counts 503-refusal decisions (circuit-close decisions
+on `+tor41339.9`), not delivered responses.
 Combined-mode attribution lacks overlap telemetry. Enforcement changes which
 future requests reach the counters; lower traffic alone is not prevented work.
 

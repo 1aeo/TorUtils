@@ -1,4 +1,4 @@
-From f595dda06ed99be458db6354eec7b93ec295c87e Mon Sep 17 00:00:00 2001
+From 69931369f32721d6817b8fb053a9dc4b2ea4010b Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 09:09:03 +0000
 Subject: [PATCH] param-spec, rend-spec: Document HSDir DoS parameters
@@ -19,7 +19,7 @@ Companion to tor#41339.
  2 files changed, 47 insertions(+)
 
 diff --git a/spec/param-spec.md b/spec/param-spec.md
-index 6a86178f..e653dbeb 100644
+index 6a86178f..fab89650 100644
 --- a/spec/param-spec.md
 +++ b/spec/param-spec.md
 @@ -347,6 +347,11 @@ will upload its descriptor to.
@@ -62,11 +62,11 @@ index 6a86178f..e653dbeb 100644
 +First appeared: TBD.
 +
 +"HSDirRefuseUnknownPrevHop" -- If 1, a public onion service directory
-+refuses, with an HTTP 503 response, an onion service descriptor fetch or
-+upload whose previous hop is not a relay in its consensus or for which it
-+has a descriptor. Directories count such requests whatever the value. The
-+relay torrc option of the same name (0, 1, or auto) overrides this
-+parameter. It is independent of "refuseunknownexits".
++refuses an onion service descriptor fetch or upload whose previous hop is
++not a relay in its consensus or for which it has a descriptor, by closing
++its circuit with reason RESOURCELIMIT. Directories count such requests
++whatever the value. The relay torrc option of the same name (0, 1, or auto)
++overrides this parameter. It is independent of "refuseunknownexits".
 +Min: 0. Max: 1. Default: 0.
 +First appeared: TBD.
 +

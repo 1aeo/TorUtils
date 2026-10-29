@@ -1,0 +1,41 @@
+Format: 1.8
+Date: Thu, 29 Oct 2026 08:29:53 +0000
+Source: tor
+Binary: tor tor-geoipdb
+Built-For-Profiles: derivative.ubuntu noudeb
+Architecture: amd64 all
+Version: 0.4.9.15-1~resolute+1+tor41339.9
+Distribution: resolute
+Urgency: medium
+Maintainer: Peter Palfrader <weasel@debian.org>
+Changed-By: 1aeo <github@1aeo.com>
+Description:
+ tor        - anonymizing overlay network for TCP
+ tor-geoipdb - GeoIP database for Tor
+Changes:
+ tor (0.4.9.15-1~resolute+1+tor41339.9) resolute; urgency=medium
+ .
+   * Apply the tor#41339 HSDir defensive series (patches 0001-0020) on
+     tor 0.4.9.15: HTTP and onion service descriptor hardening;
+     MetricsPort counters for HSDir fetches and uploads, tunneled
+     directory requests and response bytes by type and previous hop,
+     circuits and BEGIN_DIR cells by previous hop and by source and
+     descriptor per minute; the HSDirRefuseUnknownPrevHop and
+     HSDirFetchShedding defenses, both off by default; restore
+     doc/nofooter.conf. The same options and MetricsPort series as
+     +tor41339.8, from a smaller series with the fixes from its review.
+Checksums-Sha1:
+ c784359d99662679e2b181cb5c07a49d247d29c4 7097894 tor-dbgsym_0.4.9.15-1~resolute+1+tor41339.9_amd64.ddeb
+ 19af4b11175ed35e0d89be51fa5ddb2062e8f977 2774384 tor-geoipdb_0.4.9.15-1~resolute+1+tor41339.9_all.deb
+ 8a00dd1ef631c6402440d383d1b9a748115456e4 8297 tor_0.4.9.15-1~resolute+1+tor41339.9_amd64.buildinfo
+ 09f507ed2f02c26af457f0cda2adc6423dca786b 1787428 tor_0.4.9.15-1~resolute+1+tor41339.9_amd64.deb
+Checksums-Sha256:
+ 7f3ef81c18c9b228d5fe77687a0c3893057dbdddb44c5ebd63664ea1d8059572 7097894 tor-dbgsym_0.4.9.15-1~resolute+1+tor41339.9_amd64.ddeb
+ d656486c710fd39006fa582c06356743eea97f55e0c9e8b97cd8fe0271671d7e 2774384 tor-geoipdb_0.4.9.15-1~resolute+1+tor41339.9_all.deb
+ 7da60da22c322855ce15966f9e3beeaba643b42253e64243a7f4212621223650 8297 tor_0.4.9.15-1~resolute+1+tor41339.9_amd64.buildinfo
+ d8be9298d2635bac375e9cdd487222a798e4941cc0ae3c5771c03f33701fcc1d 1787428 tor_0.4.9.15-1~resolute+1+tor41339.9_amd64.deb
+Files:
+ a6a92aca1f6f287fe4308294b4f3d8d5 7097894 debug optional tor-dbgsym_0.4.9.15-1~resolute+1+tor41339.9_amd64.ddeb
+ ff1079c4d12c74c666ff02550831c615 2774384 net optional tor-geoipdb_0.4.9.15-1~resolute+1+tor41339.9_all.deb
+ 353079fcf1a3241016f7db531b2200c4 8297 net optional tor_0.4.9.15-1~resolute+1+tor41339.9_amd64.buildinfo
+ b1e4d7a0f6459929652e1bbe7cabad7f 1787428 net optional tor_0.4.9.15-1~resolute+1+tor41339.9_amd64.deb

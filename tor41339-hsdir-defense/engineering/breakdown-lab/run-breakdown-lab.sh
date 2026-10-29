@@ -7,10 +7,10 @@
 # (answered 503), and the network's ordinary directory traffic.
 # Usage:
 #   CHUTNEY=<chutney checkout> LOADCLIENT=<test-only load-client tor> \
-#   OUT=<file> [IMAGE=lab24v8] [TOR_BIN=<tor bound over /usr/bin/tor>] \
+#   OUT=<file> [IMAGE=lab24v9] [TOR_BIN=<tor bound over /usr/bin/tor>] \
 #   ./run-breakdown-lab.sh
-# The default image holds +tor41339.8; IMAGE=lab24v7 or lab24v6 checks the
-# tool against a +tor41339.7 or .6 relay.
+# The default image holds +tor41339.9; IMAGE=lab24v8, lab24v7 or lab24v6
+# checks the tool against a +tor41339.8, .7 or .6 relay.
 set -u
 : "${CHUTNEY:?}" "${LOADCLIENT:?}" "${OUT:?}"
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -19,4 +19,4 @@ TOOL=$(cd "$HERE/../../operator" && pwd)
 ARGS=(--rm --network none -v "$CHUTNEY":/chutney:ro -v "$SIM":/sim:ro
   -v "$LOADCLIENT":/lc/tor:ro -v "$HERE":/bd:ro -v "$TOOL":/tool:ro)
 [ -n "${TOR_BIN:-}" ] && ARGS+=(-v "$TOR_BIN":/usr/bin/tor:ro)
-docker run "${ARGS[@]}" "${IMAGE:-lab24v8}" bash /bd/in-lab.sh > "$OUT" 2>&1
+docker run "${ARGS[@]}" "${IMAGE:-lab24v9}" bash /bd/in-lab.sh > "$OUT" 2>&1

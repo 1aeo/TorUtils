@@ -1,4 +1,4 @@
-From fdfee2afd94ef22680060852b87611eb6aa2324c Mon Sep 17 00:00:00 2001
+From 4910c8b969bd8f34d8587756dba2e44a5f79e55f Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Thu, 22 Oct 2026 19:24:21 +0000
 Subject: [PATCH 16/20] dos: Count client CREATE cells over the circuit
@@ -17,8 +17,10 @@ empty, whether or not the address is marked. Count also, as
 tor_relay_dos_total{type="circuit_untracked"}, the CREATE cells from
 client addresses that have no geoip entry, which DoSCircuitCreation
 neither limits nor counts: tor drops an address's entry a day or two
-after its last new connection, even while older connections from it
-stay open.
+after its last new connection, even while older connections from it stay
+open, and on a bridge, a client that connects over a pluggable transport
+has an entry only under the transport's name, which DoSCircuitCreation
+doesn't look up.
 
 In T seconds, an address can send at most DoSCircuitCreationBurst +
 T * DoSCircuitCreationRate CREATE cells before its bucket is empty, so
@@ -30,30 +32,31 @@ DoSCircuitCreationEnabled is set, as the bucket does.
 
 Part of #41339.
 ---
- changes/ticket41339_metrics       |  7 +++
+ changes/ticket41339_metrics       |  8 ++++
  src/core/or/dos.c                 | 24 ++++++++++
  src/core/or/dos.h                 |  2 +
  src/feature/relay/relay_metrics.c |  2 +
  src/test/test_dos.c               | 78 +++++++++++++++++++++++++++++++
- 5 files changed, 113 insertions(+)
+ 5 files changed, 114 insertions(+)
 
 diff --git a/changes/ticket41339_metrics b/changes/ticket41339_metrics
-index e8a232105f..1fcde36d6b 100644
+index 6c07fb9fb6..b02735b1d1 100644
 --- a/changes/ticket41339_metrics
 +++ b/changes/ticket41339_metrics
-@@ -24,3 +24,10 @@
-       previous hop, as tor_relay_begindir_request_total. A request dropped
-       unread because its stream or circuit was already closing is counted as
-       type "circuit_dead". Part of ticket 41339.
+@@ -27,3 +27,11 @@
+       bridge), "known_relay" or "unknown_relay". This is not a hop count. Count
+       BEGIN_DIR cells also by their place among their circuit's BEGIN_DIR cells
+       (nth). Part of ticket 41339.
 +    - Count the CREATE cells from client channels that find their address's
 +      circuit creation bucket empty, as
 +      tor_relay_dos_total{type="circuit_over_rate"}, marked or not, and those
-+      from client addresses that tor no longer tracks, which have no bucket, as
++      from client addresses that have no bucket, as tor no longer tracks them
++      or, on a bridge, tracks them under a pluggable transport, as
 +      {type="circuit_untracked"}, both while DoSCircuitCreationEnabled is on.
 +      Together with the client CREATE cells, they bound the number of client
 +      addresses from below. Part of ticket 41339.
 diff --git a/src/core/or/dos.c b/src/core/or/dos.c
-index e953f747d9..bc2f7d888c 100644
+index 74c9c1925c..45b4119d5c 100644
 --- a/src/core/or/dos.c
 +++ b/src/core/or/dos.c
 @@ -54,6 +54,10 @@ static int32_t dos_cc_defense_time_period;
@@ -90,7 +93,7 @@ index e953f747d9..bc2f7d888c 100644
  /** Return the number of marked addresses. */
  uint32_t
  dos_get_num_cc_marked_addr(void)
-@@ -1032,6 +1052,7 @@ dos_cc_new_create_cell(channel_t *chan)
+@@ -876,6 +896,7 @@ dos_cc_new_create_cell(channel_t *chan)
      /* We can have a connection creating circuits but not tracked by the geoip
       * cache. Once this DoS subsystem is enabled, we can end up here with no
       * entry for the channel. */
@@ -98,7 +101,7 @@ index e953f747d9..bc2f7d888c 100644
      goto end;
    }
  
-@@ -1048,6 +1069,9 @@ dos_cc_new_create_cell(channel_t *chan)
+@@ -892,6 +913,9 @@ dos_cc_new_create_cell(channel_t *chan)
     * underflow the bucket. */
    if (entry->dos_stats.cc_stats.circuit_bucket > 0) {
      entry->dos_stats.cc_stats.circuit_bucket--;
@@ -109,10 +112,10 @@ index e953f747d9..bc2f7d888c 100644
  
    /* This is the detection. Assess at every CREATE cell if the client should
 diff --git a/src/core/or/dos.h b/src/core/or/dos.h
-index 3d03abb9ac..3742d0c68c 100644
+index 1015493e8e..f4a1ea80b7 100644
 --- a/src/core/or/dos.h
 +++ b/src/core/or/dos.h
-@@ -112,6 +112,8 @@ void dos_note_begindir_hsdir_rejected(void);
+@@ -113,6 +113,8 @@ void dos_note_begindir_hsdir_rejected(void);
  uint32_t dos_get_num_cc_marked_addr(void);
  uint32_t dos_get_num_cc_marked_addr_maxq(void);
  uint64_t dos_get_num_cc_rejected(void);
@@ -122,10 +125,10 @@ index 3d03abb9ac..3742d0c68c 100644
  uint64_t dos_get_num_conn_addr_connect_rejected(void);
  uint64_t dos_get_num_single_hop_refused(void);
 diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
-index 25291db193..fcc39ef889 100644
+index 41cdb03755..6c7e0f311c 100644
 --- a/src/feature/relay/relay_metrics.c
 +++ b/src/feature/relay/relay_metrics.c
-@@ -468,6 +468,8 @@ fill_dos_values(void)
+@@ -469,6 +469,8 @@ fill_dos_values(void)
      uint64_t value;
    } entries[] = {
      { "circuit_rejected", dos_get_num_cc_rejected() },
@@ -135,7 +138,7 @@ index 25291db193..fcc39ef889 100644
      { "circuit_killed_max_cell_outq", stats_n_circ_max_cell_outq_reached },
      { "marked_address", dos_get_num_cc_marked_addr() },
 diff --git a/src/test/test_dos.c b/src/test/test_dos.c
-index 2f4531fe4a..da1fe2fe44 100644
+index 4e898fb301..eee913d828 100644
 --- a/src/test/test_dos.c
 +++ b/src/test/test_dos.c
 @@ -27,6 +27,8 @@
@@ -236,7 +239,7 @@ index 2f4531fe4a..da1fe2fe44 100644
  /** Test that the circuit tracker of the DoS subsystem will block clients who
   *  try to establish too many circuits. */
  static void
-@@ -1270,6 +1347,7 @@ test_dos_hsdir_fetch_shedding_edges(void *arg)
+@@ -1197,6 +1274,7 @@ test_dos_hsdir_fetch_shedding_edges(void *arg)
  struct testcase_t dos_tests[] = {
    { "conn_creation", test_dos_conn_creation, TT_FORK, NULL, NULL },
    { "circuit_creation", test_dos_circuit_creation, TT_FORK, NULL, NULL },
@@ -244,3 +247,6 @@ index 2f4531fe4a..da1fe2fe44 100644
    { "bucket_refill", test_dos_bucket_refill, TT_FORK, NULL, NULL },
    { "known_relay" , test_known_relay, TT_FORK,
      NULL, NULL },
+-- 
+2.43.0
+

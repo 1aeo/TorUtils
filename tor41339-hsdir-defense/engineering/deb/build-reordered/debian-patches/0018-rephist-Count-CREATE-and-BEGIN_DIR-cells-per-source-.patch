@@ -1,4 +1,4 @@
-From cc3fa5615a43a550d023a6158abe190870067a19 Mon Sep 17 00:00:00 2001
+From 7c6f39db4cd1eea0888c0c87bfdbecbf29462c7a Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Fri, 23 Oct 2026 05:28:25 +0000
 Subject: [PATCH 18/20] rephist: Count CREATE and BEGIN_DIR cells per source
@@ -23,39 +23,38 @@ A source is what tor would limit: all client channels from one address,
 while the DoS subsystem tracks it (whenever one of its defenses is on,
 from the address's last new connection until tor forgets it a day or two
 later), or each channel from a relay. A client channel from an address
-tor doesn't track is its own source. Each source keeps its minute and
-two counts that stop at the last band, 8 bytes on the channel and on the
-client address entry, in a source_minute_t of their own header so that
-channel.h needn't include dos.h. Bridges don't count these, so as to say
-nothing about their users. Only the MetricsPort shows these counts, so a
-relay without one skips them, and with them the address lookup each cell
-from a client channel costs.
+tor doesn't track is its own source. Each source keeps its minute,
+modulo 4096, and two counts that stop at the last band, in 32 bits on
+the channel and on the client address entry, where they take what was
+padding; a source that was silent for a multiple of 4096 minutes, about
+68 hours, carries its counts over. Bridges don't count these, so as to
+say nothing about their users. Only the MetricsPort shows these counts,
+so a relay without one skips them, and with them the address lookup each
+cell from a client channel costs.
 
 Part of #41339.
 ---
- changes/ticket41339_metrics       |   8 ++
- src/core/or/channel.h             |   3 +
+ changes/ticket41339_metrics       |   8 +++
+ src/core/or/channel.h             |   2 +
  src/core/or/command.c             |   2 +-
- src/core/or/dos.h                 |   4 +
- src/core/or/include.am            |   1 +
- src/core/or/source_minute_st.h    |  23 ++++
- src/feature/relay/relay_metrics.c |  44 ++++++
- src/feature/relay/relay_metrics.h |   6 +
- src/feature/stats/rephist.c       |  70 +++++++++-
+ src/core/or/dos.h                 |   3 +
+ src/core/or/or.h                  |   9 +++
+ src/feature/relay/relay_metrics.c |  44 +++++++++++++
+ src/feature/relay/relay_metrics.h |   6 ++
+ src/feature/stats/rephist.c       |  71 +++++++++++++++++++-
  src/feature/stats/rephist.h       |   5 +-
- src/test/test_dos.c               |  35 +++++
- src/test/test_hs_cache.c          | 216 +++++++++++++++++++++++++++++-
- 12 files changed, 406 insertions(+), 11 deletions(-)
- create mode 100644 src/core/or/source_minute_st.h
+ src/test/test_dos.c               |   7 ++
+ src/test/test_hs_cache.c          | 104 +++++++++++++++++++++++++++++-
+ 11 files changed, 254 insertions(+), 7 deletions(-)
 
 diff --git a/changes/ticket41339_metrics b/changes/ticket41339_metrics
-index 968fc4e1fe..b7f924c6fa 100644
+index 9568bd73ac..8a79b2d583 100644
 --- a/changes/ticket41339_metrics
 +++ b/changes/ticket41339_metrics
-@@ -37,3 +37,11 @@
-       now counted as "other_get" or "other_post" by method, and a POST that a
-       relay which isn't public refuses is counted before it is answered. Part
-       of ticket 41339.
+@@ -38,3 +38,11 @@
+     - Count the bytes of each tunneled directory response that its stream reads
+       while the directory connection is open, by what the request asked for, as
+       tor_relay_begindir_response_bytes_total. Part of ticket 41339.
 +    - Count CREATE and BEGIN_DIR cells by previous hop and by their place among
 +      the cells of the same kind that their source sent in the same minute
 +      (nth), as tor_relay_create_cell_source_total and
@@ -65,26 +64,18 @@ index 968fc4e1fe..b7f924c6fa 100644
 +      source would cut. Bridges don't count these, and other relays count them
 +      only while a MetricsPort is configured. Part of ticket 41339.
 diff --git a/src/core/or/channel.h b/src/core/or/channel.h
-index e40495f5b1..991e8e1a89 100644
+index e40495f5b1..2d6175b286 100644
 --- a/src/core/or/channel.h
 +++ b/src/core/or/channel.h
-@@ -11,6 +11,7 @@
- 
- #include "core/or/or.h"
- #include "core/or/circuitmux.h"
-+#include "core/or/source_minute_st.h"
- #include "lib/container/handles.h"
- #include "lib/crypt_ops/crypto_ed25519.h"
- 
-@@ -409,6 +410,8 @@ struct channel_t {
- 
-   /** For how many circuits are we n_chan?  What about p_chan? */
-   unsigned int num_n_circuits, num_p_circuits;
+@@ -438,6 +438,8 @@ struct channel_t {
+    * this channel in circuitbuild.c
+    */
+   unsigned int is_local:1;
 +  /** Cells this channel sent in its latest minute, if it is from a relay. */
 +  source_minute_t source_minute;
  
-   /**
-    * True iff this channel shouldn't get any new circs attached to it,
+   /** Have we logged a warning about circID exhaustion on this channel?
+    * If so, when? */
 diff --git a/src/core/or/command.c b/src/core/or/command.c
 index bdfa15c3a5..7e690bfce2 100644
 --- a/src/core/or/command.c
@@ -99,70 +90,41 @@ index bdfa15c3a5..7e690bfce2 100644
    /* We check for the conditions that would make us drop the cell before
     * we check for the conditions that would make us send a DESTROY back,
 diff --git a/src/core/or/dos.h b/src/core/or/dos.h
-index 3742d0c68c..6fcb543f7c 100644
+index f4a1ea80b7..2c939ecc4e 100644
 --- a/src/core/or/dos.h
 +++ b/src/core/or/dos.h
-@@ -11,6 +11,7 @@
+@@ -61,6 +61,9 @@ typedef struct dos_client_stats_t {
  
- #include "core/or/or.h"
- 
-+#include "core/or/source_minute_st.h"
- #include "lib/evloop/token_bucket.h"
- 
- /* Structure that keeps stats of circuit creation per client connection IP. */
-@@ -55,6 +56,9 @@ typedef struct dos_client_stats_t {
-   /* Client connection statistics. */
-   conn_client_stats_t conn_stats;
- 
+   /** Number of times the circ_max_cell_queue_size limit has been reached. */
+   uint32_t num_circ_max_cell_queue_size;
++
 +  /** Cells this address sent over client channels in its latest minute. */
 +  source_minute_t source_minute;
-+
-   /* Circuit creation statistics. This is only used if the circuit creation
-    * subsystem has been enabled (dos_cc_enabled). */
-   cc_client_stats_t cc_stats;
-diff --git a/src/core/or/include.am b/src/core/or/include.am
-index 2d2141c06c..7927a9d0b9 100644
---- a/src/core/or/include.am
-+++ b/src/core/or/include.am
-@@ -121,6 +121,7 @@ noinst_HEADERS +=					\
- 	src/core/or/conflux_util.h			\
- 	src/core/or/server_port_cfg_st.h		\
- 	src/core/or/socks_request_st.h			\
-+	src/core/or/source_minute_st.h			\
- 	src/core/or/status.h				\
- 	src/core/or/tor_version_st.h			\
- 	src/core/or/var_cell_st.h			\
-diff --git a/src/core/or/source_minute_st.h b/src/core/or/source_minute_st.h
-new file mode 100644
-index 0000000000..2052900351
---- /dev/null
-+++ b/src/core/or/source_minute_st.h
-@@ -0,0 +1,23 @@
-+/* Copyright (c) 2026, The Tor Project, Inc. */
-+/* See LICENSE for licensing information */
-+
-+/**
-+ * @file source_minute_st.h
-+ * @brief The cells that one source of circuits sent in a minute.
-+ **/
-+
-+#ifndef SOURCE_MINUTE_ST_H
-+#define SOURCE_MINUTE_ST_H
-+
-+#include "lib/cc/torint.h"
-+
+ } dos_client_stats_t;
+ 
+ /* General API. */
+diff --git a/src/core/or/or.h b/src/core/or/or.h
+index 553378324b..42f863f607 100644
+--- a/src/core/or/or.h
++++ b/src/core/or/or.h
+@@ -450,6 +450,15 @@ typedef enum channel_prev_hop_t {
+   CHANNEL_PREV_HOP_COUNT
+ } channel_prev_hop_t;
+ 
 +/** The cells one source of circuits sent in its latest minute: see
 + * rep_hist_note_source_cell(). */
 +typedef struct source_minute_t {
-+  /** approx_time() / 60 when these cells arrived. */
-+  uint32_t minute;
++  /** approx_time() / 60 when these cells arrived, modulo 4096. */
++  unsigned int minute : 12;
 +  /** CREATE and BEGIN_DIR cells in that minute, stopping at NTH_BAND_MAX. */
-+  uint16_t n_create, n_begindir;
++  unsigned int n_create : 10, n_begindir : 10;
 +} source_minute_t;
 +
-+#endif /* !defined(SOURCE_MINUTE_ST_H) */
+ /** Initial value for both sides of a circuit transmission window when the
+  * circuit is initialized.  Measured in cells. */
+ #define CIRCWINDOW_START 1000
 diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
-index 03edcbaae8..eac01fc414 100644
+index 470f513f29..145647d74f 100644
 --- a/src/feature/relay/relay_metrics.c
 +++ b/src/feature/relay/relay_metrics.c
 @@ -79,6 +79,8 @@ static void fill_begindir_conns_values(void);
@@ -197,7 +159,7 @@ index 03edcbaae8..eac01fc414 100644
  };
  static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
  
-@@ -1470,6 +1488,32 @@ fill_begindir_cell_values(void)
+@@ -1467,6 +1485,32 @@ fill_begindir_cell_values(void)
                          rep_hist_get_begindir_cells(p), NTH_BAND_COUNT);
  }
  
@@ -206,7 +168,7 @@ index 03edcbaae8..eac01fc414 100644
 +static void
 +fill_source_cell_values(relay_metrics_key_t key, bool begindir)
 +{
-+  for (int p = CHANNEL_PREV_HOP_CLIENT; p < CHANNEL_PREV_HOP_COUNT; p++)
++  for (int p = 0; p < CHANNEL_PREV_HOP_COUNT; p++)
 +    fill_labeled_values(&base_metrics[key], "prev_hop", prev_hop_names[p],
 +                        "nth", nth_band_names,
 +                        rep_hist_get_source_cells(begindir, p),
@@ -227,11 +189,11 @@ index 03edcbaae8..eac01fc414 100644
 +  fill_source_cell_values(RELAY_METRICS_NUM_BEGINDIR_CELL_SOURCES, true);
 +}
 +
- /** Tunneled directory responses fully handed to their stream, by type. */
- static uint64_t dir_responses[DIR_RESPONSE_TYPE_COUNT];
- /** Label values for a dir_response_type_t. */
+ /** Tunneled directory responses fully handed to their stream (which doesn't
+  * mean that the client received them): onion service descriptors, and
+  * anything else, including error responses. */
 diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
-index 28becb3b51..8ff911fa7c 100644
+index d76263aaa4..65bddd20ac 100644
 --- a/src/feature/relay/relay_metrics.h
 +++ b/src/feature/relay/relay_metrics.h
 @@ -79,6 +79,12 @@ typedef enum {
@@ -248,7 +210,7 @@ index 28becb3b51..8ff911fa7c 100644
  
  /** The metadata of a relay metric. */
 diff --git a/src/feature/stats/rephist.c b/src/feature/stats/rephist.c
-index 937b564eb4..dca0b6b8cf 100644
+index 937b564eb4..aaebd26eee 100644
 --- a/src/feature/stats/rephist.c
 +++ b/src/feature/stats/rephist.c
 @@ -70,6 +70,7 @@
@@ -267,7 +229,7 @@ index 937b564eb4..dca0b6b8cf 100644
  #include "feature/stats/rephist.h"
  #include "lib/cc/ctassert.h"
  #include "lib/container/order.h"
-@@ -1687,13 +1689,65 @@ static uint64_t create_cells[CHANNEL_PREV_HOP_COUNT];
+@@ -1687,13 +1689,66 @@ static uint64_t create_cells[CHANNEL_PREV_HOP_COUNT];
  /** BEGIN_DIR cells, by previous hop and by place among those of their
   * circuit. */
  static uint64_t begindir_cells[CHANNEL_PREV_HOP_COUNT][NTH_BAND_COUNT];
@@ -306,10 +268,12 @@ index 937b564eb4..dca0b6b8cf 100644
 +                          bool begindir)
 +{
 +  const or_options_t *options = get_options();
-+  const uint32_t minute = (uint32_t) (approx_time() / 60);
++  const unsigned minute = (unsigned) (approx_time() / 60 % 4096);
 +  source_minute_t *src;
-+  uint16_t *n;
-+
++  unsigned n;
+ 
+-/** Note a CREATE cell from a previous hop of kind <b>prev_hop</b>, before we
+- * decide whether to accept it. */
 +  if (!chan || options->BridgeRelay || !options->MetricsPort_set)
 +    return;
 +  src = source_minute_of(chan, prev_hop);
@@ -317,14 +281,13 @@ index 937b564eb4..dca0b6b8cf 100644
 +    src->minute = minute;
 +    src->n_create = src->n_begindir = 0;
 +  }
-+  n = begindir ? &src->n_begindir : &src->n_create;
-+  if (*n < NTH_BAND_MAX)
-+    ++*n;
-+  source_cells[begindir][prev_hop][nth_band_of(*n)]++;
++  if (begindir)
++    n = src->n_begindir = MIN(src->n_begindir + 1, NTH_BAND_MAX);
++  else
++    n = src->n_create = MIN(src->n_create + 1, NTH_BAND_MAX);
++  source_cells[begindir][prev_hop][nth_band_of(n)]++;
 +}
- 
--/** Note a CREATE cell from a previous hop of kind <b>prev_hop</b>, before we
-- * decide whether to accept it. */
++
 +/** Note a CREATE cell from <b>chan</b>, whose peer identified itself as
 + * <b>prev_hop</b>, before we decide whether to accept it. */
  void
@@ -336,7 +299,7 @@ index 937b564eb4..dca0b6b8cf 100644
  }
  
  /** Note a BEGIN_DIR cell on <b>circ</b>, before we decide whether to accept
-@@ -1706,6 +1760,7 @@ rep_hist_note_begindir_cell(or_circuit_t *circ)
+@@ -1706,6 +1761,7 @@ rep_hist_note_begindir_cell(or_circuit_t *circ)
    if (circ->n_begindir < NTH_BAND_MAX)
      circ->n_begindir++;
    begindir_cells[circ->prev_hop][nth_band_of(circ->n_begindir)]++;
@@ -344,7 +307,7 @@ index 937b564eb4..dca0b6b8cf 100644
  }
  
  /** Return the numbers of CREATE cells, indexed by the channel_prev_hop_t of
-@@ -1724,6 +1779,15 @@ rep_hist_get_begindir_cells(channel_prev_hop_t prev_hop)
+@@ -1724,6 +1780,15 @@ rep_hist_get_begindir_cells(channel_prev_hop_t prev_hop)
    return begindir_cells[prev_hop];
  }
  
@@ -381,59 +344,32 @@ index 0765cfb789..76efffdc52 100644
  void rep_hist_buffer_stats_add_circ(circuit_t *circ,
                                      time_t end_of_interval);
 diff --git a/src/test/test_dos.c b/src/test/test_dos.c
-index da1fe2fe44..7a4a5d919f 100644
+index eee913d828..baa3089051 100644
 --- a/src/test/test_dos.c
 +++ b/src/test/test_dos.c
-@@ -1344,6 +1344,40 @@ test_dos_hsdir_fetch_shedding_edges(void *arg)
-   tor_free(dummy_ns);
- }
+@@ -790,6 +790,8 @@ test_dos_create_cell_prev_hop(void *arg)
  
-+/** Test that every CREATE cell, even one we drop, is counted by its place
-+ * among the CREATE cells its source sent in the same minute, and not among
-+ * its BEGIN_DIR cells. */
-+static void
-+test_dos_create_cell_source(void *arg)
-+{
-+  channel_t *chan = new_fake_channel();
-+  cell_t cell;
-+  const channel_prev_hop_t hop = CHANNEL_PREV_HOP_UNKNOWN_RELAY;
-+  uint64_t first0, later0, begindir0;
-+  (void) arg;
-+
+   MOCK(we_are_hibernating, mock_we_are_hibernating);
+   get_options_mutable()->ORPort_set = 1;
 +  get_options_mutable()->MetricsPort_set = 1;
 +  update_approx_time(1800000000); /* The start of a minute. */
-+  first0 = rep_hist_get_source_cells(false, hop)[NTH_BAND_1];
-+  later0 = rep_hist_get_source_cells(false, hop)[NTH_BAND_2_10];
-+  begindir0 = rep_hist_get_source_cells(true, hop)[NTH_BAND_1];
-+  memset(&cell, 0, sizeof(cell));
-+  cell.command = CELL_CREATE2;
-+
-+  /* Two cells from one relay's channel, dropped for their circuit ID 0. */
-+  command_process_cell(chan, &cell);
-+  command_process_cell(chan, &cell);
-+  tt_u64_op(rep_hist_get_source_cells(false, hop)[NTH_BAND_1], OP_EQ,
-+            first0 + 1);
-+  tt_u64_op(rep_hist_get_source_cells(false, hop)[NTH_BAND_2_10], OP_EQ,
-+            later0 + 1);
-+  tt_u64_op(rep_hist_get_source_cells(true, hop)[NTH_BAND_1], OP_EQ,
-+            begindir0);
-+
-+ done:
-+  free_fake_channel(chan);
-+}
-+
- struct testcase_t dos_tests[] = {
-   { "conn_creation", test_dos_conn_creation, TT_FORK, NULL, NULL },
-   { "circuit_creation", test_dos_circuit_creation, TT_FORK, NULL, NULL },
-@@ -1363,5 +1397,6 @@ struct testcase_t dos_tests[] = {
-     NULL, NULL },
-   { "hsdir_fetch_shedding_edges", test_dos_hsdir_fetch_shedding_edges,
-     TT_FORK, NULL, NULL },
-+  { "create_cell_source", test_dos_create_cell_source, TT_FORK, NULL, NULL },
-   END_OF_TESTCASES
- };
+   chan->circ_id_type = CIRC_ID_TYPE_NEITHER;
+   memset(&cell, 0, sizeof(cell));
+   cell.command = CELL_CREATE2;
+@@ -805,6 +807,11 @@ test_dos_create_cell_prev_hop(void *arg)
+   tt_u64_op(rep_hist_get_create_cells()[hop], OP_EQ, 2);
+   tt_int_op(smartlist_len(circs), OP_EQ, 1);
+   tt_int_op(TO_OR_CIRCUIT(smartlist_get(circs, 0))->prev_hop, OP_EQ, hop);
++  /* Both are also counted by their place among the CREATE cells their
++   * source sent in the same minute, and not among its BEGIN_DIR cells. */
++  tt_u64_op(rep_hist_get_source_cells(false, hop)[NTH_BAND_1], OP_EQ, 1);
++  tt_u64_op(rep_hist_get_source_cells(false, hop)[NTH_BAND_2_10], OP_EQ, 1);
++  tt_u64_op(rep_hist_get_source_cells(true, hop)[NTH_BAND_1], OP_EQ, 0);
+   chan->is_client = 1;
+   cell.circ_id = 2;
+   command_process_cell(chan, &cell);
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 68d217a46e..412663defb 100644
+index 111ddb461f..dadc1dff6b 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -31,6 +31,7 @@
@@ -444,34 +380,8 @@ index 68d217a46e..412663defb 100644
  #include "feature/stats/rephist.h"
  #include "lib/metrics/metrics_store_entry.h"
  #include "lib/crypt_ops/crypto_format.h"
-@@ -45,6 +46,7 @@
- #include "feature/nodelist/networkstatus_st.h"
- #include "feature/nodelist/routerstatus_st.h"
- 
-+#include "test/fakechans.h"
- #include "test/hs_test_helpers.h"
- #include "test/log_test_helpers.h"
- #include "test/opts_test_helpers.h"
-@@ -660,7 +662,7 @@ hsdir_request_on_new_circ(channel_t *chan, const char *req, const char *body)
- static void
- test_hsdir_get_post_metrics(void *arg)
- {
--  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
-+  channel_t *chan = new_fake_channel();
-   ed25519_keypair_t signing_kp;
-   hs_descriptor_t *desc = NULL;
-   dir_connection_t *dirport;
-@@ -739,7 +741,7 @@ test_hsdir_get_post_metrics(void *arg)
-   SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
-                     TO_OR_CIRCUIT(c)->p_chan = NULL);
-   circuit_free_all();
--  tor_free(chan);
-+  free_fake_channel(chan);
-   hs_descriptor_free(desc);
-   tor_free(desc_str);
-   tor_free(get);
-@@ -1500,6 +1502,101 @@ test_dir_response_bytes_metric(void *arg)
-   connection_free_minimal(TO_CONN(dirport));
+@@ -1424,6 +1425,102 @@ test_dir_response_bytes_metric(void *arg)
+   connection_free_minimal(TO_CONN(conn));
  }
  
 +/* tor_relay_<family>{prev_hop, nth} */
@@ -495,41 +405,38 @@ index 68d217a46e..412663defb 100644
 +  or_circuit_t *circ = or_circuit_new(0, NULL);
 +  tor_addr_t addr;
 +  const time_t t0 = 1800000000; /* The start of a minute. */
-+  const char *bands[] = { "1", "2_10", "11_100", "101_1000", "1001_plus" };
-+  int64_t relay0[ARRAY_LENGTH(bands)], client0[ARRAY_LENGTH(bands)];
-+  int64_t unknown0[ARRAY_LENGTH(bands)], begindir0;
 +  (void) arg;
 +
 +  get_options_mutable()->MetricsPort_set = 1;
-+  for (size_t i = 0; i < ARRAY_LENGTH(bands); i++) {
-+    relay0[i] = CREATE_SOURCE("known_relay", bands[i]);
-+    client0[i] = CREATE_SOURCE("client", bands[i]);
-+    unknown0[i] = CREATE_SOURCE("unknown_relay", bands[i]);
-+  }
-+  begindir0 = BEGINDIR_SOURCE("known_relay", "1");
 +  update_approx_time(t0);
 +
 +  /* Twelve CREATE cells from a relay in one minute. */
 +  for (int i = 0; i < 12; i++)
 +    rep_hist_note_create_cell(relay, CHANNEL_PREV_HOP_KNOWN_RELAY);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "1"), OP_EQ, relay0[0] + 1);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "2_10"), OP_EQ, relay0[1] + 9);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "11_100"), OP_EQ, relay0[2] + 2);
-+  /* BEGIN_DIR cells are counted apart, here through their circuit. */
++  tt_i64_op(CREATE_SOURCE("known_relay", "1"), OP_EQ, 1);
++  tt_i64_op(CREATE_SOURCE("known_relay", "2_10"), OP_EQ, 9);
++  tt_i64_op(CREATE_SOURCE("known_relay", "11_100"), OP_EQ, 2);
++  /* BEGIN_DIR cells are counted apart, here through their circuit, until
++   * the last second of the minute. */
 +  circ->p_chan = relay;
 +  circ->prev_hop = CHANNEL_PREV_HOP_KNOWN_RELAY;
 +  rep_hist_note_begindir_cell(circ);
-+  tt_i64_op(BEGINDIR_SOURCE("known_relay", "1"), OP_EQ, begindir0 + 1);
-+  /* A new minute starts over. */
++  update_approx_time(t0 + 59);
++  rep_hist_note_begindir_cell(circ);
++  tt_i64_op(BEGINDIR_SOURCE("known_relay", "1"), OP_EQ, 1);
++  tt_i64_op(BEGINDIR_SOURCE("known_relay", "2_10"), OP_EQ, 1);
++  /* A new minute starts over, for both kinds. */
 +  update_approx_time(t0 + 60);
++  rep_hist_note_begindir_cell(circ);
 +  rep_hist_note_create_cell(relay, CHANNEL_PREV_HOP_KNOWN_RELAY);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "1"), OP_EQ, relay0[0] + 2);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "2_10"), OP_EQ, relay0[1] + 9);
++  tt_i64_op(BEGINDIR_SOURCE("known_relay", "1"), OP_EQ, 2);
++  tt_i64_op(CREATE_SOURCE("known_relay", "1"), OP_EQ, 2);
++  tt_i64_op(CREATE_SOURCE("known_relay", "2_10"), OP_EQ, 9);
 +
 +  /* A client channel from an address tor doesn't track is its own source. */
 +  rep_hist_note_create_cell(client1, CHANNEL_PREV_HOP_CLIENT);
 +  rep_hist_note_create_cell(client2, CHANNEL_PREV_HOP_CLIENT);
-+  tt_i64_op(CREATE_SOURCE("client", "1"), OP_EQ, client0[0] + 2);
++  tt_i64_op(CREATE_SOURCE("client", "1"), OP_EQ, 2);
 +  /* Once tracked, as tor does whenever a DoS defense is on, the client
 +   * channels from one address are one source. */
 +  get_options_mutable()->EntryStatistics = 1;
@@ -537,31 +444,35 @@ index 68d217a46e..412663defb 100644
 +  geoip_note_client_seen(GEOIP_CLIENT_CONNECT, &addr, NULL, t0);
 +  rep_hist_note_create_cell(client1, CHANNEL_PREV_HOP_CLIENT);
 +  rep_hist_note_create_cell(client2, CHANNEL_PREV_HOP_CLIENT);
-+  tt_i64_op(CREATE_SOURCE("client", "1"), OP_EQ, client0[0] + 3);
-+  tt_i64_op(CREATE_SOURCE("client", "2_10"), OP_EQ, client0[1] + 1);
++  tt_i64_op(CREATE_SOURCE("client", "1"), OP_EQ, 3);
++  tt_i64_op(CREATE_SOURCE("client", "2_10"), OP_EQ, 1);
 +
-+  /* The last two bands. */
-+  for (int i = 0; i < 1001; i++)
++  /* The last two bands. A count stops there: the 65537th cell, past what
++   * 16 bits hold, is still the 1001st or later. */
++  for (int i = 0; i < 65537; i++)
 +    rep_hist_note_create_cell(heavy, CHANNEL_PREV_HOP_UNKNOWN_RELAY);
-+  tt_i64_op(CREATE_SOURCE("unknown_relay", "101_1000"), OP_EQ,
-+            unknown0[3] + 900);
-+  tt_i64_op(CREATE_SOURCE("unknown_relay", "1001_plus"), OP_EQ,
-+            unknown0[4] + 1);
++  tt_i64_op(CREATE_SOURCE("unknown_relay", "1"), OP_EQ, 1);
++  tt_i64_op(CREATE_SOURCE("unknown_relay", "101_1000"), OP_EQ, 900);
++  tt_i64_op(CREATE_SOURCE("unknown_relay", "1001_plus"), OP_EQ, 65537 - 1000);
 +
-+  /* Bridges don't count them, nor does a relay without a MetricsPort. */
++  /* Bridges don't count them, nor does a relay without a MetricsPort, and
++   * those cells don't count towards their source's place in the minute: once
++   * a MetricsPort is added, the next one is the first. A cell without a
++   * channel has no source. */
++  update_approx_time(t0 + 120);
 +  get_options_mutable()->BridgeRelay = 1;
 +  rep_hist_note_create_cell(relay, CHANNEL_PREV_HOP_KNOWN_RELAY);
 +  get_options_mutable()->BridgeRelay = 0;
 +  get_options_mutable()->MetricsPort_set = 0;
 +  rep_hist_note_create_cell(relay, CHANNEL_PREV_HOP_KNOWN_RELAY);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "2_10"), OP_EQ, relay0[1] + 9);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "1"), OP_EQ, relay0[0] + 2);
++  tt_i64_op(CREATE_SOURCE("known_relay", "1"), OP_EQ, 2);
++  get_options_mutable()->MetricsPort_set = 1;
++  rep_hist_note_create_cell(relay, CHANNEL_PREV_HOP_KNOWN_RELAY);
++  rep_hist_note_create_cell(NULL, CHANNEL_PREV_HOP_KNOWN_RELAY);
++  tt_i64_op(CREATE_SOURCE("known_relay", "1"), OP_EQ, 3);
++  tt_i64_op(CREATE_SOURCE("known_relay", "2_10"), OP_EQ, 9);
 +
 + done:
-+  get_options_mutable()->BridgeRelay = 0;
-+  get_options_mutable()->MetricsPort_set = 0;
-+  get_options_mutable()->EntryStatistics = 0;
-+  circ->p_chan = NULL;
 +  circuit_free_all();
 +  free_fake_channel(relay);
 +  free_fake_channel(heavy);
@@ -569,170 +480,34 @@ index 68d217a46e..412663defb 100644
 +  free_fake_channel(client2);
 +}
 +
- /* The previous-hop families export one series per class (and per nth or
-  * type), never the unset class, with the counted values. */
+ /* Each new family is exported with its type and number of series (one per
+  * previous-hop class, and per nth or type), and with the counted values. */
  static void
-@@ -1513,6 +1610,8 @@ test_prev_hop_metric_series(void *arg)
-     { METRICS_NAME(relay_begindir_cell_total), 15 },
-     { METRICS_NAME(relay_begindir_request_total), 30 },
-     { METRICS_NAME(relay_begindir_response_bytes_total), 10 },
-+    { METRICS_NAME(relay_create_cell_source_total), 15 },
-+    { METRICS_NAME(relay_begindir_cell_source_total), 15 },
+@@ -1442,12 +1539,14 @@ test_prev_hop_metric_series(void *arg)
+     { METRICS_NAME(relay_begindir_cell_total), 15, "counter" },
+     { METRICS_NAME(relay_begindir_request_total), 30, "counter" },
+     { METRICS_NAME(relay_begindir_response_bytes_total), 10, "counter" },
++    { METRICS_NAME(relay_create_cell_source_total), 15, "counter" },
++    { METRICS_NAME(relay_begindir_cell_source_total), 15, "counter" },
    };
    or_circuit_t *circ = or_circuit_new(0, NULL);
-   int64_t create0, first0, later0, tenth0;
-@@ -1526,8 +1625,8 @@ test_prev_hop_metric_series(void *arg)
-                        "client", "nth", "2_10");
-   tenth0 = get_metric2(METRICS_NAME(relay_begindir_cell_total), "prev_hop",
-                        "client", "nth", "11_100");
+   (void) arg;
+ 
 -  rep_hist_note_create_cell(CHANNEL_PREV_HOP_KNOWN_RELAY);
 -  rep_hist_note_create_cell(CHANNEL_PREV_HOP_KNOWN_RELAY);
 +  rep_hist_note_create_cell(NULL, CHANNEL_PREV_HOP_KNOWN_RELAY);
 +  rep_hist_note_create_cell(NULL, CHANNEL_PREV_HOP_KNOWN_RELAY);
-   circ->prev_hop = CHANNEL_PREV_HOP_CLIENT;
    for (int i = 0; i < 11; i++)
      rep_hist_note_begindir_cell(circ);
-@@ -1621,7 +1720,7 @@ mock_hsdir_get_latest_consensus(void)
- static void
- test_hsdir_prev_hop_counter(void *arg)
- {
--  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
-+  channel_t *chan = new_fake_channel();
-   routerstatus_t known_rs;
-   or_circuit_t *circ;
-   const char *post = "POST /tor/hs/3/publish HTTP/1.0\r\n\r\n";
-@@ -1679,7 +1778,7 @@ test_hsdir_prev_hop_counter(void *arg)
-   SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
-                     TO_OR_CIRCUIT(c)->p_chan = NULL);
-   circuit_free_all();
--  tor_free(chan);
-+  free_fake_channel(chan);
- }
  
- static const char *
-@@ -2136,6 +2235,105 @@ test_dir_response_bytes_on_read(void *arg)
-   connection_free_minimal(TO_CONN(edge));
- }
- 
-+/* A source's BEGIN_DIR and CREATE cells are counted apart, each in its own
-+ * family, and both start over when a new minute starts, not before. */
-+static void
-+test_source_cell_minutes(void *arg)
-+{
-+  channel_t *relay = new_fake_channel();
-+  or_circuit_t *circ = or_circuit_new(0, NULL);
-+  const time_t t0 = 1800000000; /* The start of a minute. */
-+  int64_t create1, create2, begindir1, begindir2;
-+  (void) arg;
-+
-+  get_options_mutable()->MetricsPort_set = 1;
-+  create1 = CREATE_SOURCE("known_relay", "1");
-+  create2 = CREATE_SOURCE("known_relay", "2_10");
-+  begindir1 = BEGINDIR_SOURCE("known_relay", "1");
-+  begindir2 = BEGINDIR_SOURCE("known_relay", "2_10");
-+  update_approx_time(t0);
-+  circ->p_chan = relay;
-+  circ->prev_hop = CHANNEL_PREV_HOP_KNOWN_RELAY;
-+
-+  /* Two BEGIN_DIR cells, then the first CREATE cell. */
-+  rep_hist_note_begindir_cell(circ);
-+  rep_hist_note_begindir_cell(circ);
-+  rep_hist_note_create_cell(relay, CHANNEL_PREV_HOP_KNOWN_RELAY);
-+  tt_i64_op(BEGINDIR_SOURCE("known_relay", "1"), OP_EQ, begindir1 + 1);
-+  tt_i64_op(BEGINDIR_SOURCE("known_relay", "2_10"), OP_EQ, begindir2 + 1);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "1"), OP_EQ, create1 + 1);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "2_10"), OP_EQ, create2);
-+
-+  /* The last second of the minute, then the next minute. */
-+  update_approx_time(t0 + 59);
-+  rep_hist_note_begindir_cell(circ);
-+  tt_i64_op(BEGINDIR_SOURCE("known_relay", "2_10"), OP_EQ, begindir2 + 2);
-+  update_approx_time(t0 + 60);
-+  rep_hist_note_begindir_cell(circ);
-+  rep_hist_note_create_cell(relay, CHANNEL_PREV_HOP_KNOWN_RELAY);
-+  tt_i64_op(BEGINDIR_SOURCE("known_relay", "1"), OP_EQ, begindir1 + 2);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "1"), OP_EQ, create1 + 2);
-+
-+ done:
-+  circ->p_chan = NULL;
-+  circuit_free_all();
-+  free_fake_channel(relay);
-+}
-+
-+/* A source's count stops at the last band: its 65537th cell in a minute,
-+ * past what 16 bits hold, is still the 1001st or later. */
-+static void
-+test_source_cell_saturation(void *arg)
-+{
-+  channel_t *relay = new_fake_channel();
-+  int64_t first0, last0;
-+  (void) arg;
-+
-+  get_options_mutable()->MetricsPort_set = 1;
-+  first0 = CREATE_SOURCE("unknown_relay", "1");
-+  last0 = CREATE_SOURCE("unknown_relay", "1001_plus");
-+  update_approx_time(1800000000); /* The start of a minute. */
-+  for (int i = 0; i < 65537; i++)
-+    rep_hist_note_create_cell(relay, CHANNEL_PREV_HOP_UNKNOWN_RELAY);
-+  tt_i64_op(CREATE_SOURCE("unknown_relay", "1"), OP_EQ, first0 + 1);
-+  tt_i64_op(CREATE_SOURCE("unknown_relay", "1001_plus"), OP_EQ,
-+            last0 + 65537 - 1000);
-+
-+ done:
-+  free_fake_channel(relay);
-+}
-+
-+/* Without a MetricsPort, a relay looks at no cell's source: its cells don't
-+ * count towards the source's place in the minute, so once a MetricsPort is
-+ * added, the source's next cell is its first. A cell without a channel has
-+ * no source. */
-+static void
-+test_source_cell_metrics_port(void *arg)
-+{
-+  channel_t *relay = new_fake_channel();
-+  or_circuit_t *circ = or_circuit_new(0, NULL);
-+  int64_t first0, later0;
-+  (void) arg;
-+
-+  first0 = CREATE_SOURCE("known_relay", "1");
-+  later0 = CREATE_SOURCE("known_relay", "2_10");
-+  update_approx_time(1800000000); /* The start of a minute. */
-+  rep_hist_note_create_cell(relay, CHANNEL_PREV_HOP_KNOWN_RELAY);
-+  get_options_mutable()->MetricsPort_set = 1;
-+  rep_hist_note_create_cell(relay, CHANNEL_PREV_HOP_KNOWN_RELAY);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "1"), OP_EQ, first0 + 1);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "2_10"), OP_EQ, later0);
-+  rep_hist_note_create_cell(NULL, CHANNEL_PREV_HOP_KNOWN_RELAY);
-+  circ->prev_hop = CHANNEL_PREV_HOP_KNOWN_RELAY;
-+  rep_hist_note_begindir_cell(circ);
-+  tt_i64_op(CREATE_SOURCE("known_relay", "1"), OP_EQ, first0 + 1);
-+
-+ done:
-+  get_options_mutable()->MetricsPort_set = 0;
-+  circuit_free_all();
-+  free_fake_channel(relay);
-+}
-+
- struct testcase_t hs_cache[] = {
-   { "hsdir_request_limit_get", test_hsdir_request_limit, TT_FORK,
-     &passthrough_setup, (void *) "get" },
-@@ -2162,6 +2360,7 @@ struct testcase_t hs_cache[] = {
-     TT_FORK, NULL, NULL },
+@@ -1940,6 +2039,7 @@ struct testcase_t hs_cache[] = {
+     NULL, NULL },
    { "dir_response_bytes_metric", test_dir_response_bytes_metric, TT_FORK,
      NULL, NULL },
 +  { "source_cell_metrics", test_source_cell_metrics, TT_FORK, NULL, NULL },
    { "dir_server_conns_gauge", test_dir_server_conns_gauge, TT_FORK,
      NULL, NULL },
    { "hsdir_prev_hop_counter", test_hsdir_prev_hop_counter, TT_FORK,
-@@ -2189,6 +2388,11 @@ struct testcase_t hs_cache[] = {
-   { "metric_single_labels", test_metric_single_labels, TT_FORK, NULL, NULL },
-   { "dir_response_bytes_on_read", test_dir_response_bytes_on_read, TT_FORK,
-     NULL, NULL },
-+  { "source_cell_minutes", test_source_cell_minutes, TT_FORK, NULL, NULL },
-+  { "source_cell_saturation", test_source_cell_saturation, TT_FORK,
-+    NULL, NULL },
-+  { "source_cell_metrics_port", test_source_cell_metrics_port, TT_FORK,
-+    NULL, NULL },
- 
-   END_OF_TESTCASES
- };
+-- 
+2.43.0
+

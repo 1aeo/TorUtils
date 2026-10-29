@@ -1,6 +1,6 @@
 # amd64 `.deb` for Ubuntu 24.04 and 26.04: build + install evidence
 
-> **Not yet upstream-reviewed.** `+tor41339.8` is tor 0.4.9.15 with all 20
+> **Not yet upstream-reviewed.** `+tor41339.9` is tor 0.4.9.15 with all 20
 > patches in `../../patches/`. Every defense of the series (0011, 0013) is
 > off: the AUTOBOOL options default to `auto` and no consensus sets their
 > parameters. Tor 0.4.9.15's own BEGIN_DIR rate limit and limit of one onion
@@ -20,8 +20,8 @@ configuration:
 
 | Host | Package |
 |---|---|
-| Ubuntu 24.04 (noble) | `tor_0.4.9.15-1~noble+1+tor41339.8_amd64.deb` |
-| Ubuntu 26.04 (resolute) | `tor_0.4.9.15-1~resolute+1+tor41339.8_amd64.deb` |
+| Ubuntu 24.04 (noble) | `tor_0.4.9.15-1~noble+1+tor41339.9_amd64.deb` |
+| Ubuntu 26.04 (resolute) | `tor_0.4.9.15-1~resolute+1+tor41339.9_amd64.deb` |
 
 - The `tor_…_amd64.deb` is the patched daemon (`/usr/bin/tor` + the systemd
   units); **it alone contains the patches.** The current plan unpacks it to
@@ -35,7 +35,7 @@ configuration:
   installable).
 
 **26.04 native artifact for the build handoff:** `resolute/DELIVERY.md` records
-the `+tor41339.3` handoff and has not been redone for `+tor41339.8`; it has the
+the `+tor41339.3` handoff and has not been redone for `+tor41339.9`; it has the
 package and extracted-binary SHA256s, source base, compiler and flags, linked
 libraries, the comparison with the stock 26.04 package, and the validation
 evidence requested by `../../operator/NATIVE-26.04-BUILD-HANDOFF.md`, including
@@ -85,7 +85,7 @@ tarball omits), then `0001`–`0020`, byte-identical to `../../patches/`; it
 is the same for both builds. `changelog` is the 24.04 build's
 `debian/changelog`; `resolute/changelog` is the 26.04 one.
 
-- `dh_auto_test` (`make test`, the full unit binary), both builds: **1648 tests
+- `dh_auto_test` (`make test`, the full unit binary), both builds: **1639 tests
   ok, 24 skipped (the same environment-conditional set), 0 failed.**
 - No compiler warning on any line the series adds (gcc 13 and gcc 15). The
   only warnings in files the series touches are in unchanged upstream test
@@ -112,7 +112,7 @@ installs **only the `tor` package** (`tor-geoipdb` not installed) and runs an
 unpublished relay joined to that network. Results, the same for both builds:
 
 - `tor --verify-config` returns 0 for the default and the lab torrc, and the
-  installed version ends in `+tor41339.8`.
+  installed version ends in `+tor41339.9`.
 - All 5 new options exist, with every defense off:
   `HSDirRefuseUnknownPrevHop auto`, `HSDirDescriptorFetchRate 5`,
   `HSDirDescriptorFetchBurst 20`, `HSDirFetchShedding auto`,
@@ -137,21 +137,34 @@ client. Results for both packages (`controls-result.json` for 26.04,
 
 | Phase (40 s each) | Stock prober (target only) | Reuse load | One-hop load | Refused at the target |
 |---|---|---|---|---|
-| Defaults, or every option off | 43/43 | 0–1/100 | 10/20 | 30, by tor's limit of one HSDir request per circuit |
-| `HSDirRefuseUnknownPrevHop 1` | 41/41 | 0/100 | 0/20 | 40: tor's 30, and 10 answered 503 |
+| Defaults, or every option off | all of 37 to 43 fetches¹ | 0–2 of 96 to 100 | 9–11/20 | 28–30, by tor's limit of one HSDir request per circuit |
+| `HSDirRefuseUnknownPrevHop 1` | 43/43 (24.04), 27/28 (26.04)² | 0/100 (26.04: 0/95) | 0/20 | 40: tor's 20, and 20 circuits closed by `HSDirRefuseUnknownPrevHop` (26.04: 37, 18 and 19) |
 | 0012 rate 1, burst 2 (count only) | 43/43 | 0/100 | 10/20 | 30; 29 fetches counted over the rate |
-| `HSDirFetchShedding 1`, `HSDirFetchBudget 28000` | 13/15 (26.04), 22/24 (24.04) | 0/100 | 10/20 | 32: tor's 27 or 24, and 5 or 8 shed |
+| `HSDirFetchShedding 1`, `HSDirFetchBudget 28000` | 13/15 (24.04), 7/10 (26.04) | 0/100 | 10/20 | 32: tor's 27, and 5 shed (26.04: 33, 29 and 4) |
+
+¹ Except the first phase on 24.04: 13/15, and 4/20 for the one-hop load.
+A test network's onion service time periods last minutes, and the
+target answered 24 fetches `not_found` until the service uploaded its
+descriptor for the new period.
+² The failure was a 15-second timeout, not a refusal at the target: its 37
+refusals are tor's 18 second requests and the 19 fetches it refused from
+the unknown relay identity.
 
 In every phase:
 - **Tor's own limit.** Tor 0.4.9.15 closed each circuit at its second onion
   service request, counted as `begindir_hsdir_rejected`. That covered the
-  reuse load's 20 circuits and the one-hop load's 10, so the one-hop load
-  received half of its fetches. The reuse load received at most one: the
-  close at a circuit's second request also discards the first's response
-  still in flight, an artifact of this pipelining test client.
-- **`hsdir_unknown_prev_hop`** counted 10: the one-hop load's first request
-  on each circuit, which is exactly what `HSDirRefuseUnknownPrevHop`
-  refused when on.
+  reuse load's 20 circuits and, with `HSDirRefuseUnknownPrevHop` off, the
+  one-hop load's 10, so the one-hop load received half of its fetches. The
+  reuse load received at most two: the close at a circuit's second request
+  also discards the first's response still in flight, an artifact of this
+  pipelining test client. Of the reuse load's later streams on a closed
+  circuit, about one per circuit had sent its request (`circuit_dead`, 17
+  to 24 a phase) and one hadn't (`no_request`, 14 to 20); `.8` counted both
+  as `circuit_dead`.
+- **`hsdir_unknown_prev_hop`** counted the one-hop load's first request on
+  each circuit: 10 with `HSDirRefuseUnknownPrevHop` off. With it on, each
+  of those closed its circuit, so the load made every fetch on a new
+  circuit, and the counter equals the refusals: 20 (26.04: 19).
 - **One bucket per stream.** Every tunneled BEGIN_DIR stream was counted in
   exactly one of `tor_relay_hsdir_fetch_total`,
   `tor_relay_hsdir_upload_total`, the other types of
@@ -159,11 +172,10 @@ In every phase:
   `tor_relay_begindir_connections{state="command_wait"}`.
 
 After each "on" phase, switching the option off live on the same process
-restored the loads, and the target kept its PID throughout. Some phases made
-40 to 42 prober fetches instead of 43, all answered.
+restored the loads, and the target kept its PID throughout.
 
-In the shedding phase, 20 fetches (26.04) and 31 (24.04) reached the target
-while it was over its budget, and it shed 5 and 8 of them. The shed fetches
+In the shedding phase, 20 fetches (24.04) and 15 (26.04) reached the target
+while it was over its budget, and it shed 5 and 4 of them. The shed fetches
 are counted as `refused`, and equal `hsdir_fetch_shed`. The stock prober
 fetches only from the target HSDir (`HSFETCH … SERVER=`), so it shows the
 per-HSDir refusal rate, not what a client sees. Real clients retry another
@@ -194,6 +206,8 @@ happens to block TERM/INT varies by environment and by run:
 | First `+tor41339.7` install runs, `Sandbox 1` | — | 24.04 exited; 26.04 stuck |
 | Final `+tor41339.7` install runs, `Sandbox 1` | — | both stuck |
 | `+tor41339.8` install runs, `Sandbox 1` | — | 24.04 exited; 26.04 stuck |
+| First `+tor41339.9` install runs, `Sandbox 1` | — | both stuck |
+| Final `+tor41339.9` install runs (the same binaries), `Sandbox 1` | — | both exited |
 | Ubuntu 26.04.1, glibc 2.43 (`resolute/sigterm-trials.txt`), `Sandbox 1` | stuck 6/15 | stuck 5/15 |
 | Ubuntu 26.04.1, `Sandbox 0` | exited 5/5 | exited 5/5 |
 

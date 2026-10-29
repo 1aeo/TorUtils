@@ -1,4 +1,4 @@
-From c853008dfa520cfc52ea1a19c1d4f43ad6bf5d7a Mon Sep 17 00:00:00 2001
+From 40a20c40e884d2807471c51e493fac36dbc2dc68 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Fri, 23 Oct 2026 05:33:17 +0000
 Subject: [PATCH 20/20] dos: Count HSDir requests from relays known only by
@@ -6,12 +6,12 @@ Subject: [PATCH 20/20] dos: Count HSDir requests from relays known only by
 
 HSDirRefuseUnknownPrevHop refuses an onion service directory request
 whose previous hop is neither in our consensus nor a relay whose
-descriptor we still hold, for up to two days after it leaves the
-consensus. Relays that the directory authorities drop therefore stay
+descriptor we still hold, as we do for up to two days after it leaves
+the consensus. Relays that the directory authorities drop therefore stay
 "known" for that long. Before tightening the rule, an operator needs to
 know how much traffic comes from them.
 
-Split the lookup that note_hs_dir_request() already makes into its two
+Split the lookup that allow_hs_dir_request() already makes into its two
 cases, and count the requests whose previous hop is known only by its
 descriptor as
 tor_relay_dos_total{type="hsdir_descriptor_only_prev_hop"}.
@@ -23,19 +23,19 @@ Part of #41339.
  changes/ticket41339_metrics       |  6 ++++++
  doc/man/tor.1.txt                 |  9 ++++++---
  src/core/or/dos.h                 |  3 +++
- src/feature/dircache/dircache.c   | 13 +++++++++----
+ src/feature/dircache/dircache.c   |  9 +++++++--
  src/feature/relay/relay_metrics.c |  2 ++
- src/test/test_hs_cache.c          | 26 +++++++++++++++++++++++++-
- 6 files changed, 51 insertions(+), 8 deletions(-)
+ src/test/test_hs_cache.c          | 21 +++++++++++++++++++++
+ 6 files changed, 45 insertions(+), 5 deletions(-)
 
 diff --git a/changes/ticket41339_metrics b/changes/ticket41339_metrics
-index 1efd94926f..bfee4cb6a5 100644
+index 4a75da1ac6..6f75d02749 100644
 --- a/changes/ticket41339_metrics
 +++ b/changes/ticket41339_metrics
-@@ -53,3 +53,9 @@
-       keyed hash of each key is kept, until a later minute. Bridges don't count
-       these, and other relays count them only while a MetricsPort is
-       configured. Part of ticket 41339.
+@@ -54,3 +54,9 @@
+       keyed hash of each key is kept, until a fetch is counted in a later
+       minute. Bridges don't count these, and other relays count them only while
+       a MetricsPort is configured. Part of ticket 41339.
 +    - Count the onion service directory requests that tor accepts whose
 +      previous hop is a relay we know only by its descriptor, not in our
 +      consensus, as tor_relay_dos_total{type="hsdir_descriptor_only_prev_hop"}.
@@ -43,11 +43,11 @@ index 1efd94926f..bfee4cb6a5 100644
 +      traffic comes from relays that recently left the consensus. Part of
 +      ticket 41339.
 diff --git a/doc/man/tor.1.txt b/doc/man/tor.1.txt
-index 3ad186b3f4..ab654a9ee9 100644
+index 9bb26f429b..f72f20c290 100644
 --- a/doc/man/tor.1.txt
 +++ b/doc/man/tor.1.txt
 @@ -3197,9 +3197,12 @@ MetricsPort.
-     descriptor: the check RefuseUnknownExits applies to exit streams. A
+     have a descriptor: the check RefuseUnknownExits applies to exit streams. A
      relay that is new in the client's consensus but not yet in ours is also
      refused, so clients then use another HSDir. Such requests are counted as
 -    tor_relay_dos_total\{type="hsdir_unknown_prev_hop"}. "auto" means use
@@ -63,51 +63,49 @@ index 3ad186b3f4..ab654a9ee9 100644
  [[HSDirDescriptorFetchRate]] **HSDirDescriptorFetchRate** __NUM__::
  
 diff --git a/src/core/or/dos.h b/src/core/or/dos.h
-index 6fcb543f7c..e7bf6b2512 100644
+index 2c939ecc4e..322123e584 100644
 --- a/src/core/or/dos.h
 +++ b/src/core/or/dos.h
-@@ -93,6 +93,9 @@ typedef enum dos_dir_stat_t {
-   /** Onion service directory requests that tor accepts (over an anonymous
-    * circuit, and the first on it) whose previous hop is not a known relay. */
+@@ -92,6 +92,9 @@ typedef enum dos_dir_stat_t {
+   /** Onion service directory requests over an anonymous circuit, and the
+    * first on it, whose previous hop is not a known relay. */
    DOS_DIR_HSDIR_UNKNOWN_PREV_HOP,
-+  /** Such requests whose previous hop is a relay we know only by its
-+   * descriptor: not in our consensus. */
++  /** Those whose previous hop is a relay we know only by its descriptor,
++   * not in our consensus, which aren't counted above. */
 +  DOS_DIR_HSDIR_DESCRIPTOR_ONLY_PREV_HOP,
    /** Fetches of a cached onion service descriptor over
     * HSDirDescriptorFetchRate. */
    DOS_DIR_HSDIR_FETCH_OVER_RATE,
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 4fc210e7a6..6813d2d47c 100644
+index 7e6602733e..f6ef6341ac 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
-@@ -1435,16 +1435,21 @@ hsdir_request_allowed_on_circuit(dir_connection_t *conn)
- 
- /** Count the onion service directory request on <b>conn</b>, which
-  * connection_dir_is_anonymous() and hsdir_request_allowed_on_circuit()
-- * accepted, if its previous hop is not a known relay. Stock tor and Arti
-- * build those circuits through relays in the consensus. */
-+ * accepted, if its previous hop is not a known relay, or is one we know only
-+ * by its descriptor. Stock tor and Arti build those circuits through relays
-+ * in the consensus. */
- static void
- note_hs_dir_request(dir_connection_t *conn)
- {
-   const or_circuit_t *circ =
+@@ -18,7 +18,6 @@
+ #include "core/or/channel.h"
+ #include "core/or/circuitlist.h"
+ #include "core/or/connection_edge.h"
+-#include "core/or/connection_or.h"
+ #include "core/or/dos.h"
+ #include "core/or/relay.h"
+ #include "feature/dirauth/dirvote.h"
+@@ -1446,8 +1445,14 @@ allow_hs_dir_request(dir_connection_t *conn)
+   or_circuit_t *circ =
      TO_OR_CIRCUIT(TO_EDGE_CONN(TO_CONN(conn)->linked_conn)->on_circuit);
  
--  if (!connection_or_digest_is_known_relay(circ->p_chan->identity_digest))
--    dos_note_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
-+  /* connection_or_digest_is_known_relay(), with its two cases apart. */
-+  if (!router_get_consensus_status_by_id(circ->p_chan->identity_digest)) {
-+    dos_note_dir_stat(router_get_by_id_digest(circ->p_chan->identity_digest) ?
-+                      DOS_DIR_HSDIR_DESCRIPTOR_ONLY_PREV_HOP :
-+                      DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
+-  if (connection_or_digest_is_known_relay(circ->p_chan->identity_digest))
++  /* connection_or_digest_is_known_relay(), with its two cases apart, to
++   * count the requests from relays we know only by their descriptor. */
++  if (router_get_consensus_status_by_id(circ->p_chan->identity_digest))
+     return true;
++  if (router_get_by_id_digest(circ->p_chan->identity_digest)) {
++    dos_note_dir_stat(DOS_DIR_HSDIR_DESCRIPTOR_ONLY_PREV_HOP);
++    return true;
 +  }
- }
- 
- /** Return false if we refuse the onion service directory request on
+   dos_note_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
+   if (!dos_should_refuse_unknown_hsdir_prev_hop())
+     return true;
 diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
-index 00b3ae6067..fcec345d6e 100644
+index 05caf007fd..2344e48c61 100644
 --- a/src/feature/relay/relay_metrics.c
 +++ b/src/feature/relay/relay_metrics.c
 @@ -525,6 +525,8 @@ fill_dos_values(void)
@@ -120,7 +118,7 @@ index 00b3ae6067..fcec345d6e 100644
        dos_get_dir_stat(DOS_DIR_HSDIR_FETCH_OVER_RATE) },
      { "hsdir_fetch_pressure",
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 9d1d6d9a90..524f7ee663 100644
+index 3142109706..67fed28d01 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -24,6 +24,7 @@
@@ -140,28 +138,16 @@ index 9d1d6d9a90..524f7ee663 100644
  #include "feature/nodelist/routerstatus_st.h"
  
  #include "test/fakechans.h"
-@@ -1820,9 +1823,10 @@ test_hsdir_prev_hop_counter(void *arg)
+@@ -1723,6 +1726,7 @@ test_hsdir_prev_hop_counter(void *arg)
  {
    channel_t *chan = new_fake_channel();
    routerstatus_t known_rs;
 +  routerinfo_t *ri = NULL;
    or_circuit_t *circ;
    const char *post = "POST /tor/hs/3/publish HTTP/1.0\r\n\r\n";
--  uint64_t unknown0;
-+  uint64_t unknown0, desc_only0;
    (void) arg;
- 
-   init_test();
-@@ -1832,6 +1836,7 @@ test_hsdir_prev_hop_counter(void *arg)
-   get_options_mutable()->ORPort_set = 1; /* Accept descriptor uploads. */
-   /* Other tests may have counted requests before we forked. */
-   unknown0 = dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
-+  desc_only0 = dos_get_dir_stat(DOS_DIR_HSDIR_DESCRIPTOR_ONLY_PREV_HOP);
- 
-   /* The zeroed previous hop identity is not a known relay. A second request
-    * on a circuit isn't counted: tor refuses it first. */
-@@ -1855,6 +1860,22 @@ test_hsdir_prev_hop_counter(void *arg)
-             unknown0 + 2);
+@@ -1750,6 +1754,20 @@ test_hsdir_prev_hop_counter(void *arg)
+   tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP), OP_EQ, 2);
    chan->is_client = 0;
  
 +  /* A previous hop whose descriptor we have, but which isn't in our
@@ -169,34 +155,35 @@ index 9d1d6d9a90..524f7ee663 100644
 +  ri = tor_malloc_zero(sizeof(routerinfo_t));
 +  digestmap_set((digestmap_t *) router_get_routerlist()->identity_map,
 +                chan->identity_digest, ri);
-+  hsdir_request_on_new_circ(chan, GET("/tor/hs/3/x"), NULL);
++  tt_int_op(hsdir_request_on_new_circ(chan, GET("/tor/hs/3/x"), NULL),
++            OP_EQ, 404);
 +  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_DESCRIPTOR_ONLY_PREV_HOP),
-+            OP_EQ, desc_only0 + 1);
-+  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP), OP_EQ,
-+            unknown0 + 2);
-+  tt_i64_op(get_metric(METRICS_NAME(relay_dos_total), "type",
-+                       "hsdir_descriptor_only_prev_hop"), OP_EQ,
-+            desc_only0 + 1);
++            OP_EQ, 1);
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP), OP_EQ, 2);
++  tt_i64_op(DOS_METRIC("hsdir_descriptor_only_prev_hop"), OP_EQ, 1);
 +  digestmap_remove((digestmap_t *) router_get_routerlist()->identity_map,
 +                   chan->identity_digest);
 +
    /* A previous hop in our consensus is known. */
    memset(&known_rs, 0, sizeof(known_rs)); /* Matches the zeroed identity. */
    mock_hsdir_ns = tor_malloc_zero(sizeof(networkstatus_t));
-@@ -1864,6 +1885,8 @@ test_hsdir_prev_hop_counter(void *arg)
+@@ -1758,6 +1776,8 @@ test_hsdir_prev_hop_counter(void *arg)
+   MOCK(networkstatus_get_latest_consensus, mock_hsdir_get_latest_consensus);
    hsdir_request_on_new_circ(chan, GET("/tor/hs/3/x"), NULL);
-   tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP), OP_EQ,
-             unknown0 + 2);
+   tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP), OP_EQ, 2);
 +  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_DESCRIPTOR_ONLY_PREV_HOP),
-+            OP_EQ, desc_only0 + 1);
++            OP_EQ, 1);
  
   done:
    UNMOCK(connection_write_to_buf_impl_);
-@@ -1877,6 +1900,7 @@ test_hsdir_prev_hop_counter(void *arg)
-                     TO_OR_CIRCUIT(c)->p_chan = NULL);
+@@ -1768,6 +1788,7 @@ test_hsdir_prev_hop_counter(void *arg)
+   }
    circuit_free_all();
    free_fake_channel(chan);
 +  tor_free(ri);
  }
  
- static const char *
+ /* HSDirRefuseUnknownPrevHop only refuses when the torrc, or else the
+-- 
+2.43.0
+

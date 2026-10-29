@@ -3,7 +3,7 @@
 # with NO network interface (--network none). Build the image first from
 # the Dockerfile in this directory. Usage:
 #   CHUTNEY=<chutney checkout> LOADCLIENT=<test-only load-client tor> OUT=<dir> \
-#   [IMAGE=lab26v8] [SANDBOX=1|0] [PHASE_S=40] ./run-controls.sh
+#   [IMAGE=lab26v9] [SANDBOX=1|0] [PHASE_S=40] ./run-controls.sh
 set -u
 : "${CHUTNEY:?}" "${LOADCLIENT:?}" "${OUT:?}"
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -11,4 +11,4 @@ SIM=$(cd "$HERE/../../../../simulator/scripts" && pwd)
 mkdir -p "$OUT"
 docker run --rm --network none -e SANDBOX="${SANDBOX:-1}" -e PHASE_S="${PHASE_S:-40}" \
   -v "$CHUTNEY":/chutney:ro -v "$SIM":/sim:ro -v "$LOADCLIENT":/lc/tor:ro \
-  -v "$HERE":/evidence:ro -v "$OUT":/out "${IMAGE:-lab26v8}" bash /evidence/in-lab.sh 2>&1 | tee "$OUT/controls-transcript.txt"
+  -v "$HERE":/evidence:ro -v "$OUT":/out "${IMAGE:-lab26v9}" bash /evidence/in-lab.sh 2>&1 | tee "$OUT/controls-transcript.txt"

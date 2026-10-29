@@ -1,8 +1,8 @@
 # What is this BEGIN_DIR flood? A breakdown from the MetricsPort
 
 `begindir-breakdown.py` reads the MetricsPort of a relay running the
-tor#41339 series (`+tor41339.8` on tor 0.4.9.15, or `.7`; it also reads
-`.6`, with fewer answers),
+tor#41339 series (`+tor41339.9` or `.8` on tor 0.4.9.15, or `.7`; it also
+reads `.6`, with fewer answers),
 optionally twice to get rates, and says what the relay's BEGIN_DIR streams
 were. With access to the ControlPort it
 also counts the relay's open OR connections by kind of peer. It only reads,
@@ -15,7 +15,9 @@ python3 -I begindir-breakdown.py --metrics http://127.0.0.1:9035/metrics \
 ```
 
 Names below are `.7`'s, which `.8` keeps, less the counters of the rules it
-drops and plus one request type (see "What `+tor41339.8` changes"). `.6` called some of the
+drops and plus one request type (see "What `+tor41339.8` changes"). `.9`
+keeps `.8`'s names, and below, `.8` means `.8` and `.9` except as "What
+`+tor41339.9` changes" says. `.6` called some of the
 families differently
 (`tor_relay_hsdir_get_total` and `_post_total`, `tor_relay_dir_requests_total`,
 `tor_relay_dir_responses_total`, `tor_relay_dir_server_conns`), and exported
@@ -231,6 +233,26 @@ The script reads all three versions: on `.8` it prints tor's own counts
 where `.7` printed the reuse counts, and lists tor's rules with the series'
 in its table of what each rule refuses.
 
+## What `+tor41339.9` changes
+
+`.9` is `.8` with less code and the fixes of a review
+(`../engineering/v9-minimize/`). It has the same names, and counts the same
+things, except:
+
+- `no_request` also counts a stream that its client, or its circuit,
+  closed before it sent anything. `.8` counted those as `circuit_dead`, and
+  its `no_request` counted only the directory connections that timed out
+  first. `circuit_dead` now counts only a request, or part of one, dropped
+  unread;
+- `HSDirRefuseUnknownPrevHop` refuses by closing the circuit, as tor's
+  limit of one onion service request per circuit does, instead of with a
+  503, which made clients avoid the relay for other directory requests;
+- while `HSDirFetchShedding` sheds, fetches within their descriptor's rate
+  are answered first even when they arrive after others won the lottery,
+  and the others stop at the budget.
+
+The script reads `.9` as `.8`.
+
 **Request types:**
 
 - onion service requests: `hs_get` and `hs_post`;
@@ -435,6 +457,26 @@ circuit's second onion service request:
 - **Cells, requests and sources agree.** Every class's BEGIN_DIR cells
   equal its requests (client 72, known relay 146, unknown relay 37), and the
   sum of its per-source bands.
+- No node logged a bad syscall.
+
+The same lab with the `+tor41339.9` package
+(`engineering/breakdown-lab/results/v9-lab24v9.txt`):
+- **Nothing unaccounted.** The target's 229 BEGIN_DIR streams were 155
+  descriptor fetches, 4 uploads, 35 requests dropped unread on a closing
+  circuit (`circuit_dead`) and 35 streams that sent nothing before they
+  closed (`no_request`). `.8` counted both of the last two as
+  `circuit_dead`.
+- **Tor's own limit.** Of the 155 fetches, 52 were refused as the second on
+  their circuit (`begindir_hsdir_rejected`, equal to the action `refused`),
+  49 were answered 503, from the one-hop client, and 54 were answered (22
+  with the descriptor, 32 not found).
+- **The unpublished relay identity** sent 35 fetches.
+  `hsdir_unknown_prev_hop` counted the 18 that were the first on their
+  circuit, and tor refused the other 17 as second requests.
+- **Cells, requests and sources agree.** Every class's BEGIN_DIR cells
+  equal its requests (client 49, known relay 145, unknown relay 35), and
+  the sum of its per-source bands, as each class's CREATE cells equal theirs
+  (13, 99, 18).
 - No node logged a bad syscall.
 
 The conclusions, and the sections for the proposed families, ran in the same

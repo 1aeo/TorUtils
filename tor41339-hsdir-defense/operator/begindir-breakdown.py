@@ -5,7 +5,7 @@ Reads the MetricsPort of a relay running the tor#41339 series (+tor41339.6
 or later), optionally twice to get rates over an interval, and prints what
 the BEGIN_DIR streams were: onion service descriptor fetches and uploads,
 other directory requests, or streams that never sent a request. On
-+tor41339.8 (tor 0.4.9.15) it also shows what tor's own BEGIN_DIR limits
++tor41339.8 and later (tor 0.4.9.15) it also shows what tor's own BEGIN_DIR limits
 refused: a second onion service request on a circuit, which tor 0.4.9.15
 always refuses, and BEGIN_DIR cells over the per-circuit rate. With
 --control it also counts the relay's open OR connections by kind of peer

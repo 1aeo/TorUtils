@@ -262,10 +262,12 @@ carryover/settling assumptions are demonstrated; it is not an instant reset.
 | Previous-hop-only treatment | 1 | 0 |
 | Reuse-only treatment | 0 | 1 |
 
-On `+tor41339.8` (tor 0.4.9.15), `HSDirOneRequestPerCircuit` is gone: tor
+On `+tor41339.8` and `.9` (tor 0.4.9.15), `HSDirOneRequestPerCircuit` is gone: tor
 itself closes every circuit at its second onion service request, in every
 mode, so there is no reuse-only treatment and the SETCONF sets
-`HSDirRefuseUnknownPrevHop` alone.
+`HSDirRefuseUnknownPrevHop` alone. On `.9`, `HSDirRefuseUnknownPrevHop`
+refuses by closing the circuit instead of answering 503, so the 503-refusal
+decisions below are circuit-close decisions there.
 
 Set both values in one authenticated SETCONF on the **explicitly selected
 patched instance**, require successful reply, GETCONF both, and log submission

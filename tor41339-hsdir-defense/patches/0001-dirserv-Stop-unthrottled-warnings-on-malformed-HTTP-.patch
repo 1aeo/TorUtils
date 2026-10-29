@@ -1,4 +1,4 @@
-From 6e8abb24ab31a9c7c16ac6fbf8028a9e89338b74 Mon Sep 17 00:00:00 2001
+From fd6966b3811dec54d8e8c3e097e0976e4192ad4e Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
 Subject: [PATCH 01/20] dirserv: Stop unthrottled warnings on malformed HTTP
@@ -160,3 +160,6 @@ index 7458e40496..198e70eefb 100644
  
      buf_clear(buf);
      tor_free(h);
+-- 
+2.43.0
+

@@ -1,4 +1,4 @@
-From f39b998e62a9628dd142d62e6aaae040b8080e39 Mon Sep 17 00:00:00 2001
+From 3f97b2c8449a55841f7dc2e842fdd4a9d8315a1a Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
 Subject: [PATCH 03/20] dirserv: Discard client input received after the
@@ -11,39 +11,42 @@ buffered whatever else the client sent, up to MAX_DIRECTORY_OBJECT_SIZE
 data received" warning. So a client that stops reading its answer but
 keeps sending could make a relay hold about 10 MB per stream.
 
-Discard that input instead. Once directory_handle_command() has consumed
-the request and moved the connection to SERVER_WRITING, we clear the
-input in that same pass, so bytes that arrived together with the request
-are dropped too; a still-incomplete request is left in
-SERVER_COMMAND_WAIT and kept.
+Discard that input on tunneled (BEGIN_DIR) connections instead. Once
+directory_handle_command() has consumed the request and moved the
+connection to SERVER_WRITING, we clear the input in that same pass, so
+bytes that arrived together with the request are dropped too; a
+still-incomplete request is left in SERVER_COMMAND_WAIT and kept.
 
 We don't close the connection, so a client that sends a stray CRLF after
 its request still gets its answer, and we don't stop reading, since
-linked connections only notice EOF while reading. A client that keeps
-sending without reading its answer is still closed by the
-TestingDirConnectionMaxStall timeout, and the OOM handler still covers
-these connections.
+linked connections only notice EOF while reading. A tunneled connection
+has no socket, so its TestingDirConnectionMaxStall timeout runs from
+when it opened: it still closes a client that keeps sending, and the OOM
+handler still covers these connections. DirPort connections keep the
+10 MB limit, since each write that a slowly reading client allows
+restarts their timeout: there, only the limit closes a client that keeps
+sending.
 
 Part of #41339.
 ---
  changes/ticket41339_hardening     |  3 ++
- src/feature/dircommon/directory.c | 17 +++++++++
- src/test/test_dir_handle_get.c    | 63 +++++++++++++++++++++++++++++++
- 3 files changed, 83 insertions(+)
+ src/feature/dircommon/directory.c | 10 ++++
+ src/test/test_dir_handle_get.c    | 79 +++++++++++++++++++++++++++++++
+ 3 files changed, 92 insertions(+)
 
 diff --git a/changes/ticket41339_hardening b/changes/ticket41339_hardening
-index 0ee83870a7..8df0b647fa 100644
+index 4251350e5f..a20527307f 100644
 --- a/changes/ticket41339_hardening
 +++ b/changes/ticket41339_hardening
-@@ -3,3 +3,6 @@
-       whose body is too large to be an onion service descriptor, the only
-       upload they accept, instead of buffering up to 16 MB of it. The limit is
-       the HSV3MaxDescriptorSize consensus parameter. Part of ticket 41339.
-+    - Directory servers now discard anything a client sends after its request,
-+      instead of buffering up to 10 MB of it per connection while they send
-+      their answer. Part of ticket 41339.
+@@ -4,3 +4,6 @@
+       descriptor, the only upload they accept, instead of buffering up to 16 MB
+       of it. The limit is the HSV3MaxDescriptorSize consensus parameter. Part
+       of ticket 41339.
++    - Directory servers now discard anything a client sends on a tunneled
++      (BEGIN_DIR) stream after its request, instead of buffering up to 10 MB of
++      it per stream while they send their answer. Part of ticket 41339.
 diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
-index 86693a38ac..a6c90c6e73 100644
+index 86693a38ac..d39cbb86f9 100644
 --- a/src/feature/dircommon/directory.c
 +++ b/src/feature/dircommon/directory.c
 @@ -18,6 +18,7 @@
@@ -54,48 +57,64 @@ index 86693a38ac..a6c90c6e73 100644
  #include "lib/compress/compress.h"
  
  #include "core/or/circuit_st.h"
-@@ -491,6 +492,22 @@ connection_dir_process_inbuf(dir_connection_t *conn)
+@@ -491,6 +492,15 @@ connection_dir_process_inbuf(dir_connection_t *conn)
        connection_mark_for_close(TO_CONN(conn));
        return -1;
      }
-+    /* Fall through to discard any trailing bytes once in SERVER_WRITING. */
++    if (conn->base_.state == DIR_CONN_STATE_SERVER_COMMAND_WAIT)
++      return 0;
 +  }
-+
-+  /* On the server side, once the request is read and we are writing the
-+   * response, discard anything else the client sends (whether in the same read
-+   * or a later one) instead of buffering it. A still-incomplete request stays
-+   * in COMMAND_WAIT and is kept for the next read. We don't close the
-+   * connection, so a client that sends a stray CRLF after its request still
-+   * gets its answer, and we don't stop reading, since linked connections only
-+   * notice EOF while reading. Memory stays bounded because each read is
-+   * discarded at once; a client that keeps sending without reading its answer
-+   * is closed by the TestingDirConnectionMaxStall timeout, and the OOM handler
-+   * still covers these connections. */
-+  if (DIR_CONN_IS_SERVER(TO_CONN(conn))) {
-+    if (conn->base_.state == DIR_CONN_STATE_SERVER_WRITING)
-+      buf_clear(TO_CONN(conn)->inbuf);
++  /* Once a tunneled request is read, even in this same read, discard
++   * whatever else the client sends instead of buffering it. Don't close the
++   * connection or stop reading: linked connections only notice EOF while
++   * reading. DirPort connections keep the limit below. */
++  if (DIR_CONN_IS_SERVER(TO_CONN(conn)) && TO_CONN(conn)->linked) {
++    buf_clear(TO_CONN(conn)->inbuf);
      return 0;
    }
  
 diff --git a/src/test/test_dir_handle_get.c b/src/test/test_dir_handle_get.c
-index b4e69d19b6..6c75b9d935 100644
+index 7bd455e514..19264a3365 100644
 --- a/src/test/test_dir_handle_get.c
 +++ b/src/test/test_dir_handle_get.c
-@@ -2785,6 +2785,68 @@ test_dir_handle_get_hs_post_size_limit(void *data)
+@@ -13,6 +13,7 @@
+ #include "core/or/or.h"
+ #include "app/config/config.h"
+ #include "core/mainloop/connection.h"
++#include "core/or/circuitlist.h"
+ #include "feature/dircache/consdiffmgr.h"
+ #include "feature/dircommon/directory.h"
+ #include "feature/dircache/dircache.h"
+@@ -39,6 +40,8 @@
+ #include "feature/hs/hs_cache.h"
+ #include "feature/dirauth/voting_schedule.h"
+ 
++#include "core/or/edge_connection_st.h"
++#include "core/or/or_circuit_st.h"
+ #include "feature/dircommon/dir_connection_st.h"
+ #include "feature/dirclient/dir_server_st.h"
+ #include "feature/nodelist/networkstatus_st.h"
+@@ -2786,6 +2789,81 @@ test_dir_handle_get_hs_post_size_limit(void *data)
    UNMOCK(connection_write_to_buf_impl_);
  }
  
 +/* Helper: feed `in` (`in_len` bytes) into a dir connection with `purpose` and
-+ * `state`, run connection_dir_process_inbuf(), and verify the resulting state
-+ * and remaining inbuf length. */
++ * `state`, tunneled on a stream if `linked`, run
++ * connection_dir_process_inbuf(), and verify the resulting state and
++ * remaining inbuf length. */
 +static void
-+check_dir_inbuf(uint8_t purpose, uint8_t state,
++check_dir_inbuf(uint8_t purpose, uint8_t state, bool linked,
 +                const char *in, size_t in_len,
 +                uint8_t exp_state, size_t exp_inbuf)
 +{
 +  dir_connection_t *conn = new_dir_conn();
++  edge_connection_t *edge = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
 +  TO_CONN(conn)->purpose = purpose;
 +  TO_CONN(conn)->state = state;
++  if (linked) {
++    connection_link_connections(TO_CONN(conn), TO_CONN(edge));
++    edge->on_circuit = TO_CIRCUIT(or_circuit_new(0, NULL));
++  }
 +  buf_add(TO_CONN(conn)->inbuf, in, in_len);
 +  tt_int_op(connection_dir_process_inbuf(conn), OP_EQ, 0);
 +  tt_int_op(TO_CONN(conn)->state, OP_EQ, exp_state);
@@ -103,11 +122,14 @@ index b4e69d19b6..6c75b9d935 100644
 +  tt_assert(!TO_CONN(conn)->marked_for_close);
 + done:
 +  connection_free_minimal(TO_CONN(conn));
++  connection_free_minimal(TO_CONN(edge));
++  circuit_free_all();
 +}
 +
-+/* Verify that a dirserver discards trailing client input once it enters
-+ * DIR_CONN_STATE_SERVER_WRITING (whether in the same read, a subsequent read,
-+ * or >10 MB), while preserving partial server commands and client replies. */
++/* Verify that a dirserver discards trailing client input on a tunneled
++ * connection once it enters DIR_CONN_STATE_SERVER_WRITING (whether in the
++ * same read, a subsequent read, or >10 MB), while preserving partial server
++ * commands, client replies and DirPort input. */
 +static void
 +test_dir_handle_get_server_discards_extra_input(void *data)
 +{
@@ -125,23 +147,27 @@ index b4e69d19b6..6c75b9d935 100644
 +  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
 +
 +  /* 1. Trailing bytes in the same read as a complete request are discarded. */
-+  check_dir_inbuf(DIR_PURPOSE_SERVER, DIR_CONN_STATE_SERVER_COMMAND_WAIT,
++  check_dir_inbuf(DIR_PURPOSE_SERVER, DIR_CONN_STATE_SERVER_COMMAND_WAIT, 1,
 +                  req_trail, strlen(req_trail),
 +                  DIR_CONN_STATE_SERVER_WRITING, 0);
 +  /* 2. Later bytes arriving while already in SERVER_WRITING are discarded. */
-+  check_dir_inbuf(DIR_PURPOSE_SERVER, DIR_CONN_STATE_SERVER_WRITING,
++  check_dir_inbuf(DIR_PURPOSE_SERVER, DIR_CONN_STATE_SERVER_WRITING, 1,
 +                  req, strlen(req), DIR_CONN_STATE_SERVER_WRITING, 0);
 +  /* 3. Over 10 MB of trailing input is discarded without closing. */
-+  check_dir_inbuf(DIR_PURPOSE_SERVER, DIR_CONN_STATE_SERVER_WRITING,
++  check_dir_inbuf(DIR_PURPOSE_SERVER, DIR_CONN_STATE_SERVER_WRITING, 1,
 +                  junk, big, DIR_CONN_STATE_SERVER_WRITING, 0);
 +  /* 4. Partial server command stays in inbuf while in COMMAND_WAIT. */
-+  check_dir_inbuf(DIR_PURPOSE_SERVER, DIR_CONN_STATE_SERVER_COMMAND_WAIT,
++  check_dir_inbuf(DIR_PURPOSE_SERVER, DIR_CONN_STATE_SERVER_COMMAND_WAIT, 1,
 +                  partial, strlen(partial),
 +                  DIR_CONN_STATE_SERVER_COMMAND_WAIT, strlen(partial));
 +  /* 5. Directory clients keep their response body. */
 +  check_dir_inbuf(DIR_PURPOSE_FETCH_CONSENSUS, DIR_CONN_STATE_CLIENT_READING,
-+                  resp, strlen(resp),
++                  0, resp, strlen(resp),
 +                  DIR_CONN_STATE_CLIENT_READING, strlen(resp));
++  /* 6. So do DirPort connections, up to the 10 MB limit, as before. */
++  check_dir_inbuf(DIR_PURPOSE_SERVER, DIR_CONN_STATE_SERVER_WRITING, 0,
++                  req, strlen(req), DIR_CONN_STATE_SERVER_WRITING,
++                  strlen(req));
 +
 +  UNMOCK(connection_write_to_buf_impl_);
 +  tor_free(junk);
@@ -150,10 +176,13 @@ index b4e69d19b6..6c75b9d935 100644
  #define DIR_HANDLE_CMD(name,flags) \
    { #name, test_dir_handle_get_##name, (flags), NULL, NULL }
  
-@@ -2857,5 +2919,6 @@ struct testcase_t dir_handle_get_tests[] = {
+@@ -2858,5 +2936,6 @@ struct testcase_t dir_handle_get_tests[] = {
    DIR_HANDLE_CMD(parse_accept_encoding, 0),
    DIR_HANDLE_CMD(malformed_warn_ratelim, TT_FORK),
    DIR_HANDLE_CMD(hs_post_size_limit, TT_FORK),
 +  DIR_HANDLE_CMD(server_discards_extra_input, TT_FORK),
    END_OF_TESTCASES
  };
+-- 
+2.43.0
+

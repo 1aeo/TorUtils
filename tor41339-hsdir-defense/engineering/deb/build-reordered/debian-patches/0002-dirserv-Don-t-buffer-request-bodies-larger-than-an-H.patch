@@ -1,4 +1,4 @@
-From 1bafc73f33928a82ca0fd9a25aad9dd1bedf892b Mon Sep 17 00:00:00 2001
+From 0ca736187af84ae276df38c3b35e93764d4d2b90 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
 Subject: [PATCH 02/20] dirserv: Don't buffer request bodies larger than an HS
@@ -28,45 +28,37 @@ or the directory connection stall timeout frees it.
 
 Part of #41339.
 ---
- changes/ticket41339_hardening   |  5 +++++
- src/feature/dircache/dircache.c |  9 +++++++-
- src/test/test_dir_handle_get.c  | 39 +++++++++++++++++++++++++++++++++
+ changes/ticket41339_hardening   |  6 +++++
+ src/feature/dircache/dircache.c |  7 +++++-
+ src/test/test_dir_handle_get.c  | 40 +++++++++++++++++++++++++++++++++
  3 files changed, 52 insertions(+), 1 deletion(-)
  create mode 100644 changes/ticket41339_hardening
 
 diff --git a/changes/ticket41339_hardening b/changes/ticket41339_hardening
 new file mode 100644
-index 0000000000..0ee83870a7
+index 0000000000..4251350e5f
 --- /dev/null
 +++ b/changes/ticket41339_hardening
-@@ -0,0 +1,5 @@
+@@ -0,0 +1,6 @@
 +  o Minor features (directory server, denial-of-service):
-+    - Relays that are not directory authorities now refuse a directory request
-+      whose body is too large to be an onion service descriptor, the only
-+      upload they accept, instead of buffering up to 16 MB of it. The limit is
-+      the HSV3MaxDescriptorSize consensus parameter. Part of ticket 41339.
++    - Relays that are not directory authorities now close, without an answer,
++      a directory request whose body is too large to be an onion service
++      descriptor, the only upload they accept, instead of buffering up to 16 MB
++      of it. The limit is the HSV3MaxDescriptorSize consensus parameter. Part
++      of ticket 41339.
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 61e47f018a..a16d9f40ab 100644
+index 61e47f018a..4c1bc169ba 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
-@@ -1827,6 +1827,7 @@ directory_handle_command(dir_connection_t *conn)
-   char *headers=NULL, *body=NULL;
-   size_t body_len=0;
-   int r;
-+  size_t max_body_len = MAX_DIR_UL_SIZE;
- 
-   tor_assert(conn);
-   tor_assert(conn->base_.type == CONN_TYPE_DIR);
-@@ -1840,10 +1841,16 @@ directory_handle_command(dir_connection_t *conn)
+@@ -1840,10 +1840,15 @@ directory_handle_command(dir_connection_t *conn)
    if (dir_conn_is_closing(conn)) {
      return -1;
    }
 +  /* Non-authorities only accept HS descriptor posts, so don't buffer a body
 +   * that is too large to be one. Authorities keep the 16 MB limit. */
-+  if (!authdir_mode(get_options())) {
-+    const size_t hs_max = hs_cache_get_max_descriptor_size();
-+    max_body_len = MIN(max_body_len, hs_max);
-+  }
++  size_t max_body_len = hs_cache_get_max_descriptor_size();
++  if (authdir_mode(get_options()) || max_body_len > MAX_DIR_UL_SIZE)
++    max_body_len = MAX_DIR_UL_SIZE;
  
    switch (connection_fetch_from_buf_http(TO_CONN(conn),
                                &headers, MAX_HEADERS_SIZE,
@@ -76,7 +68,7 @@ index 61e47f018a..a16d9f40ab 100644
        log_fn_ratelim(&warning_limit, LOG_WARN, LD_DIRSERV,
                       "Oversized or malformed directory request from %s. "
 diff --git a/src/test/test_dir_handle_get.c b/src/test/test_dir_handle_get.c
-index a529ed7afb..b4e69d19b6 100644
+index a529ed7afb..7bd455e514 100644
 --- a/src/test/test_dir_handle_get.c
 +++ b/src/test/test_dir_handle_get.c
 @@ -36,6 +36,7 @@
@@ -87,19 +79,20 @@ index a529ed7afb..b4e69d19b6 100644
  #include "feature/dirauth/voting_schedule.h"
  
  #include "feature/dircommon/dir_connection_st.h"
-@@ -2747,6 +2748,43 @@ test_dir_handle_get_malformed_warn_ratelim(void *data)
+@@ -2747,6 +2748,44 @@ test_dir_handle_get_malformed_warn_ratelim(void *data)
      connection_free_minimal(TO_CONN(conn));
  }
  
-+/* Return directory_handle_command()'s result for an HS descriptor POST with
-+ * a <b>len</b>-byte body. */
++/* Return directory_handle_command()'s result for an HS descriptor POST that
++ * declares a Content-Length of <b>declared</b> and sends <b>len</b> body
++ * bytes. */
 +static int
-+handle_hs_post(size_t len)
++handle_hs_post(size_t declared, size_t len)
 +{
 +  dir_connection_t *conn = new_dir_conn();
 +  char *body = tor_malloc_zero(len);
 +  buf_add_printf(TO_CONN(conn)->inbuf, "POST /tor/hs/3/publish HTTP/1.0\r\n"
-+                 "Content-Length: %"TOR_PRIuSZ"\r\n\r\n", len);
++                 "Content-Length: %"TOR_PRIuSZ"\r\n\r\n", declared);
 +  buf_add(TO_CONN(conn)->inbuf, body, len);
 +  int r = directory_handle_command(conn);
 +  tor_free(body);
@@ -116,12 +109,12 @@ index a529ed7afb..b4e69d19b6 100644
 +
 +  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
 +  /* A body just under the limit is read; one that reaches it is refused. */
-+  tt_int_op(handle_hs_post(max_len - 1), OP_EQ, 0);
-+  tt_int_op(handle_hs_post(max_len), OP_EQ, -1);
++  tt_int_op(handle_hs_post(max_len - 1, max_len - 1), OP_EQ, 0);
++  tt_int_op(handle_hs_post(max_len, max_len), OP_EQ, -1);
 +#ifdef HAVE_MODULE_DIRAUTH
 +  /* Authorities keep the 16 MB limit. */
 +  get_options_mutable()->AuthoritativeDir = 1;
-+  tt_int_op(handle_hs_post(max_len), OP_EQ, 0);
++  tt_int_op(handle_hs_post(max_len, max_len), OP_EQ, 0);
 +#endif
 +
 + done:
@@ -131,10 +124,13 @@ index a529ed7afb..b4e69d19b6 100644
  #define DIR_HANDLE_CMD(name,flags) \
    { #name, test_dir_handle_get_##name, (flags), NULL, NULL }
  
-@@ -2818,5 +2856,6 @@ struct testcase_t dir_handle_get_tests[] = {
+@@ -2818,5 +2857,6 @@ struct testcase_t dir_handle_get_tests[] = {
    DIR_HANDLE_CMD(status_vote_next_consensus_signatures, 0),
    DIR_HANDLE_CMD(parse_accept_encoding, 0),
    DIR_HANDLE_CMD(malformed_warn_ratelim, TT_FORK),
 +  DIR_HANDLE_CMD(hs_post_size_limit, TT_FORK),
    END_OF_TESTCASES
  };
+-- 
+2.43.0
+

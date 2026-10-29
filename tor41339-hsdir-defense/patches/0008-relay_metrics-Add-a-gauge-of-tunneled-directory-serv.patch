@@ -1,4 +1,4 @@
-From d32a62d9c5e56b525ae62d1fffc8fe002bcd501b Mon Sep 17 00:00:00 2001
+From 3ef3e1df19e26995cb4df617be8abd164282259e Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:45:05 +0000
 Subject: [PATCH 08/20] relay_metrics: Add a gauge of tunneled directory server
@@ -21,24 +21,24 @@ gone and only the stream is left, draining onto the circuit
 Part of #41339.
 ---
  changes/ticket41339_metrics       |  3 ++
- src/feature/relay/relay_metrics.c | 45 +++++++++++++++++++++++
+ src/feature/relay/relay_metrics.c | 44 +++++++++++++++++++++++++
  src/feature/relay/relay_metrics.h |  2 ++
- src/test/test_hs_cache.c          | 60 +++++++++++++++++++++++++++++++
- 4 files changed, 110 insertions(+)
+ src/test/test_hs_cache.c          | 54 +++++++++++++++++++++++++++++++
+ 4 files changed, 103 insertions(+)
 
 diff --git a/changes/ticket41339_metrics b/changes/ticket41339_metrics
-index 598fce8a70..46581cac7b 100644
+index 824dd7e19e..d7caba192a 100644
 --- a/changes/ticket41339_metrics
 +++ b/changes/ticket41339_metrics
-@@ -9,3 +9,6 @@
-       and the tunneled directory responses fully handed to their stream, as
+@@ -12,3 +12,6 @@
+       fully handed to their stream, as
        tor_relay_begindir_response_total{type="hs_descriptor"|"other"}. Part of
        ticket 41339.
 +    - Report the tunneled directory connections a relay has open, by state, as
 +      the gauge tor_relay_begindir_connections. These connections have no
 +      socket, so tor_relay_connections doesn't show them. Part of ticket 41339.
 diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
-index 895be807d2..39f69222b0 100644
+index e2567da93d..76d8543c8e 100644
 --- a/src/feature/relay/relay_metrics.c
 +++ b/src/feature/relay/relay_metrics.c
 @@ -20,6 +20,7 @@
@@ -49,16 +49,15 @@ index 895be807d2..39f69222b0 100644
  
  #include "app/config/config.h"
  
-@@ -29,6 +30,8 @@
- #include "lib/math/fp.h"
+@@ -31,6 +32,7 @@
  #include "lib/metrics/metrics_store.h"
  
-+#include "feature/dircommon/dir_connection_st.h"
+ #include "feature/dircommon/dir_connection_st.h"
 +#include "feature/dircommon/directory.h"
  #include "feature/hs/hs_dos.h"
  #include "feature/nodelist/nodelist.h"
  #include "feature/nodelist/node_st.h"
-@@ -71,6 +74,7 @@ static void fill_hsdir_get_values(void);
+@@ -73,6 +75,7 @@ static void fill_hsdir_get_values(void);
  static void fill_hsdir_post_values(void);
  static void fill_begindir_request_values(void);
  static void fill_begindir_response_values(void);
@@ -66,7 +65,7 @@ index 895be807d2..39f69222b0 100644
  
  /** The base metrics that is a static array of metrics added to the metrics
   * store.
-@@ -274,6 +278,13 @@ static const relay_metrics_entry_t base_metrics[] =
+@@ -276,6 +279,13 @@ static const relay_metrics_entry_t base_metrics[] =
      .help = "Total number of tunneled directory responses we handed off",
      .fill_fn = fill_begindir_response_values,
    },
@@ -74,14 +73,14 @@ index 895be807d2..39f69222b0 100644
 +    .key = RELAY_METRICS_BEGINDIR_CONNS,
 +    .type = METRICS_TYPE_GAUGE,
 +    .name = METRICS_NAME(relay_begindir_connections),
-+    .help = "Open tunneled directory server connections",
++    .help = "Open tunneled directory streams, by state",
 +    .fill_fn = fill_begindir_conns_values,
 +  },
  };
  static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
  
-@@ -1414,6 +1425,40 @@ fill_begindir_response_values(void)
-                       DIR_RESPONSE_TYPE_COUNT);
+@@ -1438,6 +1448,40 @@ fill_begindir_response_values(void)
+                       ARRAY_LENGTH(names));
  }
  
 +/** Fill the RELAY_METRICS_BEGINDIR_CONNS gauge. Each open BEGIN_DIR stream
@@ -114,15 +113,15 @@ index 895be807d2..39f69222b0 100644
 +    }
 +  } SMARTLIST_FOREACH_END(c);
 +
-+  fill_labeled_values(&base_metrics[RELAY_METRICS_BEGINDIR_CONNS], "state",
-+                      names, counts, N_STATES);
++  fill_labeled_values(&base_metrics[RELAY_METRICS_BEGINDIR_CONNS], NULL,
++                      NULL, "state", names, counts, N_STATES);
 +}
 +
  /** Fill the metrics store for the RELAY_METRICS_CIRC_DROP_CELL counter. */
  static void
  fill_relay_drop_cell(void)
 diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
-index 9a99287a7c..3ff548d279 100644
+index fceace00aa..47b67fdeb4 100644
 --- a/src/feature/relay/relay_metrics.h
 +++ b/src/feature/relay/relay_metrics.h
 @@ -71,6 +71,8 @@ typedef enum {
@@ -135,7 +134,7 @@ index 9a99287a7c..3ff548d279 100644
  
  /** The metadata of a relay metric. */
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 6f4096206f..0586460e63 100644
+index 611266142b..cfa65aa046 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -23,6 +23,7 @@
@@ -145,9 +144,9 @@ index 6f4096206f..0586460e63 100644
 +#include "core/mainloop/mainloop.h"
  #include "core/proto/proto_http.h"
  #include "core/or/circuitlist.h"
- #include "core/or/channel.h"
-@@ -1239,6 +1240,63 @@ test_dir_request_response_metrics(void *arg)
-   tor_free(chan);
+ #include "core/or/connection_edge.h"
+@@ -1323,6 +1324,57 @@ test_dir_request_url_table_types(void *arg)
+   free_fake_channel(chan);
  }
  
 +#define DIR_CONN_GAUGE(state) \
@@ -161,10 +160,7 @@ index 6f4096206f..0586460e63 100644
 +  const char *states[] = { "command_wait", "writing_hs_descriptor",
 +                           "writing_other", "draining" };
 +  const int64_t added[ARRAY_LENGTH(states)] = { 1, 1, 1, 2 };
-+  int64_t before[ARRAY_LENGTH(states)];
 +  connection_t *conns[7];
-+  edge_connection_t *edge = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
-+  edge_connection_t *edge2 = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
 +  ed25519_public_key_t pk;
 +  (void) arg;
 +
@@ -183,20 +179,17 @@ index 6f4096206f..0586460e63 100644
 +  conns[4]->state = DIR_CONN_STATE_SERVER_COMMAND_WAIT;
 +  conns[4]->marked_for_close = 1;
 +  /* Streams whose directory connection is gone, or closing. */
-+  conns[5] = TO_CONN(edge);
-+  conns[5]->linked = 1;
-+  conns[6] = TO_CONN(edge2);
-+  conns[6]->linked = 1;
++  conns[5] = TO_CONN(edge_connection_new(CONN_TYPE_EXIT, AF_INET));
++  conns[6] = TO_CONN(edge_connection_new(CONN_TYPE_EXIT, AF_INET));
++  conns[5]->linked = conns[6]->linked = 1;
 +  conns[6]->linked_conn = conns[4];
 +
-+  for (size_t i = 0; i < ARRAY_LENGTH(states); i++)
-+    before[i] = DIR_CONN_GAUGE(states[i]);
 +  for (size_t i = 0; i < ARRAY_LENGTH(conns); i++) {
 +    conns[i]->conn_array_index = smartlist_len(get_connection_array());
 +    smartlist_add(get_connection_array(), conns[i]);
 +  }
 +  for (size_t i = 0; i < ARRAY_LENGTH(states); i++)
-+    tt_i64_op(DIR_CONN_GAUGE(states[i]), OP_EQ, before[i] + added[i]);
++    tt_i64_op(DIR_CONN_GAUGE(states[i]), OP_EQ, added[i]);
 +
 + done:
 +  conns[6]->linked_conn = NULL;
@@ -210,12 +203,15 @@ index 6f4096206f..0586460e63 100644
  struct testcase_t hs_cache[] = {
    { "hsdir_request_limit_get", test_hsdir_request_limit, TT_FORK,
      &passthrough_setup, (void *) "get" },
-@@ -1261,6 +1319,8 @@ struct testcase_t hs_cache[] = {
-     NULL, NULL },
-   { "dir_request_response_metrics", test_dir_request_response_metrics,
+@@ -1347,6 +1399,8 @@ struct testcase_t hs_cache[] = {
      TT_FORK, NULL, NULL },
+   { "dir_request_url_table_types", test_dir_request_url_table_types, TT_FORK,
+     NULL, NULL },
 +  { "dir_server_conns_gauge", test_dir_server_conns_gauge, TT_FORK,
 +    NULL, NULL },
    { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
      NULL, NULL },
-   { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
+   { "client_cache", test_client_cache, TT_FORK,
+-- 
+2.43.0
+

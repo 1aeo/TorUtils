@@ -1,0 +1,8 @@
+1000 keys: 0.00% of keys find no slot
+2000 keys: 0.04% of keys find no slot
+2500 keys: 0.24% of keys find no slot
+2800 keys: 0.62% of keys find no slot
+3000 keys: 1.11% of keys find no slot
+3200 keys: 1.75% of keys find no slot
+3500 keys: 3.30% of keys find no slot
+4096 keys: 8.62% of keys find no slot

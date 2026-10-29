@@ -1,0 +1,288 @@
+os: Ubuntu 24.04.5 LTS; tor: 0.4.9.15-1~noble+1+tor41339.9
+iface: lo:
+INFO:chutney:creating '/work/net/nodes.1793264757', linking to '/work/net/nodes'
+Creating identity key for test003a     with /usr/bin/tor-gencert
+INFO:chutney:Loading network from nodes dir: '/work/net/nodes'->'/work/net/nodes.1793264757
+Starting nodes
+
+Starting nodes
+
+torrc=/work/lc-reuse/torrc ctl=8020 role=client bin=/lc/tor EVIL_ISO_SESSIONGRP=1 EVIL_ONEHOP=unset
+torrc=/work/lc-onehop/torrc ctl=8022 role=onehop bin=/lc/tor EVIL_ISO_SESSIONGRP=unset EVIL_ONEHOP=1
+torrc=/work/lc-clientonehop/torrc ctl=8024 role=client bin=/lc/tor EVIL_ISO_SESSIONGRP=unset EVIL_ONEHOP=1
+load client reuse bootstrapped: True
+load client onehop-unlisted bootstrapped: True
+load client onehop-client bootstrapped: True
+target HSDir 004r
+=== rates while loaded ===
+BEGIN_DIR streams, per second over 45.0 s
+  opened (tor_relay_streams_total{type="BEGIN_DIR"}): 3.11/s
+  Q1: what they asked for
+    onion service descriptor fetches   68.6%  2.13/s
+    onion service descriptor uploads    0.0%  0.00/s
+    other directory requests            0.0%  0.00/s
+    no request, or unparsable          15.7%  0.49/s
+    dropped unread, circuit closing    15.7%  0.49/s
+    still waiting for a request now   0
+    unaccounted (opened - classified - change in waiting): 0.00/s
+  Q4: onion service requests by previous hop
+    unauthenticated client or bridge, one hop (503, single_hop): 0.67/s
+    second on its circuit, refused before its previous hop is looked up: 0.73/s
+    authenticated, relay in our consensus: 0.49/s
+    authenticated, relay known only by its descriptor (left the consensus in about the last two days): 0.00/s
+    authenticated, relay identity we do not know: 0.24/s
+  Q1 x Q4: all BEGIN_DIR by previous hop: client (never authenticated: one hop from a client or bridge), relay we know, relay identity we do not know
+                                                   client    known_relay  unknown_relay
+    BEGIN_DIR cells                                0.67/s         1.96/s         0.49/s
+      requests (each accepted stream once)         0.67/s         1.96/s         0.49/s
+        onion service descriptor fetches           0.67/s         0.98/s         0.49/s
+        onion service descriptor uploads           0.00/s         0.00/s         0.00/s
+        consensus                                  0.00/s         0.00/s         0.00/s
+        microdescriptors                           0.00/s         0.00/s         0.00/s
+        relay descriptors                          0.00/s         0.00/s         0.00/s
+        other GETs (including 404s)                0.00/s         0.00/s         0.00/s
+        other POSTs                                0.00/s         0.00/s         0.00/s
+        unparsable or incomplete                   0.00/s         0.00/s         0.00/s
+        nothing sent                               0.00/s         0.49/s         0.00/s
+        dropped unread: circuit closing            0.00/s         0.49/s         0.00/s
+    circuits that sent BEGIN_DIR                   0.00/s         0.49/s         0.24/s
+    BEGIN_DIR cells per circuit                         -            4.0            2.0
+    cells past their circuit's 10th                100.0%           0.0%           0.0%
+    cells past their circuit's 100th                 0.0%           0.0%           0.0%
+    CREATE cells (all circuits)                    0.09/s         0.60/s         0.24/s
+  Q6: response bytes read by their stream, by request type
+    onion service descriptor fetches       1.3 KB/s  (630 bytes per request)
+    nothing sent                           0.0 KB/s  (0 bytes per request)
+    dropped unread: circuit closing        0.0 KB/s  (0 bytes per request)
+  Q2: requests per circuit
+    onion service requests refused as the second on their circuit, which closes it: 0.73/s of 1.47/s
+    requests dropped unread on a closing circuit: 0.49/s
+    BEGIN_DIR cells over their circuit's BEGIN_DIR rate (DoSBeginDirRate/Burst; counted while DoSBeginDirRateEnabled is on, the default): 0.00/s
+    BEGIN_DIR cells refused as the second on a relay's circuit (counted while the consensus enables DoSBeginDirLimitEnabled): 0.00/s
+  Q3: circuits
+    CREATE handshakes processed, from authenticated previous hops only (stock leaves clients out): 0.84/s
+    CREATE handshakes dropped, from authenticated previous hops only (stock leaves clients out): 0.00/s
+    congestion-control circuits created, from every kind of previous hop: 1.00/s
+      minus authenticated ntor_v3 handshakes (clients' circuits plus the relay's own, roughly): 0.16/s
+    rejected by the per-address circuit limit (client channels only): 0.00/s
+    client CREATE cells that found their address's DoSCircuitCreationRate/Burst bucket empty (marked or not; counted only while DoSCircuitCreationEnabled is on): 0.00/s of 0.09/s
+    client CREATE cells from addresses tor no longer tracks, which DoSCircuitCreation does not limit: 0.00/s
+    open circuits now: 95
+  Q3: sources (a client address tor tracks, else a client channel; or a relay channel; not counted on bridges)
+    CREATE from client:          (per minute: use an --interval of 60 or a multiple); 0.0% past their 10th, 0.0% past their 100th in a minute
+    BEGIN_DIR from client:       (per minute: use an --interval of 60 or a multiple); 66.7% past their 10th, 0.0% past their 100th in a minute
+    CREATE from known_relay:     (per minute: use an --interval of 60 or a multiple); 0.0% past their 10th, 0.0% past their 100th in a minute
+    BEGIN_DIR from known_relay:  (per minute: use an --interval of 60 or a multiple); 43.2% past their 10th, 0.0% past their 100th in a minute
+    CREATE from unknown_relay:   (per minute: use an --interval of 60 or a multiple); 9.1% past their 10th, 0.0% past their 100th in a minute
+    BEGIN_DIR from unknown_relay: (per minute: use an --interval of 60 or a multiple); 54.5% past their 10th, 0.0% past their 100th in a minute
+  descriptors fetched (distinct per minute; a fetch past the 10th or 100th of its descriptor in a minute)
+    found:                       (per minute: use an --interval of 60 or a multiple); 16.7% past their 10th, 0.0% past their 100th in a minute
+    not_found:                   (per minute: use an --interval of 60 or a multiple); 52.4% past their 10th, 0.0% past their 100th in a minute
+  mean time per directory stream (from the state gauge, over this interval):
+    waiting for a request: 0.0 s
+    writing an onion service descriptor: 0.0 s
+    descriptors abandoned before their stream took them: 0.18/s
+  descriptor fetches over HSDirFetchBudget: 0.00/s, shed or would be shed: 0.00/s, refused: 0.73/s
+  open OR connections by peer (GETINFO orconn-status), now
+    relay named in our node list            12
+    authenticated identity with no name     2
+      of their 1 identities, in our consensus or descriptors: 0
+    client (never authenticated)            1
+    distinct client addresses: 1, most connections from one address: 1
+
+What this says (rates over 45.0 s):
+  1. Most BEGIN_DIR streams (68.6%, 2.13/s) were onion service descriptor
+     fetches.
+  2. Of those, 46% came through a relay we know; 31% came one hop from a
+     client or bridge (never authenticated); 23% came from a relay identity we
+     do not know.
+  3. 63% of BEGIN_DIR cells came through a relay we know; 0.0% of those were
+     past their circuit's 10th, 0.0% past its 100th and 0.0% past its 1000th.
+     Stock tor and Arti send one per onion service circuit, and about 30 or
+     fewer on a directory circuit.
+  4. 50.0% of onion service requests (0.73/s) were the second on their
+     circuit: tor refuses those and closes the circuit, since stock clients
+     make one per circuit.
+  5. Each rule counts what it refuses; ours also what they would refuse while
+     off, tor's own begindir_* rules only while on:
+       one HSDir request per circuit  50.0% of onion service requests
+       HSDirRefuseUnknownPrevHop   16.7% of onion service requests
+       HSDirFetchShedding           0.0% of descriptor fetches
+       DoSBeginDirLimitEnabled (consensus)   0.0% of BEGIN_DIR cells
+       DoSBeginDirRateEnabled       0.0% of BEGIN_DIR cells
+     A client refused can retry on a new circuit: refusing a share of requests
+     saves less than that share of bandwidth.
+  6. Responses took 1.3 KB/s, read by their streams; 100% of it for onion
+     service descriptor fetches, 5038 bytes per descriptor served, about 13
+     cells with their CONNECTED and END cells. Each accepted stream also cost
+     a CONNECTED cell of 514 bytes: 1.6 KB/s. As cells, that is about 51% of
+     the bytes the relay wrote.
+  7. Empty streams: 0.49/s (15.7% of BEGIN_DIR streams); their CONNECTED cells
+     alone cost 0.3 KB/s. Their mean life was at most 0 s (from the gauge of
+     streams waiting for a request), so at least 100% closed within 10 s,
+     before our stall timeout could close them.
+  8. Not in these metrics (see analysis/v8-metrics-proposal.md): which kinds
+     of request sit deep in their circuits, how empty streams end and on which
+     circuits, the response bytes each rule would avoid, descriptor and not-
+     found bytes apart, and bytes dropped at close.
+
+loads: {'reuse': {'load_issued': 175, 'load_recv': 2, 'load_fail': 0, 'load_groups': 35}, 'onehop-unlisted': {'load_issued': 35, 'load_recv': 8, 'load_fail': 11}, 'onehop-client': {'load_issued': 35, 'load_recv': 0, 'load_fail': 0}}
+=== totals since start ===
+BEGIN_DIR streams, since the relay started
+  opened (tor_relay_streams_total{type="BEGIN_DIR"}): 229
+  Q1: what they asked for
+    onion service descriptor fetches   67.7%  155
+    onion service descriptor uploads    1.7%  4
+    other directory requests            0.0%  0
+    no request, or unparsable          15.3%  35
+    dropped unread, circuit closing    15.3%  35
+    still waiting for a request now   0
+    unaccounted (opened - classified - change in waiting): 0
+  Q4: onion service requests by previous hop
+    unauthenticated client or bridge, one hop (503, single_hop): 49
+    second on its circuit, refused before its previous hop is looked up: 52
+    authenticated, relay in our consensus: 40
+    authenticated, relay known only by its descriptor (left the consensus in about the last two days): 0
+    authenticated, relay identity we do not know: 18
+  Q1 x Q4: all BEGIN_DIR by previous hop: client (never authenticated: one hop from a client or bridge), relay we know, relay identity we do not know
+                                                   client    known_relay  unknown_relay
+    BEGIN_DIR cells                                    49            145             35
+      requests (each accepted stream once)             49            145             35
+        onion service descriptor fetches               49             71             35
+        onion service descriptor uploads                0              4              0
+        consensus                                       0              0              0
+        microdescriptors                                0              0              0
+        relay descriptors                               0              0              0
+        other GETs (including 404s)                     0              0              0
+        other POSTs                                     0              0              0
+        unparsable or incomplete                        0              0              0
+        nothing sent                                    0             35              0
+        dropped unread: circuit closing                 0             35              0
+    circuits that sent BEGIN_DIR                        1             40             18
+    BEGIN_DIR cells per circuit                      49.0            3.6            1.9
+    cells past their circuit's 10th                 79.6%           0.0%           0.0%
+    cells past their circuit's 100th                 0.0%           0.0%           0.0%
+    CREATE cells (all circuits)                        13             99             18
+  Q6: response bytes read by their stream, by request type
+    onion service descriptor fetches       119624 bytes  (772 bytes per request)
+    onion service descriptor uploads       352 bytes  (88 bytes per request)
+    nothing sent                           0 bytes  (0 bytes per request)
+    dropped unread: circuit closing        0 bytes  (0 bytes per request)
+  Q2: requests per circuit
+    onion service requests refused as the second on their circuit, which closes it: 52 of 110
+    requests dropped unread on a closing circuit: 35
+    BEGIN_DIR cells over their circuit's BEGIN_DIR rate (DoSBeginDirRate/Burst; counted while DoSBeginDirRateEnabled is on, the default): 0
+    BEGIN_DIR cells refused as the second on a relay's circuit (counted while the consensus enables DoSBeginDirLimitEnabled): 0
+  Q3: circuits
+    CREATE handshakes processed, from authenticated previous hops only (stock leaves clients out): 117
+    CREATE handshakes dropped, from authenticated previous hops only (stock leaves clients out): 0
+    congestion-control circuits created, from every kind of previous hop: 184
+      minus authenticated ntor_v3 handshakes (clients' circuits plus the relay's own, roughly): 71
+    rejected by the per-address circuit limit (client channels only): 0
+    client CREATE cells that found their address's DoSCircuitCreationRate/Burst bucket empty (marked or not; counted only while DoSCircuitCreationEnabled is on): 0 of 13
+    client CREATE cells from addresses tor no longer tracks, which DoSCircuitCreation does not limit: 0
+    open circuits now: 98
+  Q3: sources (a client address tor tracks, else a client channel; or a relay channel; not counted on bridges)
+    CREATE from client:          3 source-minutes; 0.0% past their 10th, 0.0% past their 100th in a minute
+    BEGIN_DIR from client:       2 source-minutes; 59.2% past their 10th, 0.0% past their 100th in a minute
+    CREATE from known_relay:     21 source-minutes; 6.1% past their 10th, 0.0% past their 100th in a minute
+    BEGIN_DIR from known_relay:  13 source-minutes; 42.8% past their 10th, 0.0% past their 100th in a minute
+    CREATE from unknown_relay:   2 source-minutes; 27.8% past their 10th, 0.0% past their 100th in a minute
+    BEGIN_DIR from unknown_relay: 2 source-minutes; 54.3% past their 10th, 0.0% past their 100th in a minute
+  descriptors fetched (distinct per minute; a fetch past the 10th or 100th of its descriptor in a minute)
+    found:                       2 descriptor-minutes; 9.1% past their 10th, 0.0% past their 100th in a minute
+    not_found:                   1 descriptor-minutes; 68.8% past their 10th, 0.0% past their 100th in a minute
+  descriptor fetches over HSDirFetchBudget: 0, shed or would be shed: 0, refused: 52
+  open OR connections by peer (GETINFO orconn-status), now
+    relay named in our node list            12
+    authenticated identity with no name     2
+      of their 1 identities, in our consensus or descriptors: 0
+    client (never authenticated)            1
+    distinct client addresses: 1, most connections from one address: 1
+
+What this says (since the relay started):
+  1. Most BEGIN_DIR streams (67.7%, 155) were onion service descriptor
+     fetches.
+  2. Of those, 46% came through a relay we know; 32% came one hop from a
+     client or bridge (never authenticated); 23% came from a relay identity we
+     do not know.
+  3. 63% of BEGIN_DIR cells came through a relay we know; 0.0% of those were
+     past their circuit's 10th, 0.0% past its 100th and 0.0% past its 1000th.
+     Stock tor and Arti send one per onion service circuit, and about 30 or
+     fewer on a directory circuit.
+  4. 47.3% of onion service requests (52) were the second on their circuit:
+     tor refuses those and closes the circuit, since stock clients make one
+     per circuit.
+  5. Each rule counts what it refuses; ours also what they would refuse while
+     off, tor's own begindir_* rules only while on:
+       one HSDir request per circuit  47.3% of onion service requests
+       HSDirRefuseUnknownPrevHop   16.4% of onion service requests
+       HSDirFetchShedding           0.0% of descriptor fetches
+       DoSBeginDirLimitEnabled (consensus)   0.0% of BEGIN_DIR cells
+       DoSBeginDirRateEnabled       0.0% of BEGIN_DIR cells
+     A client refused can retry on a new circuit: refusing a share of requests
+     saves less than that share of bandwidth.
+  6. Responses took 0.1 MB, read by their streams; 100% of it for onion
+     service descriptor fetches, 5437 bytes per descriptor served, about 13
+     cells with their CONNECTED and END cells. Each accepted stream also cost
+     a CONNECTED cell of 514 bytes: 0.1 MB. As cells, that is about 14% of the
+     bytes the relay wrote.
+  7. Empty streams: 35 (15.3% of BEGIN_DIR streams); their CONNECTED cells
+     alone cost 0.0 MB.
+  8. Not in these metrics (see analysis/v8-metrics-proposal.md): which kinds
+     of request sit deep in their circuits, how empty streams end and on which
+     circuits, the response bytes each rule would avoid, descriptor and not-
+     found bytes apart, and bytes dropped at close.
+ 
+=== nonzero series at the target ===
+tor_relay_hsdir_fetch_total{action="success"} 22
+tor_relay_hsdir_fetch_total{action="not_found"} 32
+tor_relay_hsdir_fetch_total{action="single_hop"} 49
+tor_relay_hsdir_fetch_total{action="refused"} 52
+tor_relay_hsdir_fetch_descriptor_total{lookup="not_found",nth="1"} 1
+tor_relay_hsdir_fetch_descriptor_total{lookup="not_found",nth="2_10"} 9
+tor_relay_hsdir_fetch_descriptor_total{lookup="not_found",nth="11_100"} 22
+tor_relay_hsdir_fetch_descriptor_total{lookup="found",nth="1"} 2
+tor_relay_hsdir_fetch_descriptor_total{lookup="found",nth="2_10"} 18
+tor_relay_hsdir_fetch_descriptor_total{lookup="found",nth="11_100"} 2
+tor_relay_create_cell_total{prev_hop="client"} 13
+tor_relay_create_cell_total{prev_hop="known_relay"} 99
+tor_relay_create_cell_total{prev_hop="unknown_relay"} 18
+tor_relay_hsdir_upload_total{action="success"} 4
+tor_relay_begindir_cell_source_total{prev_hop="client",nth="1"} 2
+tor_relay_begindir_cell_source_total{prev_hop="client",nth="2_10"} 18
+tor_relay_begindir_cell_source_total{prev_hop="client",nth="11_100"} 29
+tor_relay_begindir_cell_source_total{prev_hop="known_relay",nth="1"} 13
+tor_relay_begindir_cell_source_total{prev_hop="known_relay",nth="2_10"} 70
+tor_relay_begindir_cell_source_total{prev_hop="known_relay",nth="11_100"} 62
+tor_relay_begindir_cell_source_total{prev_hop="unknown_relay",nth="1"} 2
+tor_relay_begindir_cell_source_total{prev_hop="unknown_relay",nth="2_10"} 14
+tor_relay_begindir_cell_source_total{prev_hop="unknown_relay",nth="11_100"} 19
+tor_relay_dos_total{type="begindir_hsdir_rejected"} 52
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 18
+tor_relay_begindir_response_bytes_total{type="hs_get"} 119624
+tor_relay_begindir_response_bytes_total{type="hs_post"} 352
+tor_relay_begindir_request_total{type="hs_get",prev_hop="client"} 49
+tor_relay_begindir_request_total{type="hs_get",prev_hop="known_relay"} 71
+tor_relay_begindir_request_total{type="hs_get",prev_hop="unknown_relay"} 35
+tor_relay_begindir_request_total{type="hs_post",prev_hop="known_relay"} 4
+tor_relay_begindir_request_total{type="no_request",prev_hop="known_relay"} 35
+tor_relay_begindir_request_total{type="circuit_dead",prev_hop="known_relay"} 35
+tor_relay_begindir_cell_total{prev_hop="client",nth="1"} 1
+tor_relay_begindir_cell_total{prev_hop="client",nth="2_10"} 9
+tor_relay_begindir_cell_total{prev_hop="client",nth="11_100"} 39
+tor_relay_begindir_cell_total{prev_hop="known_relay",nth="1"} 40
+tor_relay_begindir_cell_total{prev_hop="known_relay",nth="2_10"} 105
+tor_relay_begindir_cell_total{prev_hop="unknown_relay",nth="1"} 18
+tor_relay_begindir_cell_total{prev_hop="unknown_relay",nth="2_10"} 17
+tor_relay_create_cell_source_total{prev_hop="client",nth="1"} 3
+tor_relay_create_cell_source_total{prev_hop="client",nth="2_10"} 10
+tor_relay_create_cell_source_total{prev_hop="known_relay",nth="1"} 21
+tor_relay_create_cell_source_total{prev_hop="known_relay",nth="2_10"} 72
+tor_relay_create_cell_source_total{prev_hop="known_relay",nth="11_100"} 6
+tor_relay_create_cell_source_total{prev_hop="unknown_relay",nth="1"} 2
+tor_relay_create_cell_source_total{prev_hop="unknown_relay",nth="2_10"} 11
+tor_relay_create_cell_source_total{prev_hop="unknown_relay",nth="11_100"} 5
+tor_relay_begindir_response_total{type="hs_descriptor"} 8
+tor_relay_begindir_response_total{type="other"} 64
+--- bad syscalls: 0

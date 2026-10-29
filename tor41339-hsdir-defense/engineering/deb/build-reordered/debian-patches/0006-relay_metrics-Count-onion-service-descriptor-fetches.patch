@@ -1,4 +1,4 @@
-From cd7829704771a84c217851823d319b03b70dd00d Mon Sep 17 00:00:00 2001
+From 6f063586eb5985b289f326d863323c9a22f6c991 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:40:13 +0000
 Subject: [PATCH 06/20] relay_metrics: Count onion service descriptor fetches
@@ -26,13 +26,13 @@ Only tunneled (BEGIN_DIR) requests are counted.
 Part of #41339.
 ---
  changes/ticket41339_metrics       |   6 ++
- src/feature/dircache/dircache.c   |  21 ++++-
- src/feature/hs/hs_cache.c         |   8 +-
- src/feature/relay/relay_metrics.c |  86 +++++++++++++++++++++
- src/feature/relay/relay_metrics.h |  46 +++++++++++
- src/test/test_hs_cache.c          | 124 +++++++++++++++++++++++++++++-
+ src/feature/dircache/dircache.c   |  17 ++++-
+ src/feature/hs/hs_cache.c         |   8 ++-
+ src/feature/relay/relay_metrics.c |  91 ++++++++++++++++++++++++
+ src/feature/relay/relay_metrics.h |  46 +++++++++++++
+ src/test/test_hs_cache.c          | 111 +++++++++++++++++++++++++++++-
  src/test/test_stats.c             |   2 +-
- 7 files changed, 287 insertions(+), 6 deletions(-)
+ 7 files changed, 274 insertions(+), 7 deletions(-)
  create mode 100644 changes/ticket41339_metrics
 
 diff --git a/changes/ticket41339_metrics b/changes/ticket41339_metrics
@@ -48,7 +48,7 @@ index 0000000000..ee52efa799
 +      without any fault when several instances publish for the same address,
 +      are counted apart from invalid ones. Part of ticket 41339.
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 550c236112..4f30c8a6c7 100644
+index 19de13ff04..e477481ece 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
 @@ -34,6 +34,7 @@
@@ -88,31 +88,28 @@ index 550c236112..4f30c8a6c7 100644
    write_http_response_header(conn, strlen(desc_str), NO_METHOD, 0);
    connection_buf_add(desc_str, strlen(desc_str), TO_CONN(conn));
  
-@@ -1615,6 +1621,7 @@ handle_post_hs_descriptor(const char *url, const char *body)
+@@ -1613,8 +1619,9 @@ parse_hs_version_from_post(const char *url, const char *prefix,
+ STATIC int
+ handle_post_hs_descriptor(const char *url, const char *body)
  {
-   int version;
+-  int version;
++  int version, ret;
    const char *end_pos;
 +  hsdir_post_action_t action = HSDIR_POST_BAD_URL;
  
    tor_assert(url);
    tor_assert(body);
-@@ -1632,7 +1639,14 @@ handle_post_hs_descriptor(const char *url, const char *body)
+@@ -1632,7 +1639,8 @@ handle_post_hs_descriptor(const char *url, const char *body)
  
    switch (version) {
    case HS_VERSION_THREE:
 -    if (hs_cache_store_as_dir(body) < 0) {
-+    switch (hs_cache_store_as_dir(body)) {
-+    case 0:
-+      break;
-+    case -2:
-+      action = HSDIR_POST_NOT_NEWER;
-+      goto err;
-+    default:
-+      action = HSDIR_POST_INVALID;
++    if ((ret = hs_cache_store_as_dir(body)) < 0) {
++      action = ret == -2 ? HSDIR_POST_NOT_NEWER : HSDIR_POST_INVALID;
        goto err;
      }
      log_info(LD_REND, "Publish request for HS descriptor handled "
-@@ -1643,9 +1657,11 @@ handle_post_hs_descriptor(const char *url, const char *body)
+@@ -1643,9 +1651,11 @@ handle_post_hs_descriptor(const char *url, const char *body)
      goto err;
    }
  
@@ -124,7 +121,7 @@ index 550c236112..4f30c8a6c7 100644
    return 400;
  }
  
-@@ -1689,11 +1705,14 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+@@ -1689,11 +1699,14 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
        goto done;
      }
      if (!connection_dir_is_anonymous(conn)) {
@@ -176,7 +173,7 @@ index cead515ec0..3d43bdb74b 100644
  
  /** Using the query, lookup in our directory cache the entry. If found, 1 is
 diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
-index 749b4d68bc..e6ac2661d0 100644
+index 749b4d68bc..e726e28372 100644
 --- a/src/feature/relay/relay_metrics.c
 +++ b/src/feature/relay/relay_metrics.c
 @@ -67,6 +67,8 @@ static void fill_est_intro_cells(void);
@@ -209,20 +206,25 @@ index 749b4d68bc..e6ac2661d0 100644
  };
  static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
  
-@@ -1263,6 +1279,76 @@ fill_relay_destroy_cell(void)
+@@ -1263,6 +1279,81 @@ fill_relay_destroy_cell(void)
                               (int64_t) stats_n_destroy_cells_processed);
  }
  
 +/** Add one entry of the metric <b>rentry</b> per element of <b>values</b>,
-+ * labeled <b>label</b>=<b>names</b>[i]. */
++ * labeled <b>label0</b>=<b>value0</b> unless <b>label0</b> is NULL, and
++ * <b>label</b>=<b>names</b>[i]. */
 +static void
-+fill_labeled_values(const relay_metrics_entry_t *rentry, const char *label,
++fill_labeled_values(const relay_metrics_entry_t *rentry, const char *label0,
++                    const char *value0, const char *label,
 +                    const char *const *names, const uint64_t *values,
 +                    size_t n_values)
 +{
 +  for (size_t i = 0; i < n_values; ++i) {
 +    metrics_store_entry_t *sentry = metrics_store_add(
 +        the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
++    if (label0)
++      metrics_store_entry_add_label(sentry,
++                                    metrics_format_label(label0, value0));
 +    metrics_store_entry_add_label(sentry,
 +                                  metrics_format_label(label, names[i]));
 +    metrics_store_entry_update(sentry, values[i]);
@@ -250,8 +252,8 @@ index 749b4d68bc..e6ac2661d0 100644
 +static void
 +fill_hsdir_get_values(void)
 +{
-+  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_HSDIR_GET], "action",
-+                      hsdir_get_action_names, hsdir_get_actions,
++  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_HSDIR_GET], NULL, NULL,
++                      "action", hsdir_get_action_names, hsdir_get_actions,
 +                      HSDIR_GET_ACTION_COUNT);
 +}
 +
@@ -278,8 +280,8 @@ index 749b4d68bc..e6ac2661d0 100644
 +static void
 +fill_hsdir_post_values(void)
 +{
-+  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_HSDIR_POST], "action",
-+                      hsdir_post_action_names, hsdir_post_actions,
++  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_HSDIR_POST], NULL, NULL,
++                      "action", hsdir_post_action_names, hsdir_post_actions,
 +                      HSDIR_POST_ACTION_COUNT);
 +}
 +
@@ -349,7 +351,7 @@ index e7b5b660fa..500d9ddd94 100644
 +
  #endif /* !defined(TOR_FEATURE_RELAY_RELAY_METRICS_H) */
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 185443673a..189949cf02 100644
+index 808121a49d..6b689180e4 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
 @@ -28,6 +28,7 @@
@@ -360,7 +362,15 @@ index 185443673a..189949cf02 100644
  #include "lib/crypt_ops/crypto_format.h"
  #include "lib/crypt_ops/crypto_rand.h"
  #include "lib/metrics/metrics_store.h"
-@@ -278,7 +279,7 @@ test_directory(void *arg)
+@@ -38,6 +39,7 @@
+ #include "feature/dircommon/dir_connection_st.h"
+ #include "feature/nodelist/networkstatus_st.h"
+ 
++#include "test/fakechans.h"
+ #include "test/hs_test_helpers.h"
+ #include "test/log_test_helpers.h"
+ #include "test/test_helpers.h"
+@@ -278,7 +280,7 @@ test_directory(void *arg)
      tt_int_op(ret, OP_EQ, 0);
      /* Re-add, it should fail since we already have it. */
      ret = hs_cache_store_as_dir(desc1_str);
@@ -369,13 +379,12 @@ index 185443673a..189949cf02 100644
      /* Try to clean now which should be fine, there is at worst few seconds
       * between the store and this call. */
      hs_cache_clean_as_dir(time(NULL));
-@@ -539,6 +540,125 @@ helper_fetch_desc_from_hsdir(const ed25519_public_key_t *blinded_key)
+@@ -539,6 +541,111 @@ helper_fetch_desc_from_hsdir(const ed25519_public_key_t *blinded_key)
    return received_desc;
  }
  
 +/* Return the value of <b>name</b>{<b>key</b>="<b>value</b>"} in the relay
-+ * metrics store. If there is no such entry, fail the test and return -1, so
-+ * that a series that vanished never compares equal to a baseline. */
++ * metrics store. If there is no such entry, fail the test and return -1. */
 +static int64_t
 +get_metric(const char *name, const char *key, const char *value)
 +{
@@ -407,48 +416,37 @@ index 185443673a..189949cf02 100644
 +
 +/* As hsdir_request_on_circuit(), on a new OR circuit whose previous hop is
 + * <b>chan</b>. */
-+static void
++static int
 +hsdir_request_on_new_circ(channel_t *chan, const char *req, const char *body)
 +{
-+  hsdir_request_on_circuit(new_or_circ(chan), req, body);
++  return hsdir_request_on_circuit(new_or_circ(chan), req, body);
 +}
 +
 +/* HSDirs count descriptor fetches and uploads by outcome. */
 +static void
 +test_hsdir_get_post_metrics(void *arg)
 +{
-+  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
++  channel_t *chan = new_fake_channel();
 +  ed25519_keypair_t signing_kp;
 +  hs_descriptor_t *desc = NULL;
 +  dir_connection_t *dirport;
 +  or_circuit_t *circs[2];
 +  char *desc_str = NULL, *get = NULL;
-+  char key[ED25519_BASE64_LEN+1];
 +  const char *post = "POST /tor/hs/3/publish HTTP/1.0\r\n\r\n";
 +  const char *get_actions[] = { "success", "not_found", "single_hop",
 +                                "refused" };
 +  const char *post_actions[] = { "success", "not_newer", "invalid", "bad_url",
 +                                 "single_hop", "refused" };
-+  int64_t get0[ARRAY_LENGTH(get_actions)];
-+  int64_t post0[ARRAY_LENGTH(post_actions)];
 +  (void) arg;
 +
 +  init_test();
 +  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
-+  /* Closing a circuit looks up the fake channel's address. */
-+  MOCK(channel_get_addr_if_possible, mock_channel_get_addr_if_possible);
 +  get_options_mutable()->ORPort_set = 1; /* Accept descriptor uploads. */
-+  /* Other tests may have counted requests before we forked. */
-+  for (size_t i = 0; i < ARRAY_LENGTH(get_actions); i++)
-+    get0[i] = GET_METRIC(get_actions[i]);
-+  for (size_t i = 0; i < ARRAY_LENGTH(post_actions); i++)
-+    post0[i] = POST_METRIC(post_actions[i]);
 +  tt_int_op(ed25519_keypair_generate(&signing_kp, 0), OP_EQ, 0);
 +  desc = hs_helper_build_hs_desc_with_ip(&signing_kp);
 +  tt_int_op(hs_desc_encode_descriptor(desc, &signing_kp, NULL, &desc_str),
 +            OP_EQ, 0);
-+  ed25519_public_to_base64(key, &desc->plaintext_data.blinded_pubkey);
-+  tor_asprintf(&get, GET("/tor/hs/3/%s"), key);
++  tor_asprintf(&get, GET("/tor/hs/3/%s"), helper_get_hsdir_query(desc));
 +
 +  hsdir_request_on_new_circ(chan, get, NULL); /* Not uploaded yet. */
 +  /* The second request on a circuit is refused, and closes the circuit. */
@@ -457,6 +455,7 @@ index 185443673a..189949cf02 100644
 +  tt_int_op(hsdir_request_on_circuit(circs[0], post, desc_str), OP_EQ, 200);
 +  tt_int_op(hsdir_request_on_circuit(circs[0], get, NULL), OP_EQ, 0);
 +  hsdir_request_on_new_circ(chan, post, desc_str); /* Same revision. */
++  tt_i64_op(POST_METRIC("not_newer"), OP_EQ, 1);
 +  hsdir_request_on_new_circ(chan, post, "hs-descriptor 3\nJUNK");
 +  hsdir_request_on_new_circ(chan,
 +                            "POST /tor/hs/2/publish HTTP/1.0\r\n\r\n",
@@ -476,17 +475,14 @@ index 185443673a..189949cf02 100644
 +
 +  /* Exactly one request of each outcome. */
 +  for (size_t i = 0; i < ARRAY_LENGTH(get_actions); i++)
-+    tt_i64_op(GET_METRIC(get_actions[i]), OP_EQ, get0[i] + 1);
++    tt_i64_op(GET_METRIC(get_actions[i]), OP_EQ, 1);
 +  for (size_t i = 0; i < ARRAY_LENGTH(post_actions); i++)
-+    tt_i64_op(POST_METRIC(post_actions[i]), OP_EQ, post0[i] + 1);
++    tt_i64_op(POST_METRIC(post_actions[i]), OP_EQ, 1);
 +
 + done:
 +  UNMOCK(connection_write_to_buf_impl_);
-+  UNMOCK(channel_get_addr_if_possible);
-+  SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
-+                    TO_OR_CIRCUIT(c)->p_chan = NULL);
 +  circuit_free_all();
-+  tor_free(chan);
++  free_fake_channel(chan);
 +  hs_descriptor_free(desc);
 +  tor_free(desc_str);
 +  tor_free(get);
@@ -495,7 +491,7 @@ index 185443673a..189949cf02 100644
  /* Publish a descriptor to the HSDir, then fetch it. Check that the received
     descriptor matches the published one. */
  static void
-@@ -1061,6 +1181,8 @@ struct testcase_t hs_cache[] = {
+@@ -1043,6 +1150,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "upload_and_download_hs_desc", test_upload_and_download_hs_desc, TT_FORK,
      NULL, NULL },
@@ -503,7 +499,7 @@ index 185443673a..189949cf02 100644
 +    NULL, NULL },
    { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
      NULL, NULL },
-   { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
+   { "client_cache", test_client_cache, TT_FORK,
 diff --git a/src/test/test_stats.c b/src/test/test_stats.c
 index 22d65b1e54..58a7f1eb7a 100644
 --- a/src/test/test_stats.c
@@ -517,3 +513,6 @@ index 22d65b1e54..58a7f1eb7a 100644
  
    /* cleanup */
    hs_descriptor_free(desc1);
+-- 
+2.43.0
+

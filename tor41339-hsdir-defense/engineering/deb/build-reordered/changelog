@@ -1,4 +1,4 @@
-tor (0.4.9.15-1~noble+1+tor41339.8) noble; urgency=medium
+tor (0.4.9.15-1~noble+1+tor41339.9) noble; urgency=medium
 
   * Apply the tor#41339 HSDir defensive series (patches 0001-0020) on
     tor 0.4.9.15: HTTP and onion service descriptor hardening;
@@ -7,12 +7,10 @@ tor (0.4.9.15-1~noble+1+tor41339.8) noble; urgency=medium
     circuits and BEGIN_DIR cells by previous hop and by source and
     descriptor per minute; the HSDirRefuseUnknownPrevHop and
     HSDirFetchShedding defenses, both off by default; restore
-    doc/nofooter.conf. The .7 options HSDirOneRequestPerCircuit (tor
-    0.4.9.15 enforces one HSDir request per circuit),
-    DoSBeginDirLimitEnabled and DoSBeginDirMaxStreams (the open-stream
-    cap, dropped) and HSDirDescriptorFetchLimit are gone.
+    doc/nofooter.conf. The same options and MetricsPort series as
+    +tor41339.8, from a smaller series with the fixes from its review.
 
- -- 1aeo <github@1aeo.com>  Thu, 29 Oct 2026 04:05:09 +0000
+ -- 1aeo <github@1aeo.com>  Thu, 29 Oct 2026 08:17:28 +0000
 
 tor (0.4.9.15-1~noble+1) noble-backport; urgency=medium
 

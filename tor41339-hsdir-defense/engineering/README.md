@@ -2,10 +2,11 @@
 
 > **Historical summary.** The table below covers the legacy 7-patch series
 > up to the `+tor41339.3` packages. For the current 20-patch series on tor
-> 0.4.9.15 and the `+tor41339.8` packages, see `deb/README.md` (build,
-> install check, live controls) and `v8-rebase/` (the rebase, its review,
-> per-commit builds, practracker and mutation testing). `v7-review/` and
-> `../analysis/v7-review.md` cover `.7`.
+> 0.4.9.15 and the `+tor41339.9` packages, see `deb/README.md` (build,
+> install check, live controls) and `v9-minimize/` (the smaller series, its
+> review, per-commit builds, practracker and mutation testing).
+> `v8-rebase/` covers the rebase onto tor 0.4.9.15 (`.8`), and `v7-review/`
+> and `../analysis/v7-review.md` cover `.7`.
 
 **Scope.** Native amd64 build and unit tests, the upstream CI matrix
 (patched vs unpatched), the seccomp sandbox check, the deb.torproject.org

@@ -1,4 +1,4 @@
-From 235477c0962326cff14af5645c1e51cc80c16370 Mon Sep 17 00:00:00 2001
+From ee2a1126c9a065b8b14267a4af151e83955072ee Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Thu, 29 Oct 2026 03:55:29 +0000
 Subject: [PATCH 15/20] relay_metrics: Count circuits and directory streams by
@@ -29,77 +29,50 @@ Count, by that class:
   its circuit's BEGIN_DIR cells (1, 2_10, 11_100, 101_1000,
   1001_plus): every well-formed BEGIN_DIR cell for a new stream, before
   tor decides whether to refuse it;
-- tor_relay_begindir_request_total, also by "type": each tunneled
-  directory request, once, by what it asked for: hs_get, hs_post,
-  consensus, microdesc, descriptor, other (including 404s), unparsed,
-  no_request if the stream closed without sending anything, or
-  circuit_dead if we dropped it unread because its stream or circuit was
-  already closing. Its sum by previous hop is the accepted BEGIN_DIR
-  streams, which tor_relay_streams_total{type="BEGIN_DIR"} already
-  counts in total.
-
-tor_relay_begindir_request_total now counts onion service requests too,
-and its type "non_hs" is split into the types it summed. Its type
-"unparsed" no longer includes the requests dropped unread because their
-stream or circuit was closing, such as those queued on a circuit closed
-for its second HSDir request: they are "circuit_dead".
+- tor_relay_begindir_request_total, which gains a "prev_hop" label. Its
+  sum by previous hop is the accepted BEGIN_DIR streams, which
+  tor_relay_streams_total{type="BEGIN_DIR"} already counts in total.
 
 The counters live in rephist.c, which is always built, so command.c and
 connection_edge.c need no new includes. The cost is one known-relay
 lookup per CREATE cell from an authenticated channel, twelve bits per
-circuit and three per directory connection (neither struct grows), and
-43 more series. hsdir_unknown_prev_hop keeps its lookup per request, so
+circuit and two per directory connection (neither struct grows), and
+38 more series. hsdir_unknown_prev_hop keeps its lookup per request, so
 it still matches what HSDirRefuseUnknownPrevHop refuses.
 
 Part of #41339.
 ---
- changes/ticket41339_metrics               |  13 +-
- src/core/or/channel.c                     |  18 +
+ changes/ticket41339_metrics               |   7 +
+ src/core/or/channel.c                     |  18 +++
  src/core/or/channel.h                     |   1 +
  src/core/or/command.c                     |   3 +
  src/core/or/connection_edge.c             |   2 +
- src/core/or/or.h                          |   9 +
+ src/core/or/or.h                          |   9 ++
  src/core/or/or_circuit_st.h               |   6 +
- src/feature/dircache/dircache.c           |  50 +--
- src/feature/dircommon/dir_connection_st.h |   5 +
- src/feature/dircommon/directory.c         |  12 +-
- src/feature/relay/relay_metrics.c         | 113 ++++--
- src/feature/relay/relay_metrics.h         |  36 +-
- src/feature/relay/relay_stub.c            |   3 +-
- src/feature/stats/rephist.c               |  51 +++
- src/feature/stats/rephist.h               |  40 +++
- src/test/test_dos.c                       | 233 +++++++++++++
- src/test/test_hs_cache.c                  | 406 ++++++++++++++++++++--
- 17 files changed, 923 insertions(+), 78 deletions(-)
+ src/feature/dircommon/dir_connection_st.h |   3 +
+ src/feature/relay/relay_metrics.c         |  66 +++++++-
+ src/feature/relay/relay_metrics.h         |   6 +-
+ src/feature/stats/rephist.c               |  51 ++++++
+ src/feature/stats/rephist.h               |  40 +++++
+ src/test/test_dos.c                       | 187 ++++++++++++++++++++++
+ src/test/test_hs_cache.c                  | 187 ++++++++++++++++++++--
+ 14 files changed, 567 insertions(+), 19 deletions(-)
 
 diff --git a/changes/ticket41339_metrics b/changes/ticket41339_metrics
-index 7e6476f456..e8a232105f 100644
+index cddb4a20cf..6c07fb9fb6 100644
 --- a/changes/ticket41339_metrics
 +++ b/changes/ticket41339_metrics
-@@ -4,9 +4,7 @@
-       that are valid but not newer than the cached descriptor, which happens
-       without any fault when several instances publish for the same address,
-       are counted apart from invalid ones. Part of ticket 41339.
--    - Count the tunneled directory requests that are not onion service
--      requests, as tor_relay_begindir_request_total{type="non_hs"|"unparsed"},
--      and the tunneled directory responses fully handed to their stream, as
-+    - Count the tunneled directory responses fully handed to their stream, as
-       tor_relay_begindir_response_total{type="hs_descriptor"|"other"}. Part of
-       ticket 41339.
-     - Report the tunneled directory connections a relay has open, by state, as
-@@ -17,3 +15,12 @@
-       among those that tor accepts: over an anonymous circuit, and the first
-       on it. Stock clients and services use an unknown previous hop only while
-       our consensus lags theirs. Part of ticket 41339.
-+    - Count CREATE cells, as tor_relay_create_cell_total, and BEGIN_DIR cells,
-+      as tor_relay_begindir_cell_total, by how their circuit's previous hop
+@@ -20,3 +20,10 @@
+       among those over an anonymous circuit, and the first on it. Stock clients
+       and services use an unknown previous hop only while our consensus lags
+       theirs. Part of ticket 41339.
++    - Count CREATE cells, as tor_relay_create_cell_total, BEGIN_DIR cells, as
++      tor_relay_begindir_cell_total, and tunneled directory requests, in
++      tor_relay_begindir_request_total, by how their circuit's previous hop
 +      identified itself: "client" (it never authenticated: a tor client or a
 +      bridge), "known_relay" or "unknown_relay". This is not a hop count. Count
 +      BEGIN_DIR cells also by their place among their circuit's BEGIN_DIR cells
-+      (nth), and each tunneled directory request by what it asked for and by
-+      previous hop, as tor_relay_begindir_request_total. A request dropped
-+      unread because its stream or circuit was already closing is counted as
-+      type "circuit_dead". Part of ticket 41339.
++      (nth). Part of ticket 41339.
 diff --git a/src/core/or/channel.c b/src/core/or/channel.c
 index ca13fb5aa9..775d35538e 100644
 --- a/src/core/or/channel.c
@@ -183,7 +156,7 @@ index 20590336d1..6252898d79 100644
    /* Note that the new dir conn belongs to the same tunneled request as
     * the edge conn, so that we can measure download times. */
 diff --git a/src/core/or/or.h b/src/core/or/or.h
-index fd583bb90c..d7975bd13f 100644
+index fd583bb90c..553378324b 100644
 --- a/src/core/or/or.h
 +++ b/src/core/or/or.h
 @@ -441,6 +441,15 @@ typedef enum {
@@ -192,12 +165,12 @@ index fd583bb90c..d7975bd13f 100644
  
 +/** How a channel's peer identified itself: see channel_get_prev_hop(). */
 +typedef enum channel_prev_hop_t {
-+  CHANNEL_PREV_HOP_UNSET = 0, /**< Not classified yet. */
-+  CHANNEL_PREV_HOP_CLIENT = 1, /**< Never authenticated. */
-+  CHANNEL_PREV_HOP_KNOWN_RELAY = 2, /**< A relay we know. */
-+  CHANNEL_PREV_HOP_UNKNOWN_RELAY = 3, /**< An identity we don't know. */
++  CHANNEL_PREV_HOP_CLIENT, /**< Never authenticated. */
++  CHANNEL_PREV_HOP_KNOWN_RELAY, /**< A relay we know. */
++  CHANNEL_PREV_HOP_UNKNOWN_RELAY, /**< An identity we don't know. */
++
++  CHANNEL_PREV_HOP_COUNT
 +} channel_prev_hop_t;
-+#define CHANNEL_PREV_HOP_COUNT (CHANNEL_PREV_HOP_UNKNOWN_RELAY + 1)
 +
  /** Initial value for both sides of a circuit transmission window when the
   * circuit is initialized.  Measured in cells. */
@@ -226,187 +199,25 @@ index 69eba16c0a..6e9f37ea1e 100644
  
    /** INTRODUCE2 cell bucket controlling how much can go on this circuit. Only
     * used if this is a service introduction circuit at the intro point
-diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 3cea0dd4c8..f304699819 100644
---- a/src/feature/dircache/dircache.c
-+++ b/src/feature/dircache/dircache.c
-@@ -351,6 +351,8 @@ typedef struct url_table_ent_t {
-   const char *string;
-   int is_prefix;
-   int (*handler)(dir_connection_t *conn, const get_handler_args_t *args);
-+  /** How tor_relay_begindir_request_total counts the request. */
-+  dir_request_type_t type;
- } url_table_ent_t;
- 
- static int handle_get_frontpage(dir_connection_t *conn,
-@@ -374,19 +376,23 @@ static int handle_get_next_bandwidth(dir_connection_t *conn,
- 
- /** Table for handling GET requests. */
- static const url_table_ent_t url_table[] = {
--  { "/tor/", 0, handle_get_frontpage },
--  { "/tor/status-vote/current/consensus", 1, handle_get_current_consensus },
--  { "/tor/status-vote/current/", 1, handle_get_status_vote },
--  { "/tor/status-vote/next/bandwidth", 0, handle_get_next_bandwidth },
--  { "/tor/status-vote/next/", 1, handle_get_status_vote },
--  { "/tor/micro/d/", 1, handle_get_microdesc },
--  { "/tor/server/", 1, handle_get_descriptor },
--  { "/tor/extra/", 1, handle_get_descriptor },
--  { "/tor/keys/", 1, handle_get_keys },
--  { "/tor/hs/3/", 1, handle_get_hs_descriptor_v3 },
--  { "/tor/robots.txt", 0, handle_get_robots },
--  { "/tor/networkstatus-bridges", 0, handle_get_networkstatus_bridges },
--  { NULL, 0, NULL },
-+  { "/tor/", 0, handle_get_frontpage, DIR_REQUEST_OTHER },
-+  { "/tor/status-vote/current/consensus", 1, handle_get_current_consensus,
-+    DIR_REQUEST_CONSENSUS },
-+  { "/tor/status-vote/current/", 1, handle_get_status_vote,
-+    DIR_REQUEST_OTHER },
-+  { "/tor/status-vote/next/bandwidth", 0, handle_get_next_bandwidth,
-+    DIR_REQUEST_OTHER },
-+  { "/tor/status-vote/next/", 1, handle_get_status_vote, DIR_REQUEST_OTHER },
-+  { "/tor/micro/d/", 1, handle_get_microdesc, DIR_REQUEST_MICRODESC },
-+  { "/tor/server/", 1, handle_get_descriptor, DIR_REQUEST_DESCRIPTOR },
-+  { "/tor/extra/", 1, handle_get_descriptor, DIR_REQUEST_DESCRIPTOR },
-+  { "/tor/keys/", 1, handle_get_keys, DIR_REQUEST_OTHER },
-+  { "/tor/hs/3/", 1, handle_get_hs_descriptor_v3, DIR_REQUEST_HS_GET },
-+  { "/tor/robots.txt", 0, handle_get_robots, DIR_REQUEST_OTHER },
-+  { "/tor/networkstatus-bridges", 0, handle_get_networkstatus_bridges,
-+    DIR_REQUEST_OTHER },
-+  { NULL, 0, NULL, DIR_REQUEST_OTHER },
- };
- 
- /** Helper function: called when a dirserver gets a complete HTTP GET
-@@ -413,8 +419,7 @@ directory_handle_command_get,(dir_connection_t *conn, const char *headers,
-   conn->base_.state = DIR_CONN_STATE_SERVER_WRITING;
- 
-   if (parse_http_url(headers, &url) < 0) {
--    if (TO_CONN(conn)->linked)
--      relay_increment_dir_request(DIR_REQUEST_UNPARSED);
-+    relay_note_dir_request(conn, DIR_REQUEST_UNPARSED);
-     write_short_http_response(conn, 400, "Bad request");
-     return 0;
-   }
-@@ -442,8 +447,6 @@ directory_handle_command_get,(dir_connection_t *conn, const char *headers,
-       url[url_len-2] = '\0';
-     }
-   }
--  if (TO_CONN(conn)->linked && strcmpstart(url, "/tor/hs/3/"))
--    relay_increment_dir_request(DIR_REQUEST_NON_HS);
- 
-   if ((header = http_get_header(headers, "Accept-Encoding: "))) {
-     compression_methods_supported = parse_accept_encoding_header(header);
-@@ -473,12 +476,14 @@ directory_handle_command_get,(dir_connection_t *conn, const char *headers,
-       match = !strcmp(url, url_table[i].string);
-     }
-     if (match) {
-+      relay_note_dir_request(conn, url_table[i].type);
-       result = url_table[i].handler(conn, &args);
-       goto done;
-     }
-   }
- 
-   /* we didn't recognize the url */
-+  relay_note_dir_request(conn, DIR_REQUEST_OTHER);
-   write_short_http_response(conn, 404, "Not found");
-   result = 0;
- 
-@@ -1754,8 +1759,7 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
-   }
- 
-   if (parse_http_url(headers, &url) < 0) {
--    if (TO_CONN(conn)->linked)
--      relay_increment_dir_request(DIR_REQUEST_UNPARSED);
-+    relay_note_dir_request(conn, DIR_REQUEST_UNPARSED);
-     write_short_http_response(conn, 400, "Bad request");
-     return 0;
-   }
-@@ -1765,6 +1769,7 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
-    * (which also tests for encrypted). We do not allow single-hop client to
-    * post a descriptor onto an HSDir. */
-   if (!strcmpstart(url, "/tor/hs/")) {
-+    relay_note_dir_request(conn, DIR_REQUEST_HS_POST);
-     if (dir_conn_is_closing(conn)) {
-       goto done;
-     }
-@@ -1794,8 +1799,7 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
-     write_short_http_response(conn, code, msg);
-     goto done;
-   }
--  if (TO_CONN(conn)->linked)
--    relay_increment_dir_request(DIR_REQUEST_NON_HS);
-+  relay_note_dir_request(conn, DIR_REQUEST_OTHER);
- 
-   if (!authdir_mode(options)) {
-     /* we just provide cached directories; we don't want to
-@@ -1929,6 +1933,7 @@ directory_handle_command(dir_connection_t *conn)
-   /* Don't parse queued requests whose stream or circuit is gone.
-    * The caller will close the directory connection without a response. */
-   if (dir_conn_is_closing(conn)) {
-+    relay_note_dir_request(conn, DIR_REQUEST_CIRCUIT_DEAD);
-     return -1;
-   }
-   /* Non-authorities only accept HS descriptor posts, so don't buffer a body
-@@ -1946,6 +1951,7 @@ directory_handle_command(dir_connection_t *conn)
-                      "Oversized or malformed directory request from %s. "
-                      "Closing.",
-                      safe_str(connection_describe_peer(TO_CONN(conn))));
-+      relay_note_dir_request(conn, DIR_REQUEST_UNPARSED);
-       return -1;
-     case 0:
-       log_debug(LD_DIRSERV,"command not all here yet.");
-@@ -1966,6 +1972,8 @@ directory_handle_command(dir_connection_t *conn)
-     log_fn(LOG_PROTOCOL_WARN, LD_PROTOCOL,
-            "Got headers %s with unknown command. Closing.",
-            escaped(headers));
-+    /* We've already taken the request off the inbuf. */
-+    relay_note_dir_request(conn, DIR_REQUEST_UNPARSED);
-     r = -1;
-   }
- 
 diff --git a/src/feature/dircommon/dir_connection_st.h b/src/feature/dircommon/dir_connection_st.h
-index b774d32cdb..55e995ba4f 100644
+index 4abc5e7a8d..395405b1d3 100644
 --- a/src/feature/dircommon/dir_connection_st.h
 +++ b/src/feature/dircommon/dir_connection_st.h
-@@ -31,6 +31,11 @@ struct dir_connection_t {
+@@ -31,6 +31,9 @@ struct dir_connection_t {
    /** Is this dirconn direct, or via a multi-hop Tor circuit?
     * Direct connections can use the DirPort, or BEGINDIR over the ORPort. */
    unsigned int dirconn_direct:1;
 +  /** For a tunneled (BEGIN_DIR) server connection: how the previous hop of
 +   * its circuit identified itself, a channel_prev_hop_t. */
 +  unsigned int prev_hop:2;
-+  /** For a tunneled server connection: true once its request is counted. */
-+  unsigned int request_counted:1;
- 
-   /** If we're fetching descriptors, what router purpose shall we assign
-    * to them? */
-diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
-index d9d7ad8b65..88a8fdd0d1 100644
---- a/src/feature/dircommon/directory.c
-+++ b/src/feature/dircommon/directory.c
-@@ -537,9 +537,15 @@ connection_dir_about_to_close(dir_connection_t *dir_conn)
- {
-   connection_t *conn = TO_CONN(dir_conn);
- 
--  if (DIR_CONN_IS_SERVER(conn) && conn->linked &&
--      conn->state == DIR_CONN_STATE_SERVER_COMMAND_WAIT)
--    relay_increment_dir_request(DIR_REQUEST_UNPARSED);
-+  /* Count a tunneled request we haven't counted yet: none or part of one
-+   * arrived, or (a bridge's 503 to a POST) it was answered unclassified. */
-+  if (DIR_CONN_IS_SERVER(conn) && conn->linked) {
-+    dir_request_type_t type = DIR_REQUEST_OTHER;
-+    if (conn->state == DIR_CONN_STATE_SERVER_COMMAND_WAIT)
-+      type = connection_get_inbuf_len(conn) ? DIR_REQUEST_UNPARSED :
-+                                              DIR_REQUEST_NO_REQUEST;
-+    relay_note_dir_request(dir_conn, type);
-+  }
- 
-   if (conn->state < DIR_CONN_STATE_CLIENT_FINISHED) {
-     /* It's a directory connection and connecting or fetching
+   /** For a tunneled (BEGIN_DIR) server connection: 0 until its request is
+    * counted, then one more than its dir_request_type_t. */
+   unsigned int request_type:4;
 diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
-index 29b71787f2..25291db193 100644
+index 260c3fe319..41cdb03755 100644
 --- a/src/feature/relay/relay_metrics.c
 +++ b/src/feature/relay/relay_metrics.c
-@@ -75,6 +75,8 @@ static void fill_hsdir_post_values(void);
+@@ -76,6 +76,8 @@ static void fill_hsdir_post_values(void);
  static void fill_begindir_request_values(void);
  static void fill_begindir_response_values(void);
  static void fill_begindir_conns_values(void);
@@ -415,17 +226,8 @@ index 29b71787f2..25291db193 100644
  
  /** The base metrics that is a static array of metrics added to the metrics
   * store.
-@@ -268,7 +270,7 @@ static const relay_metrics_entry_t base_metrics[] =
-     .key = RELAY_METRICS_NUM_BEGINDIR_REQUESTS,
-     .type = METRICS_TYPE_COUNTER,
-     .name = METRICS_NAME(relay_begindir_request_total),
--    .help = "Total number of other tunneled directory requests we received",
-+    .help = "Total number of tunneled directory requests we received",
-     .fill_fn = fill_begindir_request_values,
-   },
-   {
-@@ -285,6 +287,20 @@ static const relay_metrics_entry_t base_metrics[] =
-     .help = "Open tunneled directory server connections",
+@@ -286,6 +288,20 @@ static const relay_metrics_entry_t base_metrics[] =
+     .help = "Open tunneled directory streams, by state",
      .fill_fn = fill_begindir_conns_values,
    },
 +  {
@@ -445,52 +247,7 @@ index 29b71787f2..25291db193 100644
  };
  static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
  
-@@ -1261,16 +1277,23 @@ fill_relay_destroy_cell(void)
-                              (int64_t) stats_n_destroy_cells_processed);
- }
- 
--/** Add one entry of the metric <b>rentry</b> per element of <b>values</b>,
-- * labeled <b>label</b>=<b>names</b>[i]. */
-+/** Add one entry of the metric <b>rentry</b> per element of <b>values</b>
-+ * that has a name, labeled <b>label0</b>=<b>value0</b> unless <b>label0</b>
-+ * is NULL, and <b>label</b>=<b>names</b>[i]. */
- static void
--fill_labeled_values(const relay_metrics_entry_t *rentry, const char *label,
-+fill_labeled_values(const relay_metrics_entry_t *rentry, const char *label0,
-+                    const char *value0, const char *label,
-                     const char *const *names, const uint64_t *values,
-                     size_t n_values)
- {
-   for (size_t i = 0; i < n_values; ++i) {
-+    if (!names[i])
-+      continue;
-     metrics_store_entry_t *sentry = metrics_store_add(
-         the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
-+    if (label0)
-+      metrics_store_entry_add_label(sentry,
-+                                    metrics_format_label(label0, value0));
-     metrics_store_entry_add_label(sentry,
-                                   metrics_format_label(label, names[i]));
-     metrics_store_entry_update(sentry, values[i]);
-@@ -1298,8 +1321,8 @@ relay_increment_hsdir_get_action(hsdir_get_action_t action)
- static void
- fill_hsdir_get_values(void)
- {
--  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_HSDIR_GET], "action",
--                      hsdir_get_action_names, hsdir_get_actions,
-+  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_HSDIR_GET], NULL, NULL,
-+                      "action", hsdir_get_action_names, hsdir_get_actions,
-                       HSDIR_GET_ACTION_COUNT);
- }
- 
-@@ -1326,33 +1349,83 @@ relay_increment_hsdir_post_action(hsdir_post_action_t action)
- static void
- fill_hsdir_post_values(void)
- {
--  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_HSDIR_POST], "action",
--                      hsdir_post_action_names, hsdir_post_actions,
-+  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_HSDIR_POST], NULL, NULL,
-+                      "action", hsdir_post_action_names, hsdir_post_actions,
+@@ -1337,8 +1353,25 @@ fill_hsdir_post_values(void)
                        HSDIR_POST_ACTION_COUNT);
  }
  
@@ -505,7 +262,7 @@ index 29b71787f2..25291db193 100644
 +  [NTH_BAND_1001_PLUS] = "1001_plus",
 +};
 +
-+/** Label values for a channel_prev_hop_t. CHANNEL_PREV_HOP_UNSET has none. */
++/** Label values for a channel_prev_hop_t. */
 +static const char *const prev_hop_names[] = {
 +  [CHANNEL_PREV_HOP_CLIENT] = "client",
 +  [CHANNEL_PREV_HOP_KNOWN_RELAY] = "known_relay",
@@ -513,34 +270,16 @@ index 29b71787f2..25291db193 100644
 +};
 +
 +/** Tunneled directory requests, by type and by the previous hop of their
-+ * circuit. Tests can leave a connection unclassified (prev_hop 0). */
++ * circuit. */
 +static uint64_t dir_requests[DIR_REQUEST_TYPE_COUNT][CHANNEL_PREV_HOP_COUNT];
  /** Label values for a dir_request_type_t. */
  static const char *const dir_request_names[] = {
--  [DIR_REQUEST_NON_HS] = "non_hs",
-+  [DIR_REQUEST_HS_GET] = "hs_get",
-+  [DIR_REQUEST_HS_POST] = "hs_post",
-+  [DIR_REQUEST_CONSENSUS] = "consensus",
-+  [DIR_REQUEST_MICRODESC] = "microdesc",
-+  [DIR_REQUEST_DESCRIPTOR] = "descriptor",
-+  [DIR_REQUEST_OTHER] = "other",
-   [DIR_REQUEST_UNPARSED] = "unparsed",
-+  [DIR_REQUEST_NO_REQUEST] = "no_request",
-+  [DIR_REQUEST_CIRCUIT_DEAD] = "circuit_dead",
- };
- 
--/** Count a tunneled directory request of type <b>type</b>. */
-+/** Count the request on the tunneled directory server connection <b>conn</b>
-+ * as <b>type</b>, once: later calls for <b>conn</b> do nothing. DirPort
-+ * connections aren't counted. */
- void
--relay_increment_dir_request(dir_request_type_t type)
-+relay_note_dir_request(dir_connection_t *conn, dir_request_type_t type)
- {
+   [DIR_REQUEST_HS_GET] = "hs_get",
+@@ -1365,16 +1398,37 @@ relay_note_dir_request(dir_connection_t *conn, dir_request_type_t type)
+   if (!TO_CONN(conn)->linked || conn->request_type)
+     return;
+   conn->request_type = type + 1;
 -  dir_requests[type]++;
-+  if (!TO_CONN(conn)->linked || conn->request_counted)
-+    return;
-+  conn->request_counted = 1;
 +  dir_requests[type][conn->prev_hop]++;
  }
  
@@ -549,7 +288,7 @@ index 29b71787f2..25291db193 100644
  fill_begindir_request_values(void)
  {
 -  fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_BEGINDIR_REQUESTS],
--                      "type", dir_request_names, dir_requests,
+-                      NULL, NULL, "type", dir_request_names, dir_requests,
 -                      DIR_REQUEST_TYPE_COUNT);
 +  for (int t = 0; t < DIR_REQUEST_TYPE_COUNT; t++)
 +    fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_BEGINDIR_REQUESTS],
@@ -571,42 +310,22 @@ index 29b71787f2..25291db193 100644
 +static void
 +fill_begindir_cell_values(void)
 +{
-+  for (int p = CHANNEL_PREV_HOP_CLIENT; p < CHANNEL_PREV_HOP_COUNT; p++)
++  for (int p = 0; p < CHANNEL_PREV_HOP_COUNT; p++)
 +    fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_BEGINDIR_CELLS],
 +                        "prev_hop", prev_hop_names[p], "nth", nth_band_names,
 +                        rep_hist_get_begindir_cells(p), NTH_BAND_COUNT);
  }
  
- /** Tunneled directory responses fully handed to their stream, by type. */
-@@ -1376,7 +1449,7 @@ static void
- fill_begindir_response_values(void)
- {
-   fill_labeled_values(&base_metrics[RELAY_METRICS_NUM_BEGINDIR_RESPONSES],
--                      "type", dir_response_names, dir_responses,
-+                      NULL, NULL, "type", dir_response_names, dir_responses,
-                       DIR_RESPONSE_TYPE_COUNT);
- }
- 
-@@ -1410,8 +1483,8 @@ fill_begindir_conns_values(void)
-     }
-   } SMARTLIST_FOREACH_END(c);
- 
--  fill_labeled_values(&base_metrics[RELAY_METRICS_BEGINDIR_CONNS], "state",
--                      names, counts, N_STATES);
-+  fill_labeled_values(&base_metrics[RELAY_METRICS_BEGINDIR_CONNS], NULL,
-+                      NULL, "state", names, counts, N_STATES);
- }
- 
- /** Fill the metrics store for the RELAY_METRICS_CIRC_DROP_CELL counter. */
+ /** Tunneled directory responses fully handed to their stream (which doesn't
 diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
-index c04434bb6a..c908ec1a67 100644
+index 152a1962d8..e90c9b0e3b 100644
 --- a/src/feature/relay/relay_metrics.h
 +++ b/src/feature/relay/relay_metrics.h
 @@ -67,12 +67,16 @@ typedef enum {
    RELAY_METRICS_NUM_HSDIR_GET,
    /** Onion service descriptor uploads, by outcome. */
    RELAY_METRICS_NUM_HSDIR_POST,
--  /** Other tunneled directory requests, by type. */
+-  /** Tunneled directory requests, by type. */
 +  /** Tunneled directory requests, by type and previous hop. */
    RELAY_METRICS_NUM_BEGINDIR_REQUESTS,
    /** Tunneled directory responses handed to their stream, by type. */
@@ -620,64 +339,6 @@ index c04434bb6a..c908ec1a67 100644
  } relay_metrics_key_t;
  
  /** The metadata of a relay metric. */
-@@ -189,19 +193,35 @@ typedef enum {
- 
- void relay_increment_hsdir_post_action(hsdir_post_action_t);
- 
--/** Type of a tunneled (BEGIN_DIR) directory request that isn't an onion
-- * service descriptor fetch or upload. */
-+/** What a tunneled (BEGIN_DIR) directory request asked for. */
- typedef enum {
--  /** Any other request that parsed. */
--  DIR_REQUEST_NON_HS,
--  /** No usable request: parse_http_url() failed, or the connection closed
--   * while waiting for one. */
-+  /** GET /tor/hs/3/: an onion service descriptor fetch. */
-+  DIR_REQUEST_HS_GET,
-+  /** POST /tor/hs/: an onion service descriptor upload. */
-+  DIR_REQUEST_HS_POST,
-+  /** GET /tor/status-vote/current/consensus: a consensus. */
-+  DIR_REQUEST_CONSENSUS,
-+  /** GET /tor/micro/d/: microdescriptors. */
-+  DIR_REQUEST_MICRODESC,
-+  /** GET /tor/server/ or /tor/extra/: relay descriptors. */
-+  DIR_REQUEST_DESCRIPTOR,
-+  /** Any other request that parsed, including those we answer with 404. */
-+  DIR_REQUEST_OTHER,
-+  /** A request that didn't parse, was too large or had an unknown method, or
-+   * the start of one when the connection closed. */
-   DIR_REQUEST_UNPARSED,
-+  /** Nothing at all before the connection closed. */
-+  DIR_REQUEST_NO_REQUEST,
-+  /** A request, or the start of one, that we didn't read because its stream
-+   * or circuit was already closing. */
-+  DIR_REQUEST_CIRCUIT_DEAD,
- 
-   DIR_REQUEST_TYPE_COUNT
- } dir_request_type_t;
- 
--void relay_increment_dir_request(dir_request_type_t);
-+struct dir_connection_t;
-+void relay_note_dir_request(struct dir_connection_t *conn,
-+                            dir_request_type_t type);
- 
- /** Type of a tunneled directory response that was fully handed to its
-  * stream (which doesn't mean that the client received it). */
-diff --git a/src/feature/relay/relay_stub.c b/src/feature/relay/relay_stub.c
-index 3dd0e0b4a2..946b916ad2 100644
---- a/src/feature/relay/relay_stub.c
-+++ b/src/feature/relay/relay_stub.c
-@@ -46,8 +46,9 @@ relay_increment_rend1_action(rend1_action_t action)
- }
- 
- void
--relay_increment_dir_request(dir_request_type_t type)
-+relay_note_dir_request(struct dir_connection_t *conn, dir_request_type_t type)
- {
-+  (void)conn;
-   (void)type;
- }
- 
 diff --git a/src/feature/stats/rephist.c b/src/feature/stats/rephist.c
 index dac83bb97b..937b564eb4 100644
 --- a/src/feature/stats/rephist.c
@@ -799,7 +460,7 @@ index 8c7baab12a..0765cfb789 100644
  void rep_hist_buffer_stats_add_circ(circuit_t *circ,
                                      time_t end_of_interval);
 diff --git a/src/test/test_dos.c b/src/test/test_dos.c
-index 7f7f0c3cf7..2f4531fe4a 100644
+index 74ccef169e..4e898fb301 100644
 --- a/src/test/test_dos.c
 +++ b/src/test/test_dos.c
 @@ -4,28 +4,42 @@
@@ -870,7 +531,7 @@ index 7f7f0c3cf7..2f4531fe4a 100644
    routerstatus_free(rs);
    smartlist_clear(dummy_ns->routerstatus_list);
    networkstatus_vote_free(dummy_ns);
-@@ -647,6 +671,211 @@ test_dos_refuse_single_hop(void *arg)
+@@ -647,6 +671,166 @@ test_dos_refuse_single_hop(void *arg)
    tor_free(dummy_ns);
  }
  
@@ -911,70 +572,38 @@ index 7f7f0c3cf7..2f4531fe4a 100644
 +  channel_t *chan = new_fake_channel();
 +  cell_t cell;
 +  const smartlist_t *circs = circuit_get_global_list();
-+  uint64_t unknown0, client0;
++  const channel_prev_hop_t hop = CHANNEL_PREV_HOP_UNKNOWN_RELAY;
 +  (void) arg;
 +
 +  MOCK(we_are_hibernating, mock_we_are_hibernating);
 +  get_options_mutable()->ORPort_set = 1;
 +  chan->circ_id_type = CIRC_ID_TYPE_NEITHER;
-+  unknown0 = rep_hist_get_create_cells()[CHANNEL_PREV_HOP_UNKNOWN_RELAY];
-+  client0 = rep_hist_get_create_cells()[CHANNEL_PREV_HOP_CLIENT];
 +  memset(&cell, 0, sizeof(cell));
 +  cell.command = CELL_CREATE2;
 +
 +  /* Dropped: circuit ID 0. */
 +  command_process_cell(chan, &cell);
-+  tt_u64_op(rep_hist_get_create_cells()[CHANNEL_PREV_HOP_UNKNOWN_RELAY], OP_EQ,
-+            unknown0 + 1);
++  tt_u64_op(rep_hist_get_create_cells()[hop], OP_EQ, 1);
 +  tt_int_op(smartlist_len(circs), OP_EQ, 0);
 +  /* An unknown handshake type makes a circuit, which we close. */
 +  cell.circ_id = 1;
 +  set_uint16(cell.payload, htons(0xffff));
 +  command_process_cell(chan, &cell);
-+  tt_u64_op(rep_hist_get_create_cells()[CHANNEL_PREV_HOP_UNKNOWN_RELAY], OP_EQ,
-+            unknown0 + 2);
++  tt_u64_op(rep_hist_get_create_cells()[hop], OP_EQ, 2);
 +  tt_int_op(smartlist_len(circs), OP_EQ, 1);
-+  tt_int_op(TO_OR_CIRCUIT(smartlist_get(circs, 0))->prev_hop, OP_EQ,
-+            CHANNEL_PREV_HOP_UNKNOWN_RELAY);
++  tt_int_op(TO_OR_CIRCUIT(smartlist_get(circs, 0))->prev_hop, OP_EQ, hop);
 +  chan->is_client = 1;
 +  cell.circ_id = 2;
 +  command_process_cell(chan, &cell);
-+  tt_u64_op(rep_hist_get_create_cells()[CHANNEL_PREV_HOP_CLIENT], OP_EQ,
-+            client0 + 1);
++  tt_u64_op(rep_hist_get_create_cells()[CHANNEL_PREV_HOP_CLIENT], OP_EQ, 1);
 +  tt_int_op(smartlist_len(circs), OP_EQ, 2);
 +  tt_int_op(TO_OR_CIRCUIT(smartlist_get(circs, 1))->prev_hop, OP_EQ,
 +            CHANNEL_PREV_HOP_CLIENT);
 +
 + done:
 +  UNMOCK(we_are_hibernating);
-+  get_options_mutable()->ORPort_set = 0;
 +  circuit_free_all();
 +  free_fake_channel(chan);
-+}
-+
-+/** Test that BEGIN_DIR cells are counted by their place on their circuit, up
-+ * to "1001 or later". */
-+static void
-+test_dos_begindir_nth(void *arg)
-+{
-+  or_circuit_t *circ = or_circuit_new(0, NULL);
-+  const channel_prev_hop_t hop = CHANNEL_PREV_HOP_KNOWN_RELAY;
-+  const uint64_t want[NTH_BAND_COUNT] = { 1, 9, 90, 900, 2 };
-+  uint64_t n0[NTH_BAND_COUNT];
-+  (void) arg;
-+
-+  for (int n = 0; n < NTH_BAND_COUNT; n++)
-+    n0[n] = rep_hist_get_begindir_cells(hop)[n];
-+  circ->prev_hop = hop;
-+  for (int i = 0; i < 1002; i++)
-+    rep_hist_note_begindir_cell(circ);
-+  rep_hist_note_begindir_cell(NULL); /* A circuit we made: not counted. */
-+  for (int n = 0; n < NTH_BAND_COUNT; n++)
-+    tt_u64_op(rep_hist_get_begindir_cells(hop)[n], OP_EQ, n0[n] + want[n]);
-+  tt_int_op(circ->n_begindir, OP_EQ, NTH_BAND_MAX);
-+
-+ done:
-+  circuit_free_all();
 +}
 +
 +/** Test that connection_exit_begin_conn() counts every BEGIN_DIR cell by its
@@ -987,12 +616,8 @@ index 7f7f0c3cf7..2f4531fe4a 100644
 +  dos_options_t *dos_opts = get_dos_options(get_options_mutable());
 +  relay_msg_t msg;
 +  const channel_prev_hop_t hop = CHANNEL_PREV_HOP_UNKNOWN_RELAY;
-+  uint64_t first0, later0, rate_rejected0;
 +  (void) arg;
 +
-+  first0 = rep_hist_get_begindir_cells(hop)[NTH_BAND_1];
-+  later0 = rep_hist_get_begindir_cells(hop)[NTH_BAND_2_10];
-+  rate_rejected0 = dos_get_num_begindir_rate_rejected();
 +  tor_init_connection_lists();
 +  MOCK(relay_send_command_from_edge_, mock_relay_send_command_from_edge);
 +  MOCK(we_are_hibernating, mock_we_are_hibernating);
@@ -1020,7 +645,7 @@ index 7f7f0c3cf7..2f4531fe4a 100644
 +  tt_int_op(n_connected, OP_EQ, 2);
 +  tt_int_op(n_end, OP_EQ, 1);
 +  tt_int_op(end_reason, OP_EQ, END_STREAM_REASON_MISC);
-+  tt_u64_op(dos_get_num_begindir_rate_rejected(), OP_EQ, rate_rejected0 + 1);
++  tt_u64_op(dos_get_num_begindir_rate_rejected(), OP_EQ, 1);
 +  /* Two linked pairs, whose directory connections know the previous hop. */
 +  tt_int_op(smartlist_len(get_connection_array()), OP_EQ, 4);
 +  SMARTLIST_FOREACH(get_connection_array(), connection_t *, c, {
@@ -1028,10 +653,8 @@ index 7f7f0c3cf7..2f4531fe4a 100644
 +      tt_int_op(TO_DIR_CONN(c)->prev_hop, OP_EQ, hop);
 +  });
 +  /* Every cell is counted, the refused one too. */
-+  tt_u64_op(rep_hist_get_begindir_cells(hop)[NTH_BAND_1], OP_EQ,
-+            first0 + 1);
-+  tt_u64_op(rep_hist_get_begindir_cells(hop)[NTH_BAND_2_10], OP_EQ,
-+            later0 + 2);
++  tt_u64_op(rep_hist_get_begindir_cells(hop)[NTH_BAND_1], OP_EQ, 1);
++  tt_u64_op(rep_hist_get_begindir_cells(hop)[NTH_BAND_2_10], OP_EQ, 2);
 +
 +  /* So are cells that tor refuses when we're not a directory cache, and
 +   * when we're hibernating, which it checks after the BEGIN_DIR limits. */
@@ -1048,8 +671,7 @@ index 7f7f0c3cf7..2f4531fe4a 100644
 +  tt_int_op(connection_exit_begin_conn(&msg, TO_CIRCUIT(circ)), OP_EQ, 0);
 +  tt_int_op(end_reason, OP_EQ, END_STREAM_REASON_HIBERNATING);
 +  hibernating = 0;
-+  tt_u64_op(rep_hist_get_begindir_cells(hop)[NTH_BAND_2_10], OP_EQ,
-+            later0 + 4);
++  tt_u64_op(rep_hist_get_begindir_cells(hop)[NTH_BAND_2_10], OP_EQ, 4);
 +  tt_int_op(n_connected, OP_EQ, 2);
 +
 + done:
@@ -1071,33 +693,26 @@ index 7f7f0c3cf7..2f4531fe4a 100644
 +    connection_free_(c);
 +  }
 +  circuit_free_all();
-+  get_options_mutable()->ORPort_set = 0;
-+  get_options_mutable()->DirPort_set = 0;
-+  dos_opts->DoSBeginDirRateEnabled = -1;
-+  dos_opts->DoSBeginDirRate = 0;
-+  dos_opts->DoSBeginDirBurst = 0;
-+  dos_opts->DoSBeginDirDefenseType = 0;
 +}
 +
  /** Test that the heartbeat shows the directory request counts of each
   * defense once it is enabled. */
  static void
-@@ -1047,6 +1276,10 @@ struct testcase_t dos_tests[] = {
+@@ -1019,6 +1203,9 @@ struct testcase_t dos_tests[] = {
    { "conn_rate", test_dos_conn_rate, TT_FORK, NULL, NULL },
    { "begindir_limit", test_dos_begindir_limit, TT_FORK, NULL, NULL },
    { "refuse_single_hop", test_dos_refuse_single_hop, TT_FORK, NULL, NULL },
 +  { "begindir_refused", test_dos_begindir_refused, TT_FORK, NULL, NULL },
 +  { "create_cell_prev_hop", test_dos_create_cell_prev_hop, TT_FORK,
 +    NULL, NULL },
-+  { "begindir_nth", test_dos_begindir_nth, TT_FORK, NULL, NULL },
    { "dir_heartbeat", test_dos_dir_heartbeat, TT_FORK, NULL, NULL },
    { "hsdir_fetch_shedding", test_dos_hsdir_fetch_shedding, TT_FORK,
      NULL, NULL },
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index d1cea08375..dd18f56f7f 100644
+index 68ce7e8393..ed27857a36 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
-@@ -30,6 +30,7 @@
+@@ -31,6 +31,7 @@
  #include "core/or/channel.h"
  #include "core/or/dos.h"
  #include "feature/relay/relay_metrics.h"
@@ -1105,7 +720,7 @@ index d1cea08375..dd18f56f7f 100644
  #include "lib/metrics/metrics_store_entry.h"
  #include "lib/crypt_ops/crypto_format.h"
  #include "lib/crypt_ops/crypto_rand.h"
-@@ -92,6 +93,14 @@ hsdir_request_on_circuit(or_circuit_t *circ, const char *headers,
+@@ -94,6 +95,14 @@ hsdir_request_on_circuit(or_circuit_t *circ, const char *headers,
    conn->base_.address = tor_strdup("127.0.0.1");
    connection_link_connections(TO_CONN(conn), TO_CONN(edge));
    edge->on_circuit = circ ? TO_CIRCUIT(circ) : NULL;
@@ -1120,17 +735,15 @@ index d1cea08375..dd18f56f7f 100644
  
    if (body) {
      tt_int_op(directory_handle_command_post(conn, headers, body, strlen(body)),
-@@ -545,25 +554,86 @@ helper_fetch_desc_from_hsdir(const ed25519_public_key_t *blinded_key)
+@@ -547,19 +556,34 @@ helper_fetch_desc_from_hsdir(const ed25519_public_key_t *blinded_key)
    return received_desc;
  }
  
 -/* Return the value of <b>name</b>{<b>key</b>="<b>value</b>"} in the relay
-- * metrics store. If there is no such entry, fail the test and return -1, so
-- * that a series that vanished never compares equal to a baseline. */
+- * metrics store. If there is no such entry, fail the test and return -1. */
 +/* Return the value of <b>name</b>{<b>key1</b>="<b>value1</b>",
 + * <b>key2</b>="<b>value2</b>"} in the relay metrics store. If there is no
-+ * such entry, fail the test and return -1, so that a series that vanished
-+ * never compares equal to a baseline. */
++ * such entry, fail the test and return -1. */
  static int64_t
 -get_metric(const char *name, const char *key, const char *value)
 +get_metric2(const char *name, const char *key1, const char *value1,
@@ -1166,14 +779,18 @@ index d1cea08375..dd18f56f7f 100644
  }
  #define GET_METRIC(action) \
    get_metric(METRICS_NAME(relay_hsdir_fetch_total), "action", (action))
- #define POST_METRIC(action) \
+@@ -567,9 +591,53 @@ get_metric(const char *name, const char *key, const char *value)
    get_metric(METRICS_NAME(relay_hsdir_upload_total), "action", (action))
+ #define DOS_METRIC(type) \
+   get_metric(METRICS_NAME(relay_dos_total), "type", (type))
+-/* tor_relay_begindir_request_total{type} */
 +/* tor_relay_begindir_request_total{type, prev_hop}, and its sum over the
 + * three kinds of previous hop. */
 +#define REQ_METRIC(type, hop) \
 +  get_metric2(METRICS_NAME(relay_begindir_request_total), "type", (type), \
 +              "prev_hop", (hop))
-+#define REQ_SUM(type) \
+ #define REQ_SUM(type) \
+-  get_metric(METRICS_NAME(relay_begindir_request_total), "type", (type))
 +  (REQ_METRIC((type), "client") + REQ_METRIC((type), "known_relay") + \
 +   REQ_METRIC((type), "unknown_relay"))
 +
@@ -1202,14 +819,15 @@ index d1cea08375..dd18f56f7f 100644
 +  return found;
 +}
 +
-+/* Return true iff the relay metrics store exports <b>name</b> as a counter. */
++/* Return true iff the relay metrics store exports <b>name</b> as a
++ * <b>type</b>. */
 +static bool
-+metric_is_counter(const char *name)
++metric_has_type(const char *name, const char *type)
 +{
 +  char *type_line = NULL;
 +  bool found;
 +
-+  tor_asprintf(&type_line, "# TYPE %s counter\n", name);
++  tor_asprintf(&type_line, "# TYPE %s %s\n", name, type);
 +  found = relay_metrics_export(type_line);
 +  tor_free(type_line);
 +  return found;
@@ -1217,292 +835,68 @@ index d1cea08375..dd18f56f7f 100644
  
  /* Return a new OR circuit whose previous hop is <b>chan</b>. */
  static or_circuit_t *
-@@ -603,6 +673,7 @@ test_hsdir_get_post_metrics(void *arg)
-                                  "single_hop", "refused" };
-   int64_t get0[ARRAY_LENGTH(get_actions)];
-   int64_t post0[ARRAY_LENGTH(post_actions)];
-+  int64_t hs_get0, hs_post0, hs_get_client0, hs_post_client0;
-   (void) arg;
- 
-   init_test();
-@@ -615,6 +686,10 @@ test_hsdir_get_post_metrics(void *arg)
-     get0[i] = GET_METRIC(get_actions[i]);
-   for (size_t i = 0; i < ARRAY_LENGTH(post_actions); i++)
-     post0[i] = POST_METRIC(post_actions[i]);
-+  hs_get0 = REQ_SUM("hs_get");
-+  hs_post0 = REQ_SUM("hs_post");
-+  hs_get_client0 = REQ_METRIC("hs_get", "client");
-+  hs_post_client0 = REQ_METRIC("hs_post", "client");
-   tt_int_op(ed25519_keypair_generate(&signing_kp, 0), OP_EQ, 0);
-   desc = hs_helper_build_hs_desc_with_ip(&signing_kp);
-   tt_int_op(hs_desc_encode_descriptor(desc, &signing_kp, NULL, &desc_str),
-@@ -646,11 +721,16 @@ test_hsdir_get_post_metrics(void *arg)
+@@ -642,13 +710,16 @@ test_hsdir_get_post_metrics(void *arg)
    directory_handle_command_post(dirport, post, desc_str, strlen(desc_str));
    connection_free_minimal(TO_CONN(dirport));
  
--  /* Exactly one request of each outcome. */
+-  /* Exactly one request of each outcome, each also counted by type. */
 +  /* Exactly one request of each outcome, each also counted by type, and
 +   * single_hop exactly when the previous hop is a client. */
    for (size_t i = 0; i < ARRAY_LENGTH(get_actions); i++)
-     tt_i64_op(GET_METRIC(get_actions[i]), OP_EQ, get0[i] + 1);
+     tt_i64_op(GET_METRIC(get_actions[i]), OP_EQ, 1);
    for (size_t i = 0; i < ARRAY_LENGTH(post_actions); i++)
-     tt_i64_op(POST_METRIC(post_actions[i]), OP_EQ, post0[i] + 1);
-+  tt_i64_op(REQ_SUM("hs_get"), OP_EQ, hs_get0 + 4);
-+  tt_i64_op(REQ_SUM("hs_post"), OP_EQ, hs_post0 + 6);
-+  tt_i64_op(REQ_METRIC("hs_get", "client"), OP_EQ, hs_get_client0 + 1);
-+  tt_i64_op(REQ_METRIC("hs_post", "client"), OP_EQ, hs_post_client0 + 1);
+     tt_i64_op(POST_METRIC(post_actions[i]), OP_EQ, 1);
+   tt_i64_op(REQ_SUM("hs_get"), OP_EQ, 4);
+   tt_i64_op(REQ_SUM("hs_post"), OP_EQ, 6);
++  tt_i64_op(REQ_METRIC("hs_get", "client"), OP_EQ, 1);
++  tt_i64_op(REQ_METRIC("hs_post", "client"), OP_EQ, 1);
  
   done:
    UNMOCK(connection_write_to_buf_impl_);
-@@ -1168,11 +1248,41 @@ test_downloaded_counter_non_hs(void *arg)
-   connection_free_minimal(TO_CONN(conn));
+@@ -1330,6 +1401,52 @@ test_dir_request_url_table_types(void *arg)
+   free_fake_channel(chan);
  }
  
--#define DIR_REQUEST_METRIC(type) \
--  get_metric(METRICS_NAME(relay_begindir_request_total), "type", (type))
- #define DIR_RESPONSE_METRIC(type) \
-   get_metric(METRICS_NAME(relay_begindir_response_total), "type", (type))
- 
-+/* Make a tunneled directory server connection waiting for a request on a
-+ * circuit whose previous hop is of kind <b>prev_hop</b>, with <b>input</b>
-+ * (if any) on its inbuf. */
-+static dir_connection_t *
-+new_waiting_dir_conn(channel_prev_hop_t prev_hop, const char *input)
-+{
-+  dir_connection_t *conn = dir_connection_new(AF_INET);
-+
-+  TO_CONN(conn)->purpose = DIR_PURPOSE_SERVER;
-+  TO_CONN(conn)->state = DIR_CONN_STATE_SERVER_COMMAND_WAIT;
-+  TO_CONN(conn)->linked = 1;
-+  tor_addr_from_ipv4h(&TO_CONN(conn)->addr, 0x7f000001);
-+  conn->prev_hop = prev_hop;
-+  if (input)
-+    buf_add(TO_CONN(conn)->inbuf, input, strlen(input));
-+  return conn;
-+}
-+
-+/* Link <b>conn</b>, from new_waiting_dir_conn(), to a new stream on a new
-+ * circuit: directory_handle_command() drops a request on a stream that is
-+ * gone or closing without reading it. Return the stream, which the caller
-+ * frees. */
-+static edge_connection_t *
-+open_waiting_stream(dir_connection_t *conn)
-+{
-+  edge_connection_t *edge = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
-+
-+  connection_link_connections(TO_CONN(conn), TO_CONN(edge));
-+  edge->on_circuit = TO_CIRCUIT(or_circuit_new(0, NULL));
-+  return edge;
-+}
-+
- /* Tunneled directory requests are counted by type, and responses once they
-  * are handed to their stream; direct (DirPort) connections are not. */
- static void
-@@ -1180,8 +1290,13 @@ test_dir_request_response_metrics(void *arg)
- {
-   channel_t *chan = tor_malloc_zero(sizeof(channel_t));
-   dir_connection_t *conn = dir_connection_new(AF_INET), *dirport = NULL;
-+  dir_connection_t *waiting = NULL;
-+  edge_connection_t *stream = NULL;
-   ed25519_public_key_t pk;
--  int64_t non_hs0, unparsed0, hs0, other0;
-+  int64_t hs0, other0;
-+  const char *types[] = { "consensus", "microdesc", "descriptor", "other",
-+                          "unparsed", "no_request", "circuit_dead" };
-+  int64_t unknown0[ARRAY_LENGTH(types)], client0[ARRAY_LENGTH(types)];
-   (void) arg;
- 
-   init_test();
-@@ -1189,17 +1304,17 @@ test_dir_request_response_metrics(void *arg)
-   MOCK(connection_mark_for_close_internal_, hsdir_mock_mark_for_close);
-   get_options_mutable()->ORPort_set = 1; /* Accept directory posts. */
-   /* Other tests may have counted requests before we forked. */
--  non_hs0 = DIR_REQUEST_METRIC("non_hs");
--  unparsed0 = DIR_REQUEST_METRIC("unparsed");
-   hs0 = DIR_RESPONSE_METRIC("hs_descriptor");
-   other0 = DIR_RESPONSE_METRIC("other");
-+  for (size_t i = 0; i < ARRAY_LENGTH(types); i++) {
-+    unknown0[i] = REQ_METRIC(types[i], "unknown_relay");
-+    client0[i] = REQ_METRIC(types[i], "client");
-+  }
- 
-   hsdir_request_on_new_circ(chan, GET("/tor/robots.txt"), NULL);
-   hsdir_request_on_new_circ(chan, "POST /tor/ HTTP/1.0\r\n\r\n", "x");
-   hsdir_request_on_new_circ(chan, "GET\r\n\r\n", NULL);
-   hsdir_request_on_new_circ(chan, "POST\r\n\r\n", "x");
--  tt_i64_op(DIR_REQUEST_METRIC("non_hs"), OP_EQ, non_hs0 + 2);
--  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 2);
- 
-   /* The same requests on a DirPort connection aren't counted. */
-   dirport = dir_connection_new(AF_INET);
-@@ -1209,17 +1324,100 @@ test_dir_request_response_metrics(void *arg)
-                                 "x", 1);
-   directory_handle_command_get(dirport, "GET\r\n\r\n", NULL, 0);
-   directory_handle_command_post(dirport, "POST\r\n\r\n", "x", 1);
--  tt_i64_op(DIR_REQUEST_METRIC("non_hs"), OP_EQ, non_hs0 + 2);
--  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 2);
-+  tt_assert(!dirport->request_counted);
-+
-+  /* Each tunneled request is counted once by what it asked for, and by its
-+   * previous hop: here an identity we don't know. */
-+  hsdir_request_on_new_circ(chan,
-+               GET("/tor/status-vote/current/consensus/diff/zz"), NULL);
-+  hsdir_request_on_new_circ(chan, GET("/tor/micro/d/x"), NULL);
-+  hsdir_request_on_new_circ(chan, GET("/tor/server/fp/zz"), NULL);
-+  hsdir_request_on_new_circ(chan, GET("/tor/nothing-here"), NULL);
-+  hsdir_request_on_new_circ(chan, GET("/tor/hs/2/x"), NULL);
-+  tt_i64_op(REQ_METRIC("consensus", "unknown_relay"), OP_EQ, unknown0[0] + 1);
-+  tt_i64_op(REQ_METRIC("microdesc", "unknown_relay"), OP_EQ, unknown0[1] + 1);
-+  tt_i64_op(REQ_METRIC("descriptor", "unknown_relay"), OP_EQ,
-+            unknown0[2] + 1);
-+  /* robots.txt, POST /tor/, and the two we answer with 404. */
-+  tt_i64_op(REQ_METRIC("other", "unknown_relay"), OP_EQ, unknown0[3] + 4);
-+  tt_i64_op(REQ_METRIC("unparsed", "unknown_relay"), OP_EQ, unknown0[4] + 2);
-+
-+  /* An unknown method, and a body too large to accept, are counted when we
-+   * refuse them, and only once: the unknown method's request is already gone
-+   * from the inbuf when the connection closes. */
-+  waiting = new_waiting_dir_conn(CHANNEL_PREV_HOP_CLIENT,
-+                                 "PUT /tor/ HTTP/1.0\r\n\r\n");
-+  stream = open_waiting_stream(waiting);
-+  tt_int_op(directory_handle_command(waiting), OP_EQ, -1);
-+  tt_i64_op(REQ_METRIC("unparsed", "client"), OP_EQ, client0[4] + 1);
-+  connection_dir_about_to_close(waiting);
-+  tt_i64_op(REQ_METRIC("unparsed", "client"), OP_EQ, client0[4] + 1);
-+  tt_i64_op(REQ_METRIC("no_request", "client"), OP_EQ, client0[5]);
-+  connection_free_minimal(TO_CONN(waiting));
-+  connection_free_minimal(TO_CONN(stream));
-+  waiting = NULL;
-+  stream = NULL;
-+  waiting = new_waiting_dir_conn(CHANNEL_PREV_HOP_CLIENT,
-+                                 "POST /tor/hs/3/publish HTTP/1.0\r\n"
-+                                 "Content-Length: 99999999\r\n\r\n");
-+  stream = open_waiting_stream(waiting);
-+  tt_int_op(directory_handle_command(waiting), OP_EQ, -1);
-+  tt_i64_op(REQ_METRIC("unparsed", "client"), OP_EQ, client0[4] + 2);
-+  connection_dir_about_to_close(waiting);
-+  tt_i64_op(REQ_METRIC("unparsed", "client"), OP_EQ, client0[4] + 2);
-+  connection_free_minimal(TO_CONN(waiting));
-+  connection_free_minimal(TO_CONN(stream));
-+  waiting = NULL;
-+  stream = NULL;
-+  /* A request on a stream whose circuit is closing is dropped unread, and
-+   * counted as circuit_dead, once. */
-+  waiting = new_waiting_dir_conn(CHANNEL_PREV_HOP_CLIENT, GET("/tor/"));
-+  stream = open_waiting_stream(waiting);
-+  stream->on_circuit->marked_for_close = 1;
-+  tt_int_op(directory_handle_command(waiting), OP_EQ, -1);
-+  tt_int_op(connection_get_inbuf_len(TO_CONN(waiting)), OP_GT, 0);
-+  connection_dir_about_to_close(waiting);
-+  tt_i64_op(REQ_METRIC("circuit_dead", "client"), OP_EQ, client0[6] + 1);
-+  tt_i64_op(REQ_METRIC("unparsed", "client"), OP_EQ, client0[4] + 2);
-+  connection_free_minimal(TO_CONN(waiting));
-+  connection_free_minimal(TO_CONN(stream));
-+  waiting = NULL;
-+  stream = NULL;
-+  /* Closed with part of a request, or with nothing at all. */
-+  waiting = new_waiting_dir_conn(CHANNEL_PREV_HOP_CLIENT, "GET /tor/");
-+  connection_dir_about_to_close(waiting);
-+  connection_free_minimal(TO_CONN(waiting));
-+  waiting = NULL;
-+  tt_i64_op(REQ_METRIC("unparsed", "client"), OP_EQ, client0[4] + 3);
-+  tt_i64_op(REQ_METRIC("no_request", "client"), OP_EQ, client0[5]);
-+  waiting = new_waiting_dir_conn(CHANNEL_PREV_HOP_CLIENT, NULL);
-+  connection_dir_about_to_close(waiting);
-+  connection_free_minimal(TO_CONN(waiting));
-+  waiting = NULL;
-+  tt_i64_op(REQ_METRIC("unparsed", "client"), OP_EQ, client0[4] + 3);
-+  tt_i64_op(REQ_METRIC("no_request", "client"), OP_EQ, client0[5] + 1);
-+  /* A bridge answers a POST with a 503 before reading its URL: counted as
-+   * other when the connection closes. */
-+  get_options_mutable()->BridgeRelay = 1;
-+  waiting = new_waiting_dir_conn(CHANNEL_PREV_HOP_CLIENT, NULL);
-+  directory_handle_command_post(waiting,
-+                                "POST /tor/hs/3/publish HTTP/1.0\r\n\r\n",
-+                                "x", 1);
-+  connection_dir_about_to_close(waiting);
-+  connection_free_minimal(TO_CONN(waiting));
-+  waiting = NULL;
-+  get_options_mutable()->BridgeRelay = 0;
-+  tt_i64_op(REQ_METRIC("other", "client"), OP_EQ, client0[3] + 1);
- 
-   /* Closed while waiting for a request: counted only if tunneled. */
-   TO_CONN(conn)->purpose = DIR_PURPOSE_SERVER;
-   TO_CONN(conn)->state = DIR_CONN_STATE_SERVER_COMMAND_WAIT;
-+  conn->prev_hop = CHANNEL_PREV_HOP_CLIENT;
-   connection_dir_about_to_close(conn);
--  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 2);
-+  tt_i64_op(REQ_METRIC("no_request", "client"), OP_EQ, client0[5] + 1);
-   TO_CONN(conn)->linked = 1;
-   connection_dir_about_to_close(conn);
--  tt_i64_op(DIR_REQUEST_METRIC("unparsed"), OP_EQ, unparsed0 + 3);
-+  tt_i64_op(REQ_METRIC("no_request", "client"), OP_EQ, client0[5] + 2);
- 
-   /* A response is counted once it has been handed to its stream. */
-   TO_CONN(conn)->state = DIR_CONN_STATE_SERVER_WRITING;
-@@ -1235,15 +1433,71 @@ test_dir_request_response_metrics(void *arg)
-  done:
-   UNMOCK(connection_write_to_buf_impl_);
-   UNMOCK(connection_mark_for_close_internal_);
-+  get_options_mutable()->BridgeRelay = 0;
-   SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
-                     TO_OR_CIRCUIT(c)->p_chan = NULL);
-   circuit_free_all();
-   connection_free_minimal(TO_CONN(conn));
-   if (dirport)
-     connection_free_minimal(TO_CONN(dirport));
-+  if (waiting)
-+    connection_free_minimal(TO_CONN(waiting));
-+  if (stream)
-+    connection_free_minimal(TO_CONN(stream));
-   tor_free(chan);
- }
- 
-+/* The previous-hop families export one series per class (and per nth or
-+ * type), never the unset class, with the counted values. */
++/* Each new family is exported with its type and number of series (one per
++ * previous-hop class, and per nth or type), and with the counted values. */
 +static void
 +test_prev_hop_metric_series(void *arg)
 +{
 +  const struct {
 +    const char *name;
 +    int n_series;
++    const char *type;
 +  } families[] = {
-+    { METRICS_NAME(relay_create_cell_total), 3 },
-+    { METRICS_NAME(relay_begindir_cell_total), 15 },
-+    { METRICS_NAME(relay_begindir_request_total), 27 },
++    { METRICS_NAME(relay_hsdir_fetch_total), 4, "counter" },
++    { METRICS_NAME(relay_hsdir_upload_total), 6, "counter" },
++    { METRICS_NAME(relay_begindir_response_total), 2, "counter" },
++    { METRICS_NAME(relay_begindir_connections), 4, "gauge" },
++    { METRICS_NAME(relay_create_cell_total), 3, "counter" },
++    { METRICS_NAME(relay_begindir_cell_total), 15, "counter" },
++    { METRICS_NAME(relay_begindir_request_total), 30, "counter" },
 +  };
 +  or_circuit_t *circ = or_circuit_new(0, NULL);
-+  int64_t create0, first0, later0, tenth0;
 +  (void) arg;
 +
-+  create0 = get_metric(METRICS_NAME(relay_create_cell_total), "prev_hop",
-+                       "known_relay");
-+  first0 = get_metric2(METRICS_NAME(relay_begindir_cell_total), "prev_hop",
-+                       "client", "nth", "1");
-+  later0 = get_metric2(METRICS_NAME(relay_begindir_cell_total), "prev_hop",
-+                       "client", "nth", "2_10");
-+  tenth0 = get_metric2(METRICS_NAME(relay_begindir_cell_total), "prev_hop",
-+                       "client", "nth", "11_100");
 +  rep_hist_note_create_cell(CHANNEL_PREV_HOP_KNOWN_RELAY);
 +  rep_hist_note_create_cell(CHANNEL_PREV_HOP_KNOWN_RELAY);
-+  circ->prev_hop = CHANNEL_PREV_HOP_CLIENT;
 +  for (int i = 0; i < 11; i++)
 +    rep_hist_note_begindir_cell(circ);
 +
 +  tt_i64_op(get_metric(METRICS_NAME(relay_create_cell_total), "prev_hop",
-+                       "known_relay"), OP_EQ, create0 + 2);
++                       "known_relay"), OP_EQ, 2);
 +  tt_i64_op(get_metric2(METRICS_NAME(relay_begindir_cell_total), "prev_hop",
-+                        "client", "nth", "1"), OP_EQ, first0 + 1);
++                        "client", "nth", "1"), OP_EQ, 1);
 +  tt_i64_op(get_metric2(METRICS_NAME(relay_begindir_cell_total), "prev_hop",
-+                        "client", "nth", "2_10"), OP_EQ, later0 + 9);
++                        "client", "nth", "2_10"), OP_EQ, 9);
 +  tt_i64_op(get_metric2(METRICS_NAME(relay_begindir_cell_total), "prev_hop",
-+                        "client", "nth", "11_100"), OP_EQ, tenth0 + 1);
++                        "client", "nth", "11_100"), OP_EQ, 1);
 +  for (size_t i = 0; i < ARRAY_LENGTH(families); i++) {
 +    const smartlist_t *entries = metrics_store_get_all(
 +               smartlist_get(relay_metrics_get_stores(), 0), families[i].name);
 +    tt_assert(entries);
 +    tt_int_op(smartlist_len(entries), OP_EQ, families[i].n_series);
-+    tt_assert(metric_is_counter(families[i].name));
++    tt_assert(metric_has_type(families[i].name, families[i].type));
 +  }
 +
 + done:
@@ -1512,47 +906,10 @@ index d1cea08375..dd18f56f7f 100644
  #define DIR_CONN_GAUGE(state) \
    get_metric(METRICS_NAME(relay_begindir_connections), "state", (state))
  
-@@ -1670,6 +1924,107 @@ test_hsdir_desc_fetch_shedding(void *arg)
+@@ -1683,6 +1800,48 @@ test_hsdir_desc_fetch_shedding(void *arg)
    tor_free(get_b);
  }
  
-+/* Each GET that url_table matches is counted by the type of its entry. */
-+static void
-+test_dir_request_url_table_types(void *arg)
-+{
-+  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
-+  const struct {
-+    const char *url;
-+    const char *type;
-+  } reqs[] = {
-+    { "/tor/status-vote/current/consensus", "consensus" },
-+    { "/tor/micro/d/zz", "microdesc" },
-+    { "/tor/server/fp/zz", "descriptor" },
-+    { "/tor/extra/fp/zz", "descriptor" },
-+    { "/tor/hs/3/zz", "hs_get" },
-+  };
-+  char *req = NULL;
-+  (void) arg;
-+
-+  init_test();
-+  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
-+  for (size_t i = 0; i < ARRAY_LENGTH(reqs); i++) {
-+    const int64_t n0 = REQ_SUM(reqs[i].type);
-+    tor_asprintf(&req, GET("%s"), reqs[i].url);
-+    hsdir_request_on_new_circ(chan, req, NULL);
-+    tor_free(req);
-+    tt_i64_op(REQ_SUM(reqs[i].type), OP_EQ, n0 + 1);
-+  }
-+
-+ done:
-+  UNMOCK(connection_write_to_buf_impl_);
-+  tor_free(req);
-+  SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
-+                    TO_OR_CIRCUIT(c)->p_chan = NULL);
-+  circuit_free_all();
-+  tor_free(chan);
-+}
-+
 +/* BEGIN_DIR cells are exported by their previous hop and in every band of
 + * their place on their circuit, the 1001st and later included. */
 +static void
@@ -1561,41 +918,19 @@ index d1cea08375..dd18f56f7f 100644
 +  or_circuit_t *circ = or_circuit_new(0, NULL);
 +  const char *bands[] = { "1", "2_10", "11_100", "101_1000", "1001_plus" };
 +  const int64_t want[] = { 1, 9, 90, 900, 2 };
-+  int64_t n0[ARRAY_LENGTH(bands)];
 +  (void) arg;
 +
-+  for (size_t i = 0; i < ARRAY_LENGTH(bands); i++)
-+    n0[i] = get_metric2(METRICS_NAME(relay_begindir_cell_total), "prev_hop",
-+                        "known_relay", "nth", bands[i]);
 +  circ->prev_hop = CHANNEL_PREV_HOP_KNOWN_RELAY;
 +  for (int i = 0; i < 1002; i++)
 +    rep_hist_note_begindir_cell(circ);
++  rep_hist_note_begindir_cell(NULL); /* A circuit we made: not counted. */
 +  for (size_t i = 0; i < ARRAY_LENGTH(bands); i++)
 +    tt_i64_op(get_metric2(METRICS_NAME(relay_begindir_cell_total), "prev_hop",
-+                          "known_relay", "nth", bands[i]), OP_EQ,
-+              n0[i] + want[i]);
++                          "known_relay", "nth", bands[i]), OP_EQ, want[i]);
++  tt_int_op(circ->n_begindir, OP_EQ, NTH_BAND_MAX);
 +
 + done:
 +  circuit_free_all();
-+}
-+
-+/* The descriptor fetch and upload counts and the tunneled directory
-+ * response count are exported as counters, and the open tunneled directory
-+ * connections as a gauge. */
-+static void
-+test_metric_types(void *arg)
-+{
-+  (void) arg;
-+
-+  tt_assert(metric_is_counter(METRICS_NAME(relay_hsdir_fetch_total)));
-+  tt_assert(metric_is_counter(METRICS_NAME(relay_hsdir_upload_total)));
-+  tt_assert(metric_is_counter(METRICS_NAME(relay_begindir_response_total)));
-+  tt_assert(relay_metrics_export("# TYPE "
-+                                 METRICS_NAME(relay_begindir_connections)
-+                                 " gauge\n"));
-+
-+ done:
-+  ;
 +}
 +
 +/* A family with no first label exports each series with its one label. */
@@ -1620,7 +955,7 @@ index d1cea08375..dd18f56f7f 100644
  struct testcase_t hs_cache[] = {
    { "hsdir_request_limit_get", test_hsdir_request_limit, TT_FORK,
      &passthrough_setup, (void *) "get" },
-@@ -1690,6 +2045,8 @@ struct testcase_t hs_cache[] = {
+@@ -1703,6 +1862,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "hsdir_get_post_metrics", test_hsdir_get_post_metrics, TT_FORK,
      NULL, NULL },
@@ -1628,16 +963,16 @@ index d1cea08375..dd18f56f7f 100644
 +    NULL, NULL },
    { "dir_request_response_metrics", test_dir_request_response_metrics,
      TT_FORK, NULL, NULL },
-   { "dir_server_conns_gauge", test_dir_server_conns_gauge, TT_FORK,
-@@ -1712,6 +2069,11 @@ struct testcase_t hs_cache[] = {
+   { "dir_request_url_table_types", test_dir_request_url_table_types, TT_FORK,
+@@ -1725,6 +1886,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "client_cache_remove", test_client_cache_remove, TT_FORK,
      NULL, NULL },
-+  { "dir_request_url_table_types", test_dir_request_url_table_types, TT_FORK,
-+    NULL, NULL },
 +  { "begindir_cell_bands", test_begindir_cell_bands, TT_FORK, NULL, NULL },
-+  { "metric_types", test_metric_types, TT_FORK, NULL, NULL },
 +  { "metric_single_labels", test_metric_single_labels, TT_FORK, NULL, NULL },
  
    END_OF_TESTCASES
  };
+-- 
+2.43.0
+
