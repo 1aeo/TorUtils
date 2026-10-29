@@ -1,10 +1,10 @@
 # Rebuild the `.deb`s (24.04 noble, 26.04 resolute) from the current series
 
-The attached packages in `../../packages/` are `+tor41339.7` for Ubuntu 24.04
-(`~noble+1`) and 26.04 (`~resolute+1`), built from `../../patches/0001`–`0023`
-and one Debian-only patch (provenance: `../../packages/BUILD-INFO.txt`). Use this runbook whenever
-`patches/` changes, bumping the suffix (`+tor41339.7`, …) so `dpkg` sees the
-new build as newer. Rebuild **both** releases from the same
+The attached packages in `../../packages/` are `+tor41339.8` for Ubuntu 24.04
+(`~noble+1`) and 26.04 (`~resolute+1`), built on tor 0.4.9.15 from
+`../../patches/0001`–`0020` (provenance: `../../packages/BUILD-INFO.txt`). Use
+this runbook whenever `patches/` changes, bumping the suffix (`+tor41339.8`,
+…) so `dpkg` sees the new build as newer. Rebuild **both** releases from the same
 series, and regenerate every artifact below together, so the binaries, the
 `debian-patches/` build copy and the docs never diverge.
 
@@ -23,18 +23,18 @@ series, and regenerate every artifact below together, so the binaries, the
 ## Inputs (stage them in one directory, mounted read-only as `/in`)
 
 - From `https://deb.torproject.org/torproject.org/pool/main/t/tor/`:
-  `tor_0.4.9.14.orig.tar.gz` (sha256
-  `182449ac1c8ff43278da27b69b02040e11d03d0327db6d9126e4190ec6235e4a`, identical
+  `tor_0.4.9.15.orig.tar.gz` (sha256
+  `1911f5b216a6814ed143a08bbcff1c6dc96d2ca3b505df9a21876080a92963f3`, identical
   to dist.torproject.org, shared by both releases), plus
-  `tor_0.4.9.14-1~noble+1.{diff.gz,dsc}` and
-  `tor_0.4.9.14-1~resolute+1.{diff.gz,dsc}`. Check the `.diff.gz` sha256
+  `tor_0.4.9.15-1~noble+1.{diff.gz,dsc}` and
+  `tor_0.4.9.15-1~resolute+1.{diff.gz,dsc}`. Check the `.diff.gz` sha256
   against its `.dsc`; the two Debian packagings should differ only in the
   changelog entry (`diff <(zcat …noble…) <(zcat …resolute…)`).
 - Every `build-reordered/debian-patches/[0-9][0-9][0-9][0-9]-*.patch`: `0000`
-  (restores `doc/nofooter.conf`), copies of `../../patches/0001`–`0023`, and
-  `0024`, the Debian-only alias that keeps `.6`'s option name
-  `HSDirDescriptorFetchLimit` working.
-  Stage them into a fresh, empty directory so no stale patch is picked up.
+  (restores `doc/nofooter.conf`, which the 0.4.9.15 tarball still omits) and
+  copies of `../../patches/0001`–`0020`. `.7`'s Debian-only option alias is
+  gone. Stage them into a fresh, empty directory so no stale patch is picked
+  up.
 - The driver `build-reordered/build-in-container-reordered.sh`.
 
 ## Build
@@ -42,11 +42,11 @@ series, and regenerate every artifact below together, so the binaries, the
 1. The driver takes the suffix, the changelog entry and the expected patch
    count from the environment, and fails if any is unset or if the staged
    patch count differs: `REV` (the `N` in `+tor41339.N`), `CHANGELOG_MSG`, and
-   `EXPECT_PATCHES` (25 for `0000`–`0024`).
+   `EXPECT_PATCHES` (21 for `0000`–`0020`), and `VER` (default 0.4.9.15).
 2. Run once per release (the driver runs with `set -o pipefail`, so a failed
    `dpkg-buildpackage` fails the run):
-   - `docker run --rm --network host -e SUITE=noble -e REV=7 -e EXPECT_PATCHES=25 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-noble:/out ubuntu:24.04 bash /in/build-in-container-reordered.sh`
-   - `docker run --rm --network host -e SUITE=resolute -e REV=7 -e EXPECT_PATCHES=25 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-resolute:/out ubuntu:26.04 bash /in/build-in-container-reordered.sh`
+   - `docker run --rm --network host -e SUITE=noble -e REV=8 -e EXPECT_PATCHES=21 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-noble:/out ubuntu:24.04 bash /in/build-in-container-reordered.sh`
+   - `docker run --rm --network host -e SUITE=resolute -e REV=8 -e EXPECT_PATCHES=21 -e CHANGELOG_MSG="…" -v /in:/in:ro -v /out-resolute:/out ubuntu:26.04 bash /in/build-in-container-reordered.sh`
 
    Expect `dh_auto_test` green in both (see `BUILD-INFO.txt` for the counts).
 3. Check: no compiler warning on any line the series adds (warnings in
@@ -67,12 +67,13 @@ tor-gencert for the lab's own authorities, `REV`, and `IMAGE=ubuntu:26.04`
 for the resolute package). It brings up a private chutney net, installs
 **only** the `tor` package in a fresh container of that release, and runs an
 unpublished relay under `Sandbox 1`. It exits nonzero unless both torrcs pass
-`--verify-config`, the version ends in `+tor41339.$REV`, all 8 new options
-exist (`NEW_OPTIONS=8`, every defense off), `.6`'s option name still works
-with a warning, the relay bootstraps, all 132 new MetricsPort series are
-present with exactly their expected labels (`NEW_METRIC_SERIES=132`, and no
-other series in each new family), no series is left under a name `.7`
-replaced, and there are 0 bad syscalls; the
+`--verify-config`, the version ends in `+tor41339.$REV`, all 5 new options
+exist (`NEW_OPTIONS=5`, every defense off), each option name that `.8`
+dropped fails with "Unknown option", the relay bootstraps, all 121 new
+MetricsPort series are present with exactly their expected labels
+(`NEW_METRIC_SERIES=121`, and no other series in each new family), no series
+is left under a name `.7` replaced or `.8` dropped, tor 0.4.9.15's three
+`begindir_*` counts are there, and there are 0 bad syscalls; the
 transcript ends with `RESULT: PASS`. (Not exiting on SIGTERM
 under `Sandbox 1` is the pre-existing upstream bug tor#41060;
 `../seccomp/sigterm-repro.sh` compares stock and patched.)

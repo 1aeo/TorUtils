@@ -1,6 +1,6 @@
 # tor#41339 — HSDir onion-service-descriptor flood: defensive patch series
 
-A small, upstreamable patch series for **Tor 0.4.9.14** that makes the 2026
+A small, upstreamable patch series for **Tor 0.4.9.15** that makes the 2026
 BEGIN_DIR / onion-service-descriptor flood on a directory cache (HSDir)
 measurable and, with off-by-default defenses, lets an HSDir refuse the parts of
 it that stock clients never send and cap the descriptor bytes it serves. It
@@ -17,13 +17,26 @@ discussed on the public `tor-relays` list and in
 
 ## The gap
 
-In Tor 0.4.9.14, `connection_exit_begin_conn()` dispatches a `BEGIN_DIR` stream
-into `connection_exit_connect_dir()` (`src/core/or/connection_edge.c:4333`)
-**before** the per-circuit stream limiter at `:4340`, so `DoSStreamCreation*`
-never applies to directory streams. The HS descriptor GET/POST handlers never
-consult the bandwidth `write_low` check; a request only has to arrive on an
-*authenticated* channel to count as "anonymous"; and an HSDir stores/serves any
-validly-signed descriptor without a hash-ring responsibility or flag check. The
+In Tor 0.4.9.14, `connection_exit_begin_conn()` dispatched a `BEGIN_DIR` stream
+into `connection_exit_connect_dir()` **before** the per-circuit stream
+limiter, so `DoSStreamCreation*` never applied to directory streams. Tor
+0.4.9.15 (tor#41411) added its own BEGIN_DIR defenses:
+- a per-circuit BEGIN_DIR rate limit, on by default (`DoSBeginDirRate` 10 a
+  second, `DoSBeginDirBurst` 60, closing the circuit);
+- one BEGIN_DIR per circuit from relays, while the consensus turns on
+  `DoSBeginDirLimitEnabled`;
+- one onion service request per circuit, always on: a second one closes the
+  circuit;
+- requests queued on a closing stream or circuit are dropped unread.
+
+Still, in 0.4.9.15 the HS descriptor GET/POST handlers never consult the
+bandwidth `write_low` check; a request only has to arrive on an
+*authenticated* channel to count as "anonymous"; an HSDir stores/serves any
+validly-signed descriptor without a hash-ring responsibility or flag check;
+and the MetricsPort shows little of what BEGIN_DIR streams carry. Nothing
+bounds the directory streams one circuit holds open either, but `.7`'s cap of
+64 (its 0012) never fired: `begindir_over_max` stayed at 0 in every flood
+saved from `.7` relays, so `.8` drops that cap. The
 field data (public operator reports, and the de-identified capture in `data/`)
 are consistent with **fetch** traffic (write:read ~11:1 on the attacked relay,
 ~180× its baseline request rate) with several `BEGIN_DIR` requests per circuit
@@ -36,12 +49,13 @@ descriptors is not yet established.
 
 ## The series (`patches/`)
 
-Apply with `git am` onto Tor 0.4.9.14, upstream `main`, or `maint-0.4.9`.
-Patches 0001–0015 are ordered from easiest to merge upstream (bugfixes, then
-observe-only MetricsPort counters) to off-by-default enforcement, one upstream
-change per commit. 0016–0023 are the `.7` metrics for the network team's
-questions (`analysis/metrics-proposal.md`). `patches/torspec-param-spec.patch`
-is the companion param-spec and rend-spec text for the six new consensus
+Apply with `git am` onto Tor 0.4.9.15 (`tor-0.4.9.15`). `.7`'s series for
+0.4.9.14 is in this repository's history. Patches 0001–0014 are ordered from
+easiest to merge upstream (bugfixes, then observe-only MetricsPort counters)
+to off-by-default enforcement, one upstream change per commit. 0015–0020 are
+the metrics for the network team's questions
+(`analysis/metrics-proposal.md`). `patches/torspec-param-spec.patch` is the
+companion param-spec and rend-spec text for the three new consensus
 parameters.
 
 | # | Theme | What it does | Default |
@@ -51,24 +65,21 @@ parameters.
 | 0003 | Hardening | A dir server discards anything a client sends after its request. | — |
 | 0004 | Hardening | Check the descriptor signature length before verifying the signing certificate. | — |
 | 0005 | Bugfix | Credit an HSDir download only once the response is written out. | — |
-| 0006 | Metrics | `tor_relay_hsdir_fetch_total{action}` and `tor_relay_hsdir_upload_total{action}`: descriptor fetch and upload outcomes. | always on |
+| 0006 | Metrics | `tor_relay_hsdir_fetch_total{action}` and `tor_relay_hsdir_upload_total{action}`: descriptor fetch and upload outcomes, including the second request on a circuit that tor refuses (`refused`). (`.7` also had the action `circuit_dead`: tor 0.4.9.15 drops those requests before reading them, and 0015 counts them as the request type `circuit_dead`.) | always on |
 | 0007 | Metrics | `tor_relay_begindir_request_total{type}` and `tor_relay_begindir_response_total{type}`: tunneled (BEGIN_DIR) requests that aren't HS, or never parse, and responses written out. | always on |
 | 0008 | Metrics | Gauge `tor_relay_begindir_connections{state}`: tunneled dir server connections by state. | always on |
 | 0009 | Refactor | Make `fill_dos_values()` table-driven (no functional change). | — |
-| 0010 | Metrics | `tor_relay_dos_total` types `hsdir_req_reused`, `hsdir_circ_reused`, `hsdir_unknown_prev_hop`: repeated requests on one circuit, the circuits that repeat them, and requests whose previous hop isn't a known relay. | always on |
-| 0011 | Enforcement | `HSDirOneRequestPerCircuit` (close a circuit on its second HS request) and `HSDirRefuseUnknownPrevHop` (503 if the previous hop isn't a known relay). AUTOBOOL torrc options over consensus parameters of the same name. Refusals are counted as action `refused` of the 0006 families. | **off** |
-| 0012 | Enforcement | `DoSBeginDirLimitEnabled` and `DoSBeginDirMaxStreams` (64): refuse a BEGIN_DIR on a circuit that already has that many open directory streams. Counted as `begindir_over_max`. | **off** |
-| 0013 | Metrics | Per-descriptor fetch bucket (`HSDirDescriptorFetchRate` 5/s, `HSDirDescriptorFetchBurst` 20), kept when a descriptor is replaced; fetches over it are counted as `hsdir_fetch_over_rate`. Compared with `hsdir_fetch_total{action="success"}`, it shows whether a flood concentrates on a few descriptors. Never refuses. | always on |
-| 0014 | Enforcement | `HSDirFetchShedding` (AUTOBOOL over a consensus parameter) and `HSDirFetchBudget` (descriptor bytes an HSDir may be asked for per second; 0 = `HSDirFetchBudgetPercent`, default 50, of min(configured, observed bandwidth), at least 512 KB): shed descriptor fetches by closing their circuits once a second goes over the budget. No fetch is refused until then. In the second after, fetches within their descriptor's rate are answered first (up to half the budget) and the others by a lottery aimed at the budget; no second answers more than 1.5× the budget. Counted as `hsdir_fetch_pressure` and `hsdir_fetch_shed` either way; the heartbeat names the fetches selected for shedding. | **off** |
-| 0015 | Hardening | Reject a declared `Content-Length` that can never fit as soon as the headers arrive, instead of waiting for the bytes (every `fetch_from_buf_http()` caller that doesn't accept a partial body). | — |
-| 0016 | Metrics | Classify each circuit's previous hop when its CREATE cell arrives (`client`, `known_relay`, `unknown_relay`). `tor_relay_create_cell_total{prev_hop}`, `tor_relay_begindir_cell_total{prev_hop,nth}` (every BEGIN_DIR cell, by its place on its circuit: `1`, `2_10`, `11_100`, `101_1000`, `1001_plus`), and `tor_relay_begindir_request_total{type,prev_hop}`, which now counts each accepted stream's request once, by what it asked for, onion service requests included; action `circuit_dead`. | always on |
-| 0017 | Metrics | `tor_relay_dos_total{type="circuit_over_rate"}`: client CREATE cells that find their address's `DoSCircuitCreationRate`/`Burst` bucket empty, marked or not; and `{type="circuit_untracked"}`: those from addresses tor no longer tracks, which `DoSCircuitCreation` doesn't limit. Both counted only while `DoSCircuitCreationEnabled` is on. | always on |
-| 0018 | Metrics | `tor_relay_begindir_response_bytes_total{type}`: response bytes their stream read, by request type. Splits `other` into `other_get` and `other_post`. | always on |
-| 0019 | Metrics | `tor_relay_begindir_request_over_max_total{type}`: requests on streams over `DoSBeginDirMaxStreams`, which is what 0012 would refuse. | always on |
-| 0020 | Metrics | `tor_relay_create_cell_source_total{prev_hop,nth}` and `tor_relay_begindir_cell_source_total{prev_hop,nth}`: cells by their place among their source's that minute. A source is a client address (a client channel, if tor doesn't track its address) or a relay channel. Bridges don't count these. | with a MetricsPort |
-| 0021 | Metrics | `tor_relay_hsdir_fetch_descriptor_total{lookup,nth}`: descriptor fetches by their place among the same descriptor's fetches that minute, by the decoded blinded key. Only a keyed hash of each key is kept, until the first fetch of a later minute clears the table. Bridges don't count these. | with a MetricsPort |
-| 0022 | Metrics | `tor_relay_dos_total{type="hsdir_descriptor_only_prev_hop"}`: onion service requests from relays known only by descriptor. | always on |
-| 0023 | Metrics | `tor_relay_dos_total{type="begindir_over_stream_rate"}`: BEGIN_DIR cells over their circuit's stream creation rate, which counts but never refuses. | with a MetricsPort |
+| 0010 | Metrics | `tor_relay_dos_total{type="hsdir_unknown_prev_hop"}`: HS requests whose previous hop isn't a known relay, among those that tor's limit of one per circuit lets through, which is what 0011 would refuse. (`.7` counted them before its own reuse rule, and counted the reuse too; tor 0.4.9.15 refuses a circuit's second HS request first, as `begindir_hsdir_rejected`.) | always on |
+| 0011 | Enforcement | `HSDirRefuseUnknownPrevHop` (503 if the previous hop isn't a known relay), an AUTOBOOL torrc option over the consensus parameter of the same name, applied after tor's own limit of one HS request per circuit. Refusals are counted as action `refused` of the 0006 families. | **off** |
+| 0012 | Metrics | Per-descriptor fetch bucket (`HSDirDescriptorFetchRate` 5/s, `HSDirDescriptorFetchBurst` 20), kept when a descriptor is replaced; fetches over it are counted as `hsdir_fetch_over_rate`. Compared with `hsdir_fetch_total{action="success"}`, it shows whether a flood concentrates on a few descriptors. Never refuses. | always on |
+| 0013 | Enforcement | `HSDirFetchShedding` (AUTOBOOL over a consensus parameter) and `HSDirFetchBudget` (descriptor bytes an HSDir may be asked for per second; 0 = `HSDirFetchBudgetPercent`, default 50, of min(configured, observed bandwidth), at least 512 KB): shed descriptor fetches by closing their circuits once a second goes over the budget. No fetch is refused until then. In the second after, fetches within their descriptor's rate are answered first (up to half the budget) and the others by a lottery aimed at the budget; no second answers more than 1.5× the budget. Counted as `hsdir_fetch_pressure` and `hsdir_fetch_shed` either way; the heartbeat names the fetches selected for shedding. | **off** |
+| 0014 | Hardening | Reject a declared `Content-Length` that can never fit as soon as the headers arrive, instead of waiting for the bytes (every `fetch_from_buf_http()` caller that doesn't accept a partial body). | — |
+| 0015 | Metrics | Classify each circuit's previous hop when its CREATE cell arrives (`client`, `known_relay`, `unknown_relay`). `tor_relay_create_cell_total{prev_hop}`, `tor_relay_begindir_cell_total{prev_hop,nth}` (every BEGIN_DIR cell, by its place on its circuit: `1`, `2_10`, `11_100`, `101_1000`, `1001_plus`), and `tor_relay_begindir_request_total{type,prev_hop}`, which now counts each accepted stream's request once, by what it asked for, onion service requests included, with type `circuit_dead` for a request dropped unread on a closing stream or circuit. | always on |
+| 0016 | Metrics | `tor_relay_dos_total{type="circuit_over_rate"}`: client CREATE cells that find their address's `DoSCircuitCreationRate`/`Burst` bucket empty, marked or not; and `{type="circuit_untracked"}`: those from addresses tor no longer tracks, which `DoSCircuitCreation` doesn't limit. Both counted only while `DoSCircuitCreationEnabled` is on. | always on |
+| 0017 | Metrics | `tor_relay_begindir_response_bytes_total{type}`: response bytes their stream read, by request type. Splits `other` into `other_get` and `other_post`. | always on |
+| 0018 | Metrics | `tor_relay_create_cell_source_total{prev_hop,nth}` and `tor_relay_begindir_cell_source_total{prev_hop,nth}`: cells by their place among their source's that minute. A source is a client address (a client channel, if tor doesn't track its address) or a relay channel. Bridges don't count these. | with a MetricsPort |
+| 0019 | Metrics | `tor_relay_hsdir_fetch_descriptor_total{lookup,nth}`: descriptor fetches by their place among the same descriptor's fetches that minute, by the decoded blinded key. Only a keyed hash of each key is kept, until the first fetch of a later minute clears the table. Bridges don't count these. | with a MetricsPort |
+| 0020 | Metrics | `tor_relay_dos_total{type="hsdir_descriptor_only_prev_hop"}`: onion service requests from relays known only by descriptor. | always on |
 
 The metric names follow stock tor's: `tor_relay_<subsystem>_<thing>_total`
 for counters, with a singular noun as in `tor_relay_destroy_cell_total`, and
@@ -78,18 +89,19 @@ marked "with a MetricsPort" do per-cell or per-fetch work (an address lookup,
 a hash, a token bucket) that only the MetricsPort shows, so a relay without
 one skips it.
 
-The metrics (0006–0010, 0013, 0016–0023) only count, and count only
-tunneled (linked) connections, so DirPort traffic stays out. Each defense (0011, 0012, 0014)
-counts what it would refuse whether or not it is enabled, so operators can
-measure before enabling it on the MetricsPort; they apply only on public
-relays, and the DoS heartbeat shows their counts while they are enabled.
+The metrics (0006–0010, 0012, 0015–0020) only count, and count only
+tunneled (linked) connections, so DirPort traffic stays out. Each defense
+(0011, 0013) counts what it would refuse whether or not it is enabled, so
+operators can measure before enabling it on the MetricsPort; both apply only
+on public relays, and the DoS heartbeat shows their counts while they are
+enabled.
 Enabling one takes `SETCONF` or a reload, with no restart.
 
-**Why 0014 sheds only over a budget.** An earlier 0013 refused every fetch
-over a descriptor's own rate. That protected the relay from a flood of a few
+**Why 0013 sheds only over a budget.** An earlier version of 0012 refused
+every fetch over a descriptor's own rate. That protected the relay from a flood of a few
 descriptors, but it refused fetches even on an idle relay: anyone could keep
 one descriptor unavailable at that HSDir with about 6 fetches a second, and
-learn second by second how often others fetched it. 0014 refuses nothing
+learn second by second how often others fetched it. 0013 refuses nothing
 until the relay is over its budget, so denying a descriptor there takes about
 as much load as overloading the relay does in stock; once over, the flooded
 descriptors are shed before the others. While it sheds, someone who keeps the
@@ -102,32 +114,39 @@ an hour; see the client lab below.
 
 Upstream merge requests, each built from fresh `main`: 0001–0003 (0002 needs
 0001's context), 0004, 0005, then the stack 0006–0010 on top of 0001–0005
-(0007's context includes a line from 0003), then 0011, 0012, 0013 and 0014,
-each on the one before (0012 reuses 0011's option helper), for separate
-discussion, 0015 on 0002 (its test extends 0002's), and 0016–0023 as one
+(0007's context includes a line from 0003), then 0011, 0012 and 0013, each
+on the one before (0013 reuses 0011's option helper), for separate
+discussion, 0014 on 0002 (its test extends 0002's), and 0015–0020 as one
 stack on top. The commits are upstream style (`subsystem: Summary`; three
 `changes/` files, for the hardening, the metrics and the DoS options, to
 which each commit adds its own entries and which pass `lintChanges.py`;
-`check-spaces` clean; the man page renders without asciidoc warnings). Each commit builds with `--enable-fatal-warnings` and passes
-`make test`. They add no new `practracker` problem kinds; 0014 raises the
-`dos.c` dependency-violation exception from 6 to 8 for its two bandwidth
-includes. The series grows functions and files that
-stock already has over the limit, among them `connection_exit_begin_conn()`,
-`command_process_create_cell()`, `connection_edge.c` and `rephist.c`; the
-set of problems practracker reports is the same as stock's.
+`check-spaces` clean; the man page renders without asciidoc warnings). Each
+commit builds with `--enable-fatal-warnings` and passes `make test`. After
+each commit, practracker reports the same problems as on stock 0.4.9.15,
+with two exceptions updated:
+- 0007 raises `directory_handle_command_post()`'s from 124 to 138 lines
+  (0.4.9.15 already brought it to 131);
+- 0013 raises the `dos.c` dependency-violation exception from 6 to 8, for
+  its two bandwidth includes.
 
-`packages/` holds the `+tor41339.7` `.deb`s for Ubuntu 24.04 and 26.04, built
-from 0001–0023 with every defense off (see `packages/BUILD-INFO.txt`), plus
-one Debian-only patch that keeps `.6`'s option name `HSDirDescriptorFetchLimit`
-working, with a deprecation warning, as `HSDirFetchShedding`. They replace
-`+tor41339.6` (0001–0015) on every relay, and also the first `+tor41339.7`
-build: the version did not change, so a relay that installed that build
-must reinstall. `.7` renames most of `.6`'s
-metric families (the table in `analysis/v7-review.md`), counts an onion
-service request that reaches a closing circuit over an authenticated channel
-as the new action `circuit_dead` instead of `single_hop`, and adds families,
-so dashboards should not mix the two; `operator/begindir-breakdown.py` reads
-both. The
+The series also grows functions and files that stock already has over the
+limit, among them `connection_exit_begin_conn()`,
+`command_process_create_cell()`, `connection_edge.c` and `rephist.c`.
+
+`packages/` holds the `+tor41339.8` `.deb`s for Ubuntu 24.04 and 26.04:
+tor 0.4.9.15 with 0001–0020, every defense off (see
+`packages/BUILD-INFO.txt`). They replace `+tor41339.7` on every relay. A
+torrc that sets an option `.8` dropped fails with "Unknown option", so
+remove it first: `HSDirOneRequestPerCircuit`, `DoSBeginDirLimitEnabled`,
+`DoSBeginDirMaxStreams`, or `.6`'s `HSDirDescriptorFetchLimit`, which `.7`
+kept as an alias. The metric names are `.7`'s, less the counters `.8` drops
+(`hsdir_req_reused`, `hsdir_circ_reused`, `begindir_over_max`,
+`begindir_over_stream_rate`, the HSDir action `circuit_dead`, and
+`tor_relay_begindir_request_over_max_total`), and plus the request type
+`circuit_dead` and tor 0.4.9.15's own `begindir_*` counts.
+`hsdir_unknown_prev_hop` now leaves out a circuit's second request, which
+tor refuses first. `operator/begindir-breakdown.py` reads `.6`, `.7` and
+`.8`. The
 earlier `+tor41339.3` canary packages were built from a legacy 7-patch series
 that exported only the four `hsdir_*` counters of 0010 and the 0011 rules. The
 operator documents below were written for those canary builds; for the options
@@ -156,7 +175,7 @@ comparisons retain uncertainty and client-impact guardrails.
 private chutney net in one `--network none` container, stock C tor and Arti
 2.7.0 clients, a load client flooding one onion service D at every HSDir
 holding it, and an unloaded control onion service E; Ubuntu 24.04 and 26.04
-packages. With 0014 shedding on every HSDir at 1.7–2.5× its budget, both
+packages. With shedding (now 0013) on every HSDir at 1.7–2.5× its budget, both
 clients reached D on **115 of 120** requests (1.7–2.9 HSDir attempts per
 success; median latency 0.37–0.63 s against 0.23–0.30 s without load) and
 E on **every** request; each of the 5 failures had been shed at all 6
@@ -165,15 +184,16 @@ HSDirs the client asked. With one HSDir shedding, or with shedding off
 refused), every request of both clients succeeded. The lab has no capacity
 limit, so it shows what clients experience when HSDirs shed, not the relay
 protection that motivates it. The live controls (`engineering/deb/`) switch
-every defense on and off on both packages; every tunneled BEGIN_DIR stream
-lands in exactly one metric bucket in every phase.
+every defense on and off on both `+tor41339.8` packages; every tunneled
+BEGIN_DIR stream lands in exactly one metric bucket in every phase.
 
 **Closed-lab benchmark (`simulator/results/offvson-report-x86.md`).** A
 loopback-only chutney net (4 dir auths, 6 HSDir relays, 3 onion services, stock
 + load clients), matrix of enforcement × load, 3 reps × 60 s, 80 cells:
 
-These results were measured on the legacy 7-patch series, whose two rules are
-now 0011.
+These results were measured on the legacy 7-patch series. Its previous-hop
+rule is now 0011's `HSDirRefuseUnknownPrevHop`; its one-request-per-circuit
+rule is now tor 0.4.9.15's own, which is always on.
 
 - **The previous-hop rule refuses the unlisted-relay one-hop vector:** one-hop fetches from a
   self-minted (unpublished) relay go **100% → ~3% served** under it, counter
@@ -209,17 +229,18 @@ HSDir, so this needs an answer before anyone enables it.
 Native amd64 build, full unit suite, upstream CI matrix, and installable
 `.deb`s for Ubuntu 24.04 and 26.04 (same patches and build configuration).
 Under `Sandbox 1` the legacy series' enforcement branches (circuit close /
-503 refusal, the same kinds of action 0011–0013 take) add **no sandbox-denied syscall** — confirmed by an strace EPERM
+503 refusal, the same kinds of action 0011 and 0013 take) add **no sandbox-denied syscall** — confirmed by an strace EPERM
 audit, with the method validated against a known startup EPERM and the
 pre-existing tor#41060 SIGTERM bug.
 
 **Crash-at-scale review (`operator/patch-crash-at-scale-critique.md`):**
 **0 critical / 0 high** findings for the legacy 7-patch series (now 0001–0005
 plus the 0010 counters and 0011 rules). The new metrics (0006–0008) and
-0012–0015 have not had that review, but have had adversarial code review,
-mutation testing and the lab runs below. Nor have 0016–0023, which had the
-two review rounds in `analysis/v7-review.md`, mutation testing, and the
-install check, live controls and breakdown lab with the `.7` packages. (That
+0012–0014 have not had that review, but have had adversarial code review,
+mutation testing and the lab runs below. Nor have 0015–0020, which had the
+two review rounds in `analysis/v7-review.md` on `.7`, a review of the
+0.4.9.15 rebase, mutation testing, and the install check, live controls and
+breakdown lab. (That
 critique's remark that ConnLimit bounds held-open directory connections does
 not hold for BEGIN_DIR pairs, which have no socket.)
 
@@ -251,15 +272,15 @@ update. Passive collection comes first; any controlled probe/enforcement trial
 requires a separate human decision. Keep the same native artifact and metric
 set across patched members and modes. Rollout is one pilot, then small
 approved batches toward half of the pilot host's relays; retain stock references and
-patched-off controls. `.7` adds the metrics of
-[`analysis/metrics-proposal.md`](analysis/metrics-proposal.md) (0016–0023)
-and no handoff counters.
+patched-off controls. `.7` added the metrics of
+[`analysis/metrics-proposal.md`](analysis/metrics-proposal.md) (0015–0020 in
+`.8`) and no handoff counters.
 
 To see what a relay's BEGIN_DIR traffic is during a flood, run
 [`operator/begindir-breakdown.py`](operator/BEGIN_DIR-BREAKDOWN.md) against
 its MetricsPort (and, optionally, its ControlPort). It answers the questions
 the Tor network team asked operators on tor-relays in October 2026, as far as
-the `.7` metrics allow; [`analysis/begindir-questions.md`](analysis/begindir-questions.md)
+the `.7` and `.8` metrics allow; [`analysis/begindir-questions.md`](analysis/begindir-questions.md)
 explains what they can and cannot tell.
 [`analysis/metrics-coverage.md`](analysis/metrics-coverage.md) maps ten
 questions about the flood to the metrics that answer them.
@@ -284,7 +305,7 @@ quantities the stock (unpatched) counters can and cannot establish.
 ## Layout
 
 ```
-patches/       the 23-patch series (git am) + torspec patch
+patches/       the 20-patch series (git am) + torspec patch
 simulator/     closed-lab benchmark: design, harness (scripts/), results/
 operator/      count-only canary + capture playbook + crash-at-scale review,
                BEGIN_DIR breakdown tool

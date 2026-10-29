@@ -1,7 +1,7 @@
-From dac50cd9ef604ea4986963878375694e40d599dd Mon Sep 17 00:00:00 2001
+From 1bafc73f33928a82ca0fd9a25aad9dd1bedf892b Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 02/23] dirserv: Don't buffer request bodies larger than an HS
+Subject: [PATCH 02/20] dirserv: Don't buffer request bodies larger than an HS
  descriptor
 
 A relay that is not a directory authority accepts only one kind of
@@ -21,17 +21,17 @@ An oversized upload to a non-authority is now closed without an HTTP
 status instead of getting a 400, so a C tor onion service logs no
 HS_DESC FAILED event for it.
 
-This limits buffering per stream, not in total: BEGIN_DIR streams are
-not subject to DoSStreamCreation, so many streams can still hold memory
-until the OOM handler or the directory connection stall timeout frees
-it.
+This limits buffering per stream, not in total: DoSBeginDirRate limits
+how fast each circuit opens BEGIN_DIR streams, not how many circuits
+open them, so many streams can still hold memory until the OOM handler
+or the directory connection stall timeout frees it.
 
 Part of #41339.
 ---
  changes/ticket41339_hardening   |  5 +++++
- src/feature/dircache/dircache.c | 10 ++++++++-
+ src/feature/dircache/dircache.c |  9 +++++++-
  src/test/test_dir_handle_get.c  | 39 +++++++++++++++++++++++++++++++++
- 3 files changed, 53 insertions(+), 1 deletion(-)
+ 3 files changed, 52 insertions(+), 1 deletion(-)
  create mode 100644 changes/ticket41339_hardening
 
 diff --git a/changes/ticket41339_hardening b/changes/ticket41339_hardening
@@ -46,10 +46,10 @@ index 0000000000..0ee83870a7
 +      upload they accept, instead of buffering up to 16 MB of it. The limit is
 +      the HSV3MaxDescriptorSize consensus parameter. Part of ticket 41339.
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index bcea4c2169..cc3d22cd02 100644
+index 61e47f018a..a16d9f40ab 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
-@@ -1742,13 +1742,21 @@ directory_handle_command(dir_connection_t *conn)
+@@ -1827,6 +1827,7 @@ directory_handle_command(dir_connection_t *conn)
    char *headers=NULL, *body=NULL;
    size_t body_len=0;
    int r;
@@ -57,14 +57,17 @@ index bcea4c2169..cc3d22cd02 100644
  
    tor_assert(conn);
    tor_assert(conn->base_.type == CONN_TYPE_DIR);
- 
+@@ -1840,10 +1841,16 @@ directory_handle_command(dir_connection_t *conn)
+   if (dir_conn_is_closing(conn)) {
+     return -1;
+   }
 +  /* Non-authorities only accept HS descriptor posts, so don't buffer a body
 +   * that is too large to be one. Authorities keep the 16 MB limit. */
 +  if (!authdir_mode(get_options())) {
 +    const size_t hs_max = hs_cache_get_max_descriptor_size();
 +    max_body_len = MIN(max_body_len, hs_max);
 +  }
-+
+ 
    switch (connection_fetch_from_buf_http(TO_CONN(conn),
                                &headers, MAX_HEADERS_SIZE,
 -                              &body, &body_len, MAX_DIR_UL_SIZE, 0)) {
@@ -135,6 +138,3 @@ index a529ed7afb..b4e69d19b6 100644
 +  DIR_HANDLE_CMD(hs_post_size_limit, TT_FORK),
    END_OF_TESTCASES
  };
--- 
-2.43.0
-

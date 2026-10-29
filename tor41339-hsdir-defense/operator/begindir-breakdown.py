@@ -4,7 +4,10 @@
 Reads the MetricsPort of a relay running the tor#41339 series (+tor41339.6
 or later), optionally twice to get rates over an interval, and prints what
 the BEGIN_DIR streams were: onion service descriptor fetches and uploads,
-other directory requests, or streams that never sent a request. With
+other directory requests, or streams that never sent a request. On
++tor41339.8 (tor 0.4.9.15) it also shows what tor's own BEGIN_DIR limits
+refused: a second onion service request on a circuit, which tor 0.4.9.15
+always refuses, and BEGIN_DIR cells over the per-circuit rate. With
 --control it also counts the relay's open OR connections by kind of peer
 (relay we know, unlisted relay identity, or unauthenticated client)
 from GETINFO orconn-status.
@@ -181,7 +184,7 @@ def fmt(v, rate):
 # tor_relay_begindir_request_total types, in report order. "other" is only
 # in lab builds of the proposed patches, before 0018 split it into
 # "other_get" and "other_post"; +tor41339.6 has only "non_hs" and
-# "unparsed".
+# "unparsed"; "circuit_dead" is new in +tor41339.8.
 REQUEST_TYPES = (('hs_get', 'onion service descriptor fetches'),
                  ('hs_post', 'onion service descriptor uploads'),
                  ('consensus', 'consensus'),
@@ -191,7 +194,8 @@ REQUEST_TYPES = (('hs_get', 'onion service descriptor fetches'),
                  ('other_post', 'other POSTs'),
                  ('other', 'other directory requests'),
                  ('unparsed', 'unparsable or incomplete'),
-                 ('no_request', 'nothing sent'))
+                 ('no_request', 'nothing sent'),
+                 ('circuit_dead', 'dropped unread: circuit closing'))
 # Bands of the per-minute families: a cell's or fetch's place among its
 # source's, or its descriptor's, in the same minute.
 BANDS = ('1', '2_10', '11_100', '101_1000', '1001_plus')
@@ -208,6 +212,9 @@ GROUPS = (('descriptor fetches', 'onion service descriptor fetches',
             'other_post', 'other')),
           ('unparsable requests', 'unparsable or incomplete requests',
            ('unparsed',)),
+          ('requests on closing circuits', 'requests we dropped unread '
+           'because their stream or circuit was closing',
+           ('circuit_dead',)),
           ('empty streams', 'empty: they never sent a request',
            ('no_request',)))
 HOP_WORDS = {'client': 'one hop from a client or bridge (never '
@@ -229,14 +236,25 @@ ENDED = (('client', 'by the client (END)'),
          ('circuit', 'with their circuit'),
          ('relay', 'by us (our stall timeout, mostly)'))
 # The DoS rules that can refuse a tunneled directory request: their
-# tor_relay_dos_total type, the option, and what they refuse.
-RULES = (('hsdir_req_reused', 'HSDirOneRequestPerCircuit',
+# tor_relay_dos_total type, the option, and what they refuse. Only the types
+# a relay exports are shown: tor 0.4.9.15 (+tor41339.8) added the
+# begindir_* rejection counts, which count only while their rule is on;
+# +tor41339.8 dropped the .7 counts of the two rules it replaced, and of the
+# open-stream cap, which never fired in .7's floods.
+RULES = (('begindir_hsdir_rejected', 'one HSDir request per circuit',
+          'onion service requests'),
+         ('hsdir_req_reused', 'HSDirOneRequestPerCircuit (.7)',
           'onion service requests'),
          ('hsdir_unknown_prev_hop', 'HSDirRefuseUnknownPrevHop',
           'onion service requests'),
          ('hsdir_fetch_shed', 'HSDirFetchShedding', 'descriptor fetches'),
-         ('begindir_over_max', 'DoSBeginDirLimitEnabled', 'BEGIN_DIR cells'),
-         ('begindir_over_stream_rate', 'a BEGIN_DIR stream rate',
+         ('begindir_over_max', 'DoSBeginDirMaxStreams (.7)',
+          'BEGIN_DIR cells'),
+         ('begindir_rate_rejected', 'DoSBeginDirRateEnabled',
+          'BEGIN_DIR cells'),
+         ('begindir_rejected', 'DoSBeginDirLimitEnabled (consensus)',
+          'BEGIN_DIR cells'),
+         ('begindir_over_stream_rate', 'a BEGIN_DIR stream rate (.7)',
           'BEGIN_DIR cells'))
 
 
@@ -351,8 +369,14 @@ def conclude(d, a, b, rate, elapsed, streams, anon):
         if deep:
             say("By kind, %s were past their circuit's 10th BEGIN_DIR cell."
                 % ' and '.join(deep))
-    reused = d('tor_relay_dos_total', type='hsdir_req_reused')
-    if anon > 0:
+    if anon > 0 and has(b, 'tor_relay_dos_total',
+                        type='begindir_hsdir_rejected'):
+        second = d('tor_relay_dos_total', type='begindir_hsdir_rejected')
+        say('%.1f%% of onion service requests (%s) were the second on their '
+            'circuit: tor refuses those and closes the circuit, since stock '
+            'clients make one per circuit.' % (pct(second, anon), r(second)))
+    elif anon > 0:
+        reused = d('tor_relay_dos_total', type='hsdir_req_reused')
         say('%.1f%% of onion service requests (%s) came on a circuit that '
             'had already made one; stock clients make one per circuit.'
             % (pct(reused, anon), r(reused)))
@@ -362,10 +386,12 @@ def conclude(d, a, b, rate, elapsed, streams, anon):
           'descriptor fetches': d('tor_relay_hsdir_fetch_total'),
           'BEGIN_DIR cells': all_cells}
     rules = [(pct(d('tor_relay_dos_total', type=t), of[what]), t, option,
-              what) for t, option, what in RULES if of[what] > 0]
+              what) for t, option, what in RULES
+             if of[what] > 0 and has(b, 'tor_relay_dos_total', type=t)]
     if rules:
-        line = ('Each rule counts what it refuses, or would refuse while '
-                'off (a BEGIN_DIR stream rate has no option yet):')
+        line = ('Each rule counts what it refuses; ours also what they would '
+                'refuse while off, tor\'s own begindir_* rules only while '
+                'on:')
         bytes_too = has(b, 'tor_relay_dos_response_bytes_total')
         if bytes_too:
             line += '\n|%-59s %s' % ('', 'responses')
@@ -544,12 +570,16 @@ def main():
                            'other_get', 'other_post', 'other', 'non_hs'))
     unparsed = sum(d('tor_relay_begindir_request_total', type=t)
                    for t in ('unparsed', 'no_request'))
+    # +tor41339.8: requests dropped unread because their stream or circuit
+    # was closing, such as those queued on a circuit closed for its second
+    # onion service request.
+    dropped = d('tor_relay_begindir_request_total', type='circuit_dead')
     wait_now = get(b, 'tor_relay_begindir_connections', state='command_wait')
     wait_delta = wait_now - get(a, 'tor_relay_begindir_connections',
                                 state='command_wait')
     if rate:
         wait_delta /= elapsed
-    classified = hs_get + hs_post + non_hs + unparsed
+    classified = hs_get + hs_post + non_hs + unparsed + dropped
     span = ('per second over %.1f s' % elapsed) if rate else \
         'since the relay started'
 
@@ -558,7 +588,9 @@ def main():
           % fmt(streams, rate))
 
     def share(v):
-        return ('%5.1f%%' % (100.0 * v / classified)) if classified else '   - '
+        if not classified:
+            return '   - '
+        return '%5.1f%%' % (100.0 * v / classified)
     print('  Q1: what they asked for')
     print('    onion service descriptor fetches  %s  %s' % (share(hs_get),
                                                           fmt(hs_get, rate)))
@@ -568,36 +600,50 @@ def main():
                                                           fmt(non_hs, rate)))
     print('    no request, or unparsable         %s  %s' % (share(unparsed),
                                                           fmt(unparsed, rate)))
+    if has(b, 'tor_relay_begindir_request_total', type='circuit_dead'):
+        print('    dropped unread, circuit closing   %s  %s'
+              % (share(dropped), fmt(dropped, rate)))
     print('    still waiting for a request now   %d' % wait_now)
     print('    unaccounted (opened - classified - change in waiting): %s'
           % fmt(streams - classified - wait_delta, rate))
 
     print('  Q4: onion service requests by previous hop')
+    # .7 counted requests on a closing circuit as action circuit_dead (503);
+    # tor 0.4.9.15 drops them before reading them (Q1's "dropped unread").
     split = has(b, 'tor_relay_hsdir_fetch_total', action='circuit_dead')
+    v8 = has(b, 'tor_relay_dos_total', type='begindir_hsdir_rejected')
     sh = get_a['single_hop'] + post_a['single_hop']
     dead = (d('tor_relay_hsdir_fetch_total', action='circuit_dead') +
             d('tor_relay_hsdir_upload_total', action='circuit_dead'))
     anon = hs_get + hs_post - sh - dead
     unlisted = d('tor_relay_dos_total', type='hsdir_unknown_prev_hop')
-    if split:
+    # .8 counts the previous hop only of the requests that tor's limit of
+    # one per circuit accepts, so the requests it refuses are a class apart.
+    second = (d('tor_relay_dos_total', type='begindir_hsdir_rejected')
+              if v8 else 0)
+    if split or v8:
         print('    unauthenticated client or bridge, one hop (503, '
               'single_hop): %s' % fmt(sh, rate))
+    if split:
         print('    circuit already closing (503, circuit_dead): %s'
               % fmt(dead, rate))
-    else:
+    elif not v8:
         print('    unauthenticated client, or circuit already closing (503, '
               'single_hop): %s' % fmt(sh, rate))
+    if v8:
+        print('    second on its circuit, refused before its previous hop is '
+              'looked up: %s' % fmt(second, rate))
     if has(b, 'tor_relay_dos_total', type='hsdir_descriptor_only_prev_hop'):
         desc_only = d('tor_relay_dos_total',
                       type='hsdir_descriptor_only_prev_hop')
         print('    authenticated, relay in our consensus: %s'
-              % fmt(max(anon - unlisted - desc_only, 0), rate))
+              % fmt(max(anon - second - unlisted - desc_only, 0), rate))
         print('    authenticated, relay known only by its descriptor (left '
               'the consensus in about the last two days): %s'
               % fmt(desc_only, rate))
     else:
         print('    authenticated, relay we know (consensus or descriptors): %s'
-              % fmt(max(anon - unlisted, 0), rate))
+              % fmt(max(anon - second - unlisted, 0), rate))
     print('    authenticated, relay identity we do not know: %s'
           % fmt(unlisted, rate))
     hops = HOPS
@@ -717,23 +763,33 @@ def main():
     # The anonymous onion service requests, which earlier builds also
     # exported as the dos type hsdir_request(_total).
     req = anon
-    reused = d('tor_relay_dos_total', type='hsdir_req_reused')
-    circs = d('tor_relay_dos_total', type='hsdir_circ_reused')
-    print('    onion service requests on a circuit that already made one: '
-          '%s of %s' % (fmt(reused, rate), fmt(req, rate)))
-    if circs:
-        print('    circuits that made more than one: %s, %.1f requests each '
-              'on average' % (fmt(circs, rate), (reused + circs) / circs))
-    print('    BEGIN_DIR cells on a circuit already holding '
-          'DoSBeginDirMaxStreams open directory streams: %s'
-          % fmt(d('tor_relay_dos_total', type='begindir_over_max'), rate))
+    if v8:
+        print('    onion service requests refused as the second on their '
+              'circuit, which closes it: %s of %s'
+              % (fmt(d('tor_relay_dos_total', type='begindir_hsdir_rejected'),
+                     rate), fmt(req, rate)))
+        print('    requests dropped unread on a closing circuit: %s'
+              % fmt(dropped, rate))
+    else:
+        reused = d('tor_relay_dos_total', type='hsdir_req_reused')
+        circs = d('tor_relay_dos_total', type='hsdir_circ_reused')
+        print('    onion service requests on a circuit that already made '
+              'one: %s of %s' % (fmt(reused, rate), fmt(req, rate)))
+        if circs:
+            print('    circuits that made more than one: %s, %.1f requests '
+                  'each on average' % (fmt(circs, rate),
+                                       (reused + circs) / circs))
+    if has(b, 'tor_relay_dos_total', type='begindir_over_max'):
+        print('    BEGIN_DIR cells on a circuit already holding '
+              'DoSBeginDirMaxStreams open directory streams (.7): %s'
+              % fmt(d('tor_relay_dos_total', type='begindir_over_max'), rate))
     if has(b, 'tor_relay_begindir_request_over_max_total'):
         asked = [(what, d('tor_relay_begindir_request_over_max_total',
                           type=t)) for t, what in REQUEST_TYPES]
         if any(v for _, v in asked):
             print('      what those streams asked for (what '
-                  'DoSBeginDirLimitEnabled would refuse; counted only while '
-                  'it is off):')
+                  'DoSBeginDirLimitEnabled would refuse; counted only '
+                  'while it is off):')
         for what, v in asked:
             if v:
                 print('        %-36s %s' % (what, fmt(v, rate)))
@@ -742,6 +798,16 @@ def main():
               'rate (DoSStreamCreationRate/Burst, if it applied): %s'
               % fmt(d('tor_relay_dos_total',
                       type='begindir_over_stream_rate'), rate))
+    if v8:
+        print('    BEGIN_DIR cells over their circuit\'s BEGIN_DIR rate '
+              '(DoSBeginDirRate/Burst; counted while DoSBeginDirRateEnabled '
+              'is on, the default): %s'
+              % fmt(d('tor_relay_dos_total', type='begindir_rate_rejected'),
+                    rate))
+        print('    BEGIN_DIR cells refused as the second on a relay\'s '
+              'circuit (counted while the consensus enables '
+              'DoSBeginDirLimitEnabled): %s'
+              % fmt(d('tor_relay_dos_total', type='begindir_rejected'), rate))
 
     print('  Q3: circuits')
     for act in ('processed', 'dropped'):

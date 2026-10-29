@@ -1,7 +1,8 @@
 # What is this BEGIN_DIR flood? A breakdown from the MetricsPort
 
 `begindir-breakdown.py` reads the MetricsPort of a relay running the
-tor#41339 series (`+tor41339.7`; it also reads `.6`, with fewer answers),
+tor#41339 series (`+tor41339.8` on tor 0.4.9.15, or `.7`; it also reads
+`.6`, with fewer answers),
 optionally twice to get rates, and says what the relay's BEGIN_DIR streams
 were. With access to the ControlPort it
 also counts the relay's open OR connections by kind of peer. It only reads,
@@ -13,7 +14,9 @@ python3 -I begindir-breakdown.py --metrics http://127.0.0.1:9035/metrics \
     --control 127.0.0.1:9051 --cookie /var/lib/tor/control_auth_cookie
 ```
 
-Names below are `.7`'s. `.6` called some of the families differently
+Names below are `.7`'s, which `.8` keeps, less the counters of the rules it
+drops and plus one request type (see "What `+tor41339.8` changes"). `.6` called some of the
+families differently
 (`tor_relay_hsdir_get_total` and `_post_total`, `tor_relay_dir_requests_total`,
 `tor_relay_dir_responses_total`, `tor_relay_dir_server_conns`), and exported
 the dos type `hsdir_request_total`, which `.7` drops because the request
@@ -103,15 +106,17 @@ requests only:
 |---|---|---|
 | `single_hop` | `hsdir_fetch_total` + `hsdir_upload_total`, `action="single_hop"` | answered 503: the request came over an unauthenticated channel (a one-hop circuit from a client or bridge). On `.6`, also a request whose circuit was already closing |
 | `circuit_dead` (`.7`) | the same, `action="circuit_dead"` | answered 503: the request came over an authenticated channel, but its stream or circuit was already closing |
-| relay we know | the anonymous requests (fetches and uploads less `single_hop` and `circuit_dead`) minus the next line | authenticated, and the previous hop is a relay in our consensus or descriptors: normally a client's multi-hop circuit |
-| relay identity we do not know | `dos_total{type="hsdir_unknown_prev_hop"}` | authenticated with a relay identity that is in neither our consensus nor our descriptors: a relay newer than our consensus, or a host running an unpublished relay identity, which passes the single-hop check |
+| second on its circuit (`.8`) | `dos_total{type="begindir_hsdir_rejected"}` | refused by tor, which closes the circuit, before it looks up the previous hop |
+| relay we know | the anonymous requests (fetches and uploads less `single_hop` and `circuit_dead`, and on `.8` less the line above) minus the next line | authenticated, and the previous hop is a relay in our consensus or descriptors: normally a client's multi-hop circuit |
+| relay identity we do not know | `dos_total{type="hsdir_unknown_prev_hop"}` | authenticated with a relay identity that is in neither our consensus nor our descriptors: a relay newer than our consensus, or a host running an unpublished relay identity, which passes the single-hop check. On `.8`, only the first request on each circuit: what `HSDirRefuseUnknownPrevHop` refuses or would refuse |
 
 Stock tor answers 503 to an onion service request on an unauthenticated
 channel before anything else, so "unknown relay identity" is **not**
 "unauthenticated": those requests did authenticate. The `single_hop` line is
 the unauthenticated one. A request whose circuit was already closing (for
 example after a client or a defense closed it with requests still queued)
-is `circuit_dead` on `.7`; `.6` counts it as `single_hop` too.
+is `circuit_dead` on `.7`; `.6` counts it as `single_hop` too. `.8` drops it
+before reading it, and counts it in Q1, as the request type `circuit_dead`.
 
 **Not answered by the `.6` metrics** (`.7` answers it; see below): the
 previous hop of the *other* directory requests and of the empty streams. If those are the bulk of a
@@ -120,12 +125,14 @@ flood, the metrics can say *what* they are, not *who* sends them.
 **Q2. Per circuit or relay-wide?** Partly. For onion service requests:
 `hsdir_req_reused` (requests on a circuit that already made one) and
 `hsdir_circ_reused` (circuits that made more than one); the script prints
-the mean requests per such circuit. For all BEGIN_DIR streams:
-`begindir_over_max` counts BEGIN_DIR cells arriving on a circuit that
-already holds `DoSBeginDirMaxStreams` (default 64) open directory streams,
-whether or not that limit is enabled. `.6` has no count of BEGIN_DIR
+the mean requests per such circuit. For all BEGIN_DIR streams, on `.6`
+and `.7`: `begindir_over_max` counts BEGIN_DIR cells arriving on a circuit
+that already holds `DoSBeginDirMaxStreams` (default 64) open directory
+streams, whether or not that limit is enabled. `.6` has no count of BEGIN_DIR
 streams per circuit in general; `.7` counts every BEGIN_DIR cell by its
-place on its circuit (below).
+place on its circuit (below). On `.8`, tor 0.4.9.15 refuses a circuit's
+second onion service request and closes the circuit, so the script prints
+`begindir_hsdir_rejected` instead of the two reuse counts.
 
 **Q3. How many circuits, and from how many addresses?** Partly. Stock
 `tor_relay_load_onionskins_total` (and the heartbeat's "Circuit handshake
@@ -161,7 +168,7 @@ count of circuits or streams, and it needs ControlPort access.
 
 ## What `+tor41339.7` adds
 
-`.7` (patches 0016–0023) classifies every
+`.7` (patches 0016–0023, of which `.8` keeps six as 0015–0020) classifies every
 circuit's previous hop when its CREATE cell arrives:
 
 - `client`: the channel never authenticated (a tor client or a bridge);
@@ -175,17 +182,54 @@ below.
 
 | metric | what it is |
 |---|---|
-| `tor_relay_begindir_cell_total{prev_hop,nth}` | every well-formed BEGIN_DIR cell for a new stream, before stock tor or `DoSBeginDirLimitEnabled` refuses it. `nth` is its place among its circuit's BEGIN_DIR cells, in the bands below, so `nth="1"` counts circuits |
+| `tor_relay_begindir_cell_total{prev_hop,nth}` | every well-formed BEGIN_DIR cell for a new stream, before tor decides whether to refuse it. `nth` is its place among its circuit's BEGIN_DIR cells, in the bands below, so `nth="1"` counts circuits |
 | `tor_relay_begindir_request_total{type,prev_hop}` | each accepted stream's request once, by what it asked for (see below). Summed over `type`, the accepted streams by previous hop, once each has a request or has closed; cells minus these were refused |
 | `tor_relay_begindir_response_bytes_total{type}` | response bytes their stream read, by request type: work done, not proof of delivery |
-| `tor_relay_begindir_request_over_max_total{type}` | requests on streams over `DoSBeginDirMaxStreams`: what `DoSBeginDirLimitEnabled` would refuse while it is off |
+| `tor_relay_begindir_request_over_max_total{type}` | `.7` only: requests on streams over `DoSBeginDirMaxStreams`, what `DoSBeginDirLimitEnabled` would refuse while it is off |
 | `tor_relay_create_cell_total{prev_hop}` | every CREATE cell, clients' included |
 | `tor_relay_create_cell_source_total{prev_hop,nth}`, `tor_relay_begindir_cell_source_total{prev_hop,nth}` | CREATE and BEGIN_DIR cells by their place among the cells of the same kind their source sent in the same minute (see below) |
 | `tor_relay_hsdir_fetch_descriptor_total{lookup,nth}` | onion service descriptor fetches that reached the cache, `found` or `not_found`, by their place among the fetches of the same descriptor in the same minute |
 | `tor_relay_dos_total{type="circuit_over_rate"}` | client CREATE cells that find their address's `DoSCircuitCreationRate`/`Burst` bucket empty, whether or not the address is marked. Counted only while `DoSCircuitCreationEnabled` is on |
 | `tor_relay_dos_total{type="circuit_untracked"}` | client CREATE cells from addresses tor no longer tracks (a day or two after their last new connection), which `DoSCircuitCreation` neither limits nor counts. Counted only while `DoSCircuitCreationEnabled` is on |
-| `tor_relay_dos_total{type="hsdir_descriptor_only_prev_hop"}` | anonymous onion service requests whose previous hop is a relay known only by its descriptor (it left the consensus in about the last two days). `HSDirRefuseUnknownPrevHop` treats these as known |
-| `tor_relay_dos_total{type="begindir_over_stream_rate"}` | BEGIN_DIR cells that `DoSStreamCreationRate`/`Burst` would refuse on their circuit if it applied to them as it does to BEGIN. Never refused |
+| `tor_relay_dos_total{type="hsdir_descriptor_only_prev_hop"}` | anonymous onion service requests (on `.8`, the first on their circuit) whose previous hop is a relay known only by its descriptor (it left the consensus in about the last two days). `HSDirRefuseUnknownPrevHop` treats these as known |
+| `tor_relay_dos_total{type="begindir_over_stream_rate"}` | `.7` only: BEGIN_DIR cells that `DoSStreamCreationRate`/`Burst` would refuse on their circuit if it applied to them as it does to BEGIN. Never refused |
+
+## What `+tor41339.8` changes
+
+`.8` is the series rebased onto tor 0.4.9.15, which has BEGIN_DIR defenses
+of its own: a per-circuit BEGIN_DIR rate limit, on by default; one
+BEGIN_DIR per circuit from relays, while the consensus turns on
+`DoSBeginDirLimitEnabled`; and one onion service request per circuit,
+always on. Their counts are stock: `tor_relay_dos_total` types
+`begindir_rate_rejected`, `begindir_rejected` and `begindir_hsdir_rejected`,
+counted only while their rule is on. So `.8`:
+
+- drops `hsdir_req_reused` and `hsdir_circ_reused`: every circuit's second
+  onion service request is refused, and counted as
+  `begindir_hsdir_rejected`;
+- drops `begindir_over_stream_rate`: tor's own BEGIN_DIR rate limit refuses
+  and counts those cells;
+- adds the request type `circuit_dead`: requests that tor drops before
+  reading them because their stream or circuit was closing, such as those
+  queued on a circuit closed for its second onion service request. On `.7`
+  they were part of `unparsed`, or counted as onion service requests with
+  action `circuit_dead`, which `.8` drops;
+- counts `hsdir_unknown_prev_hop` and `hsdir_descriptor_only_prev_hop` only
+  for the requests that tor's limit of one per circuit accepts, so
+  `hsdir_unknown_prev_hop` is what `HSDirRefuseUnknownPrevHop` refuses or
+  would refuse. `.7` counted them before its own reuse rule;
+- drops the limit on open BEGIN_DIR streams per circuit
+  (`DoSBeginDirLimitEnabled` and `DoSBeginDirMaxStreams` on `.7`), with
+  `begindir_over_max` and `tor_relay_begindir_request_over_max_total`: in
+  every flood saved from `.7` relays, `begindir_over_max` stayed at 0, so no
+  circuit reached 64 open directory streams;
+- drops `HSDirOneRequestPerCircuit`. A torrc that still sets one of these
+  options, or `.6`'s `HSDirDescriptorFetchLimit`, fails with "Unknown
+  option".
+
+The script reads all three versions: on `.8` it prints tor's own counts
+where `.7` printed the reuse counts, and lists tor's rules with the series'
+in its table of what each rule refuses.
 
 **Request types:**
 
@@ -193,8 +237,10 @@ below.
 - ordinary requests: `consensus`, `microdesc`, `descriptor` (relay
   descriptors), `other_get` (any other GET, 404s included) and
   `other_post`;
-- no usable request: `unparsed` (malformed or incomplete) and `no_request`
-  (the stream closed without sending anything).
+- no usable request: `unparsed` (malformed or incomplete), `no_request`
+  (the stream closed without sending anything) and, on `.8`,
+  `circuit_dead` (dropped unread because its stream or circuit was
+  closing).
 
 **Sources and bands.** A source is what tor would limit:
 
@@ -218,7 +264,8 @@ BEGIN_DIR stream-rate shadow, only while it has a MetricsPort, the only
 place they show: a MetricsPort added by a reload starts them from zero.
 
 The `single_hop` action means only a client channel; a request that
-reached a circuit already closing is `circuit_dead`.
+reached a circuit already closing is `circuit_dead`: an action on `.7`, a
+request type on `.8`.
 `tor_relay_begindir_request_total` counts onion service requests too:
 `.6`'s `tor_relay_dir_requests_total` types are sums of its types (`non_hs`
 is the five ordinary request types, `unparsed` is `unparsed` and
@@ -271,10 +318,17 @@ sum(rate(tor_relay_hsdir_fetch_total{action="single_hop"}[5m]))
 sum(rate(tor_relay_hsdir_fetch_total{action!~"single_hop|circuit_dead"}[5m]))
   + sum(rate(tor_relay_hsdir_upload_total{action!~"single_hop|circuit_dead"}[5m]))
 rate(tor_relay_dos_total{type="hsdir_unknown_prev_hop"}[5m])
+# .8: the unknown share of the requests that tor's limit of one per circuit
+# accepts
+rate(tor_relay_dos_total{type="hsdir_unknown_prev_hop"}[5m])
+  / (sum(rate(tor_relay_hsdir_fetch_total{action!="single_hop"}[5m]))
+     + sum(rate(tor_relay_hsdir_upload_total{action!="single_hop"}[5m]))
+     - rate(tor_relay_dos_total{type="begindir_hsdir_rejected"}[5m]))
 # Q2
 sum(rate(tor_relay_dos_total{type="hsdir_req_reused"}[5m]))
   / (sum(rate(tor_relay_hsdir_fetch_total{action!~"single_hop|circuit_dead"}[5m]))
      + sum(rate(tor_relay_hsdir_upload_total{action!~"single_hop|circuit_dead"}[5m])))
+# .7
 rate(tor_relay_dos_total{type="begindir_over_max"}[5m])
 # Q3 (onionskins: authenticated previous hops only)
 sum(rate(tor_relay_load_onionskins_total{action="processed"}[5m]))
@@ -297,7 +351,7 @@ rate(tor_relay_dos_total{type="circuit_untracked"}[5m])
 rate(tor_relay_begindir_response_bytes_total[5m])
 sum by (type) (rate(tor_relay_begindir_response_bytes_total[5m]))
   / sum by (type) (rate(tor_relay_begindir_request_total[5m]))
-# .7: what DoSBeginDirLimitEnabled would refuse, by type
+# .7 only: what DoSBeginDirLimitEnabled would refuse, by type
 rate(tor_relay_begindir_request_over_max_total[5m])
 # .7: sources a minute, and the share past 100 cells a minute per source
 60 * rate(tor_relay_create_cell_source_total{nth="1"}[5m])
@@ -312,6 +366,11 @@ sum by (lookup) (rate(tor_relay_hsdir_fetch_descriptor_total{nth!~"1|2_10"}[5m])
 # .7: descriptor-only previous hops, and BEGIN_DIR over the stream rate
 rate(tor_relay_dos_total{type="hsdir_descriptor_only_prev_hop"}[5m])
 rate(tor_relay_dos_total{type="begindir_over_stream_rate"}[5m])
+# .8 (tor 0.4.9.15): second onion service requests refused, and the requests
+# dropped unread on closing circuits; BEGIN_DIR over the per-circuit rate
+rate(tor_relay_dos_total{type="begindir_hsdir_rejected"}[5m])
+sum(rate(tor_relay_begindir_request_total{type="circuit_dead"}[5m]))
+rate(tor_relay_dos_total{type="begindir_rate_rejected"}[5m])
 ```
 
 ## Checked in a private lab
@@ -354,6 +413,29 @@ The same lab with the final `+tor41339.7` package
 - **Nothing else counted.** `circuit_over_rate`, `circuit_untracked`, the
   over-max requests and the stream-rate shadow stayed 0, as this load
   never reaches them.
+
+The same lab with the `+tor41339.8` package
+(`engineering/breakdown-lab/results/v8-lab24v8.txt`), whose tor refuses a
+circuit's second onion service request:
+- **Nothing unaccounted.** The target's 255 BEGIN_DIR streams were 176
+  descriptor fetches, 5 uploads, 4 other requests and 70 requests dropped
+  unread (`circuit_dead`). The 70 are the reuse load's requests still queued
+  when tor closed their circuit at its second fetch.
+- **Tor's own limit.** Of the 176 fetches:
+  - 52 were refused as the second on their circuit (`begindir_hsdir_rejected`,
+    equal to the action `refused`);
+  - 70 were answered 503, from the one-hop client;
+  - 54 were answered.
+
+  The script prints the 52 as their own line in Q4.
+- **The unpublished relay identity** sent 35 fetches.
+  `hsdir_unknown_prev_hop` counted the 18 that were the first on their
+  circuit, which is what `HSDirRefuseUnknownPrevHop` would refuse. Tor
+  refused the other 17 as second requests.
+- **Cells, requests and sources agree.** Every class's BEGIN_DIR cells
+  equal its requests (client 72, known relay 146, unknown relay 37), and the
+  sum of its per-source bands.
+- No node logged a bad syscall.
 
 The conclusions, and the sections for the proposed families, ran in the same
 lab with two more load clients, which open BEGIN_DIR streams that never send

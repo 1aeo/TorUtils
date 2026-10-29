@@ -1,0 +1,25 @@
+# practracker (scripts/maint/practracker/practracker.py) on stock tor-0.4.9.15
+# and after each commit: the number of problems it reports beyond the exceptions'
+# tolerance, and the size of directory_handle_command_post() when it is listed.
+# The set of problems is the same as stock's after every commit.
+0000 tor-0.4.9.15 problems=98 directory_handle_command_post()=131
+0001 6e8abb24ab problems=98 directory_handle_command_post()=131
+0002 1bafc73f33 problems=98 directory_handle_command_post()=131
+0003 f39b998e62 problems=98 directory_handle_command_post()=131
+0004 8ad5d4516b problems=98 directory_handle_command_post()=131
+0005 07f1616e29 problems=98 directory_handle_command_post()=131
+0006 cd78297047 problems=98 directory_handle_command_post()=134
+0007 318dd177bd problems=98
+0008 d32a62d9c5 problems=98
+0009 3aeb759f1d problems=98
+0010 048588e93e problems=98 directory_handle_command_post()=139
+0011 c106bc4590 problems=98 directory_handle_command_post()=143
+0012 fd65ca4756 problems=98 directory_handle_command_post()=143
+0013 1cfdbb49cd problems=98 directory_handle_command_post()=143
+0014 54118eaf17 problems=98 directory_handle_command_post()=143
+0015 235477c096 problems=98 directory_handle_command_post()=142
+0016 fdfee2afd9 problems=98 directory_handle_command_post()=142
+0017 af3f7dd18a problems=98 directory_handle_command_post()=143
+0018 cc3fa5615a problems=98 directory_handle_command_post()=143
+0019 dc2aef9ba4 problems=98 directory_handle_command_post()=143
+0020 c853008dfa problems=98 directory_handle_command_post()=143

@@ -1,10 +1,11 @@
 # tor#41339 defensive series: amd64 engineering results
 
 > **Historical summary.** The table below covers the legacy 7-patch series
-> up to the `+tor41339.3` packages. For the current 23-patch series and the
-> `+tor41339.7` packages, see `deb/README.md` (build, install check, live
-> controls), `v7-review/` (per-commit builds and mutation testing) and
-> `../analysis/v7-review.md`.
+> up to the `+tor41339.3` packages. For the current 20-patch series on tor
+> 0.4.9.15 and the `+tor41339.8` packages, see `deb/README.md` (build,
+> install check, live controls) and `v8-rebase/` (the rebase, its review,
+> per-commit builds, practracker and mutation testing). `v7-review/` and
+> `../analysis/v7-review.md` cover `.7`.
 
 **Scope.** Native amd64 build and unit tests, the upstream CI matrix
 (patched vs unpatched), the seccomp sandbox check, the deb.torproject.org

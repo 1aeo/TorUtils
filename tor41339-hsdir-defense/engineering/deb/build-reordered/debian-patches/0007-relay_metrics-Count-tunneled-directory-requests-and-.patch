@@ -1,7 +1,7 @@
-From 86a240d0e880938ccaff521f04a6663ac32c6948 Mon Sep 17 00:00:00 2001
+From 318dd177bd2587c0d804028cca04921f3785a0ad Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:43:08 +0000
-Subject: [PATCH 07/23] relay_metrics: Count tunneled directory requests and
+Subject: [PATCH 07/20] relay_metrics: Count tunneled directory requests and
  responses
 
 tor_relay_streams_total{type="BEGIN_DIR"} counts BEGIN_DIR streams, but
@@ -26,14 +26,15 @@ counters live in the relay module, with stubs for the dircommon callers.
 
 Part of #41339.
 ---
- changes/ticket41339_metrics       |  5 ++
- src/feature/dircache/dircache.c   |  8 ++++
- src/feature/dircommon/directory.c |  9 ++++
- src/feature/relay/relay_metrics.c | 65 ++++++++++++++++++++++++++
- src/feature/relay/relay_metrics.h | 31 ++++++++++++
- src/feature/relay/relay_stub.c    | 12 +++++
- src/test/test_hs_cache.c          | 78 +++++++++++++++++++++++++++++++
- 7 files changed, 208 insertions(+)
+ changes/ticket41339_metrics              |  5 ++
+ scripts/maint/practracker/exceptions.txt |  2 +-
+ src/feature/dircache/dircache.c          |  8 +++
+ src/feature/dircommon/directory.c        |  9 +++
+ src/feature/relay/relay_metrics.c        | 65 ++++++++++++++++++++
+ src/feature/relay/relay_metrics.h        | 31 ++++++++++
+ src/feature/relay/relay_stub.c           | 12 ++++
+ src/test/test_hs_cache.c                 | 78 ++++++++++++++++++++++++
+ 8 files changed, 209 insertions(+), 1 deletion(-)
 
 diff --git a/changes/ticket41339_metrics b/changes/ticket41339_metrics
 index ee52efa799..598fce8a70 100644
@@ -48,11 +49,24 @@ index ee52efa799..598fce8a70 100644
 +      and the tunneled directory responses fully handed to their stream, as
 +      tor_relay_begindir_response_total{type="hs_descriptor"|"other"}. Part of
 +      ticket 41339.
+diff --git a/scripts/maint/practracker/exceptions.txt b/scripts/maint/practracker/exceptions.txt
+index 3d033c568f..942951af8c 100644
+--- a/scripts/maint/practracker/exceptions.txt
++++ b/scripts/maint/practracker/exceptions.txt
+@@ -219,7 +219,7 @@ problem function-size /src/feature/dircache/consdiffmgr.c:consdiffmgr_cleanup()
+ problem function-size /src/feature/dircache/consdiffmgr.c:consdiffmgr_rescan_flavor_() 111
+ problem function-size /src/feature/dircache/consdiffmgr.c:consensus_diff_worker_threadfn() 132
+ problem function-size /src/feature/dircache/dircache.c:handle_get_current_consensus() 165
+-problem function-size /src/feature/dircache/dircache.c:directory_handle_command_post() 124
++problem function-size /src/feature/dircache/dircache.c:directory_handle_command_post() 138
+ problem file-size /src/feature/dirclient/dirclient.c 3204
+ problem include-count /src/feature/dirclient/dirclient.c 54
+ problem function-size /src/feature/dirclient/dirclient.c:directory_get_from_dirserver() 126
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index d34b217563..8889ead900 100644
+index 4f30c8a6c7..4d0f26b311 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
-@@ -406,6 +406,8 @@ directory_handle_command_get,(dir_connection_t *conn, const char *headers,
+@@ -411,6 +411,8 @@ directory_handle_command_get,(dir_connection_t *conn, const char *headers,
    conn->base_.state = DIR_CONN_STATE_SERVER_WRITING;
  
    if (parse_http_url(headers, &url) < 0) {
@@ -61,7 +75,7 @@ index d34b217563..8889ead900 100644
      write_short_http_response(conn, 400, "Bad request");
      return 0;
    }
-@@ -433,6 +435,8 @@ directory_handle_command_get,(dir_connection_t *conn, const char *headers,
+@@ -438,6 +440,8 @@ directory_handle_command_get,(dir_connection_t *conn, const char *headers,
        url[url_len-2] = '\0';
      }
    }
@@ -70,7 +84,7 @@ index d34b217563..8889ead900 100644
  
    if ((header = http_get_header(headers, "Accept-Encoding: "))) {
      compression_methods_supported = parse_accept_encoding_header(header);
-@@ -1612,6 +1616,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+@@ -1692,6 +1696,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
    }
  
    if (parse_http_url(headers, &url) < 0) {
@@ -79,7 +93,7 @@ index d34b217563..8889ead900 100644
      write_short_http_response(conn, 400, "Bad request");
      return 0;
    }
-@@ -1638,6 +1644,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+@@ -1725,6 +1731,8 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
      write_short_http_response(conn, code, msg);
      goto done;
    }
@@ -89,7 +103,7 @@ index d34b217563..8889ead900 100644
    if (!authdir_mode(options)) {
      /* we just provide cached directories; we don't want to
 diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
-index e2c84197bc..770c94159d 100644
+index 2bb6b7aba0..d9d7ad8b65 100644
 --- a/src/feature/dircommon/directory.c
 +++ b/src/feature/dircommon/directory.c
 @@ -17,6 +17,7 @@
@@ -123,7 +137,7 @@ index e2c84197bc..770c94159d 100644
        }
        return 0;
 diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
-index 71b7d6798d..6284844e3f 100644
+index e6ac2661d0..895be807d2 100644
 --- a/src/feature/relay/relay_metrics.c
 +++ b/src/feature/relay/relay_metrics.c
 @@ -69,6 +69,8 @@ static void fill_intro1_cells(void);
@@ -156,7 +170,7 @@ index 71b7d6798d..6284844e3f 100644
  };
  static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
  
-@@ -1329,6 +1345,55 @@ fill_hsdir_post_values(void)
+@@ -1349,6 +1365,55 @@ fill_hsdir_post_values(void)
                        HSDIR_POST_ACTION_COUNT);
  }
  
@@ -213,7 +227,7 @@ index 71b7d6798d..6284844e3f 100644
  static void
  fill_relay_drop_cell(void)
 diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
-index 3c0eedacf6..5a55f7abf0 100644
+index 500d9ddd94..9a99287a7c 100644
 --- a/src/feature/relay/relay_metrics.h
 +++ b/src/feature/relay/relay_metrics.h
 @@ -67,6 +67,10 @@ typedef enum {
@@ -227,7 +241,7 @@ index 3c0eedacf6..5a55f7abf0 100644
  } relay_metrics_key_t;
  
  /** The metadata of a relay metric. */
-@@ -176,4 +180,31 @@ typedef enum {
+@@ -182,4 +186,31 @@ typedef enum {
  
  void relay_increment_hsdir_post_action(hsdir_post_action_t);
  
@@ -280,10 +294,10 @@ index 4531096316..3dd0e0b4a2 100644
 +  (void)type;
 +}
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 1b8e3405be..3ac4098fa3 100644
+index 189949cf02..6f4096206f 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
-@@ -964,6 +964,82 @@ test_downloaded_counter_non_hs(void *arg)
+@@ -1163,6 +1163,82 @@ test_downloaded_counter_non_hs(void *arg)
    connection_free_minimal(TO_CONN(conn));
  }
  
@@ -364,9 +378,9 @@ index 1b8e3405be..3ac4098fa3 100644
 +}
 +
  struct testcase_t hs_cache[] = {
-   /* Encoding tests. */
-   { "directory", test_directory, TT_FORK,
-@@ -978,6 +1054,8 @@ struct testcase_t hs_cache[] = {
+   { "hsdir_request_limit_get", test_hsdir_request_limit, TT_FORK,
+     &passthrough_setup, (void *) "get" },
+@@ -1183,6 +1259,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "hsdir_get_post_metrics", test_hsdir_get_post_metrics, TT_FORK,
      NULL, NULL },
@@ -375,6 +389,3 @@ index 1b8e3405be..3ac4098fa3 100644
    { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
      NULL, NULL },
    { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
--- 
-2.43.0
-

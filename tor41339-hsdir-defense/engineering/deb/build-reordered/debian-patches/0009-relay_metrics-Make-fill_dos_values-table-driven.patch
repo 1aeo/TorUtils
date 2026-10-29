@@ -1,7 +1,7 @@
-From 84e81f0b9f683c9f97ae5fb7765b034a5fa5541c Mon Sep 17 00:00:00 2001
+From 3aeb759f1db0e113d298c0d64c4660dfead7d5ef Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:46:22 +0000
-Subject: [PATCH 09/23] relay_metrics: Make fill_dos_values() table-driven
+Subject: [PATCH 09/20] relay_metrics: Make fill_dos_values() table-driven
 
 Each tor_relay_dos_total label took five nearly identical lines. Use a
 table of label and value instead, so that the following commits can add
@@ -10,14 +10,14 @@ the same order.
 
 Part of #41339.
 ---
- src/feature/relay/relay_metrics.c | 81 +++++++++----------------------
- 1 file changed, 22 insertions(+), 59 deletions(-)
+ src/feature/relay/relay_metrics.c | 102 ++++++++----------------------
+ 1 file changed, 25 insertions(+), 77 deletions(-)
 
 diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
-index 0ad59cb410..d27585000c 100644
+index 39f69222b0..1883be8c9d 100644
 --- a/src/feature/relay/relay_metrics.c
 +++ b/src/feature/relay/relay_metrics.c
-@@ -447,66 +447,29 @@ static void
+@@ -447,84 +447,32 @@ static void
  fill_dos_values(void)
  {
    const relay_metrics_entry_t *rentry = &base_metrics[RELAY_METRICS_NUM_DOS];
@@ -75,6 +75,24 @@ index 0ad59cb410..d27585000c 100644
 -  metrics_store_entry_add_label(sentry,
 -          metrics_format_label("type", "introduce2_rejected"));
 -  metrics_store_entry_update(sentry, hs_dos_get_intro2_rejected_count());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "stream_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_stream_rejected());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "begindir_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_begindir_rejected());
+-
+-  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
+-                             rentry->help, 0, NULL);
+-  metrics_store_entry_add_label(sentry,
+-          metrics_format_label("type", "begindir_rate_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_begindir_rate_rejected());
 +  const struct {
 +    const char *type;
 +    uint64_t value;
@@ -89,13 +107,16 @@ index 0ad59cb410..d27585000c 100644
 +    { "single_hop_refused", dos_get_num_single_hop_refused() },
 +    { "introduce2_rejected", hs_dos_get_intro2_rejected_count() },
 +    { "stream_rejected", dos_get_num_stream_rejected() },
++    { "begindir_rejected", dos_get_num_begindir_rejected() },
++    { "begindir_rate_rejected", dos_get_num_begindir_rate_rejected() },
++    { "begindir_hsdir_rejected", dos_get_num_begindir_hsdir_rejected() },
 +  };
  
 -  sentry = metrics_store_add(the_store, rentry->type, rentry->name,
 -                             rentry->help, 0, NULL);
 -  metrics_store_entry_add_label(sentry,
--          metrics_format_label("type", "stream_rejected"));
--  metrics_store_entry_update(sentry, dos_get_num_stream_rejected());
+-          metrics_format_label("type", "begindir_hsdir_rejected"));
+-  metrics_store_entry_update(sentry, dos_get_num_begindir_hsdir_rejected());
 +  for (size_t i = 0; i < ARRAY_LENGTH(entries); i++) {
 +    metrics_store_entry_t *sentry = metrics_store_add(
 +        the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
@@ -106,6 +127,3 @@ index 0ad59cb410..d27585000c 100644
  }
  
  /** Fill function for the RELAY_METRICS_CC_COUNTERS metric. */
--- 
-2.43.0
-

@@ -1,0 +1,22 @@
+# Mutants over the lines the rebase onto tor 0.4.9.15 added or changed, run on
+# the tip with the hs_cache, dos and status tests. id = patch-what.
+id	mutation	result
+0006-get-refused-uncounted	GET: no action count for the second request on a circuit	KILLED [hsdir_get_post_metrics FAILED] [hsdir_prev_hop_defense FAILED]
+0006-post-refused-uncounted	POST: no action count for the second request on a circuit	KILLED [hsdir_get_post_metrics FAILED]
+0006-get-single-hop	GET: no single_hop count	KILLED [hsdir_get_post_metrics FAILED]
+0006-post-single-hop	POST: no single_hop count	KILLED [hsdir_get_post_metrics FAILED]
+0010-get-note-first	GET: hsdir_unknown_prev_hop counted before tor's one-per-circuit rule	KILLED [hsdir_prev_hop_counter FAILED] [hsdir_prev_hop_defense FAILED]
+0010-post-note-first	POST: hsdir_unknown_prev_hop counted before tor's one-per-circuit rule	KILLED [hsdir_prev_hop_counter FAILED]
+0010-get-no-note	GET: hsdir_unknown_prev_hop not counted	KILLED [hsdir_prev_hop_counter FAILED] [hsdir_prev_hop_defense FAILED]
+0010-post-no-note	POST: hsdir_unknown_prev_hop not counted	KILLED [hsdir_prev_hop_counter FAILED] [hsdir_prev_hop_defense FAILED]
+0011-get-note-after-defense	GET: counted after HSDirRefuseUnknownPrevHop, so its refusals are not	KILLED [hsdir_prev_hop_defense FAILED]
+0011-post-note-after-defense	POST: counted after HSDirRefuseUnknownPrevHop, so its refusals are not	KILLED [hsdir_prev_hop_defense FAILED]
+0011-get-no-defense	GET: HSDirRefuseUnknownPrevHop never refuses	KILLED [hsdir_prev_hop_defense FAILED]
+0011-post-no-defense	POST: HSDirRefuseUnknownPrevHop never refuses	KILLED [hsdir_prev_hop_defense FAILED]
+0011-get-503-uncounted	GET: a 503 from HSDirRefuseUnknownPrevHop is not counted as refused	KILLED [hsdir_prev_hop_defense FAILED]
+0015-no-dead-type	a request dropped on a closing stream or circuit is not counted	KILLED [dir_request_response_metrics FAILED]
+0015-dead-as-unparsed	such a request is counted as unparsed	KILLED [dir_request_response_metrics FAILED]
+0015-cell-after-notdir	BEGIN_DIR cells counted only after the directory-cache check	KILLED [begindir_refused FAILED]
+0015-cell-after-rate	BEGIN_DIR cells counted only after tor's BEGIN_DIR rate limit	KILLED [begindir_refused FAILED]
+0017-untyped-bytes-counted	response bytes of a request with no type yet are counted as circuit_dead	KILLED [dir_response_bytes_metric FAILED]
+0020-split-swapped	descriptor-only and unknown previous hops swapped	KILLED [hsdir_prev_hop_counter FAILED] [hsdir_prev_hop_defense FAILED]

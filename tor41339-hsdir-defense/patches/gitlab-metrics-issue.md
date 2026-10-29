@@ -7,7 +7,10 @@
 > counts an onion service request that reaches a closing circuit as
 > `circuit_dead`, not `single_hop`. `.7` drops the dos type
 > `hsdir_request_total`, which equals fetches + uploads less their
-> `single_hop` and `circuit_dead`.
+> `single_hop` and `circuit_dead`. `.8`, on tor 0.4.9.15, also drops
+> `hsdir_req_reused` and `hsdir_circ_reused`: tor 0.4.9.15 refuses a second
+> onion service request on a circuit and counts it as
+> `tor_relay_dos_total{type="begindir_hsdir_rejected"}`.
 
 **Title:** MetricsPort: count tunneled directory requests and onion service descriptor fetch/upload outcomes
 

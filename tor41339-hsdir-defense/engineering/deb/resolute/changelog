@@ -1,22 +1,30 @@
-tor (0.4.9.14-1~resolute+1+tor41339.7) resolute; urgency=medium
+tor (0.4.9.15-1~resolute+1+tor41339.8) resolute; urgency=medium
 
-  * Apply the tor#41339 HSDir defensive series (patches 0001-0023): HTTP
-    and onion service descriptor hardening; MetricsPort counters for
-    HSDir fetches and uploads, tunneled directory requests and response
-    bytes by type and previous hop, circuits and BEGIN_DIR cells by
-    previous hop and by source and descriptor per minute; HSDir and
-    BEGIN_DIR defenses and pressure-gated shedding of descriptor fetches
-    over a byte budget, all off by default; accept the .6 option name
-    HSDirDescriptorFetchLimit as a deprecated alias of
-    HSDirFetchShedding (0024); restore doc/nofooter.conf.
+  * Apply the tor#41339 HSDir defensive series (patches 0001-0020) on
+    tor 0.4.9.15: HTTP and onion service descriptor hardening;
+    MetricsPort counters for HSDir fetches and uploads, tunneled
+    directory requests and response bytes by type and previous hop,
+    circuits and BEGIN_DIR cells by previous hop and by source and
+    descriptor per minute; the HSDirRefuseUnknownPrevHop and
+    HSDirFetchShedding defenses, both off by default; restore
+    doc/nofooter.conf. The .7 options HSDirOneRequestPerCircuit (tor
+    0.4.9.15 enforces one HSDir request per circuit),
+    DoSBeginDirLimitEnabled and DoSBeginDirMaxStreams (the open-stream
+    cap, dropped) and HSDirDescriptorFetchLimit are gone.
 
- -- 1aeo <github@1aeo.com>  Fri, 23 Oct 2026 17:57:09 +0000
+ -- 1aeo <github@1aeo.com>  Thu, 29 Oct 2026 04:21:09 +0000
 
-tor (0.4.9.14-1~resolute+1) resolute-backport; urgency=medium
+tor (0.4.9.15-1~resolute+1) resolute-backport; urgency=medium
 
   * Build for resolute-backport.
 
- -- Jérôme Charaoui <build@runner-0uop2-sxc-project-1218-concurrent-1>  Thu, 08 Oct 2026 01:11:43 +0000
+ -- Peter Palfrader <build@runner-0uop2-sxc-project-1218-concurrent-0>  Wed, 28 Oct 2026 16:36:03 +0000
+
+tor (0.4.9.15-1) unstable; urgency=medium
+
+  * New upstream version.
+
+ -- Peter Palfrader <weasel@debian.org>  Wed, 28 Oct 2026 17:23:58 +0100
 
 tor (0.4.9.14-1) unstable; urgency=medium
 

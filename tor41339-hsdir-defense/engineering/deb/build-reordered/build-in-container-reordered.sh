@@ -3,14 +3,15 @@
 # (default), ubuntu:26.04 for resolute. /in = sources (ro), /out = results.
 set -exo pipefail
 SUITE="${SUITE:-noble}"
-BASE="0.4.9.14-1~${SUITE}+1"
+VER="${VER:-0.4.9.15}"
+BASE="${VER}-1~${SUITE}+1"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q --no-install-recommends dpkg-dev devscripts equivs quilt ca-certificates
 mkdir -p /build && cd /build
-cp /in/tor_0.4.9.14.orig.tar.gz "/in/tor_${BASE}.diff.gz" "/in/tor_${BASE}.dsc" .
+cp "/in/tor_${VER}.orig.tar.gz" "/in/tor_${BASE}.diff.gz" "/in/tor_${BASE}.dsc" .
 dpkg-source -x "tor_${BASE}.dsc"
-cd tor-0.4.9.14
+cd "tor-${VER}"
 mkdir -p debian/patches
 # Every numbered patch in /in (0000 first, then the series in order). Fail
 # unless exactly EXPECT_PATCHES were staged, so a stale or partial staging

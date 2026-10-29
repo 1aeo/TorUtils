@@ -16,6 +16,49 @@ This note:
   `../engineering/v8-prototype/`, with their cost and a private-lab run;
 - checks the BEGIN_DIR position bands against the four floods.
 
+## On tor 0.4.9.15 (`+tor41339.8`)
+
+The series is now rebased onto tor 0.4.9.15, which has BEGIN_DIR defenses
+of its own (`../README.md`, "The gap"). They change parts of this note:
+
+- **What `.7` shows, items 3 and 4.** `.8` drops `hsdir_req_reused`,
+  `hsdir_circ_reused`, `HSDirOneRequestPerCircuit` and
+  `begindir_over_stream_rate`:
+  - tor refuses a circuit's second onion service request and closes the
+    circuit, counted as `begindir_hsdir_rejected`;
+  - tor rate-limits BEGIN_DIR per circuit, on by default, counted as
+    `begindir_rate_rejected`;
+  - the requests queued on a closing circuit are dropped unread, counted by
+    `.8` as `begindir_request_total{type="circuit_dead"}`.
+
+  Tor's counts are of refusals, while their rule is on, not of what a rule
+  would refuse while off.
+- **`.8` drops the limit on open streams per circuit** (`.7`'s 0012, with
+  `begindir_over_max`) and its per-type count (`.7`'s 0019). In every flood
+  saved from `.7` relays, `begindir_over_max` stayed at 0: no circuit ever
+  held 64 open directory streams, even with no BEGIN_DIR rate limit. The
+  earlier case for keeping it was wrong: it took the streams' lifetime
+  across a relay for the streams one circuit holds at once. Many requests
+  over a circuit's life, or long-lived streams on many circuits, don't put
+  64 streams on one circuit at the same time. Nor would a rise on `.7` have
+  shown that the limit adds anything: tor 0.4.9.15's rate limit would also
+  have refused some of those streams. If a later flood holds many streams
+  open on each circuit, the limit can come back from `.7`'s history; placed
+  after tor's rate limit, its count would be the streams over the limit that
+  the rate limit lets through.
+- **`hsdir_unknown_prev_hop`** now counts only the requests that tor's limit
+  of one per circuit accepts, so it is what `HSDirRefuseUnknownPrevHop`
+  refuses or would refuse. And `.8` drops the HSDir action `circuit_dead`:
+  tor 0.4.9.15 drops those requests before reading them.
+- **Addition 7** keeps its family for the series' rules:
+  `hsdir_unknown_prev_hop` and `hsdir_fetch_shed`.
+  Tor's rules answer nothing they refuse, so they have no response bytes to
+  count.
+- **The trial** has one rule fewer to choose from: reuse is refused in
+  every phase.
+- **The prototype** is built on `.7`. Ported to `.8`, its reuse rule would
+  be tor's.
+
 ## Answers
 
 - **Can `.7` split ordinary directory requests and empty streams by

@@ -1,7 +1,7 @@
-From 8ff075efb879eb565c3416d2bf3ae7c566614b41 Mon Sep 17 00:00:00 2001
+From d32a62d9c5e56b525ae62d1fffc8fe002bcd501b Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 08:45:05 +0000
-Subject: [PATCH 08/23] relay_metrics: Add a gauge of tunneled directory server
+Subject: [PATCH 08/20] relay_metrics: Add a gauge of tunneled directory server
  connections
 
 Each BEGIN_DIR stream holds a linked exit and directory connection pair
@@ -38,7 +38,7 @@ index 598fce8a70..46581cac7b 100644
 +      the gauge tor_relay_begindir_connections. These connections have no
 +      socket, so tor_relay_connections doesn't show them. Part of ticket 41339.
 diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
-index 6284844e3f..0ad59cb410 100644
+index 895be807d2..39f69222b0 100644
 --- a/src/feature/relay/relay_metrics.c
 +++ b/src/feature/relay/relay_metrics.c
 @@ -20,6 +20,7 @@
@@ -80,7 +80,7 @@ index 6284844e3f..0ad59cb410 100644
  };
  static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
  
-@@ -1394,6 +1405,40 @@ fill_begindir_response_values(void)
+@@ -1414,6 +1425,40 @@ fill_begindir_response_values(void)
                        DIR_RESPONSE_TYPE_COUNT);
  }
  
@@ -122,7 +122,7 @@ index 6284844e3f..0ad59cb410 100644
  static void
  fill_relay_drop_cell(void)
 diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
-index 5a55f7abf0..8b65669dfa 100644
+index 9a99287a7c..3ff548d279 100644
 --- a/src/feature/relay/relay_metrics.h
 +++ b/src/feature/relay/relay_metrics.h
 @@ -71,6 +71,8 @@ typedef enum {
@@ -135,18 +135,18 @@ index 5a55f7abf0..8b65669dfa 100644
  
  /** The metadata of a relay metric. */
 diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
-index 3ac4098fa3..b22d493ca6 100644
+index 6f4096206f..0586460e63 100644
 --- a/src/test/test_hs_cache.c
 +++ b/src/test/test_hs_cache.c
-@@ -20,6 +20,7 @@
+@@ -23,6 +23,7 @@
  #include "feature/hs/hs_ident.h"
  #include "feature/nodelist/networkstatus.h"
  #include "core/mainloop/connection.h"
 +#include "core/mainloop/mainloop.h"
  #include "core/proto/proto_http.h"
- #include "app/config/config.h"
  #include "core/or/circuitlist.h"
-@@ -1040,6 +1041,63 @@ test_dir_request_response_metrics(void *arg)
+ #include "core/or/channel.h"
+@@ -1239,6 +1240,63 @@ test_dir_request_response_metrics(void *arg)
    tor_free(chan);
  }
  
@@ -208,9 +208,9 @@ index 3ac4098fa3..b22d493ca6 100644
 +}
 +
  struct testcase_t hs_cache[] = {
-   /* Encoding tests. */
-   { "directory", test_directory, TT_FORK,
-@@ -1056,6 +1114,8 @@ struct testcase_t hs_cache[] = {
+   { "hsdir_request_limit_get", test_hsdir_request_limit, TT_FORK,
+     &passthrough_setup, (void *) "get" },
+@@ -1261,6 +1319,8 @@ struct testcase_t hs_cache[] = {
      NULL, NULL },
    { "dir_request_response_metrics", test_dir_request_response_metrics,
      TT_FORK, NULL, NULL },
@@ -219,6 +219,3 @@ index 3ac4098fa3..b22d493ca6 100644
    { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
      NULL, NULL },
    { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
--- 
-2.43.0
-

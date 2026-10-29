@@ -294,6 +294,7 @@ def run_cell(cfg):
     result.update(
         begin_dir_recv=d("begin_dir"),
         hsdir_circ_reused=d("hsdir_circ_reused"),
+        begindir_hsdir_rejected=d("begindir_hsdir_rejected"),
         hsdir_unknown_prev_hop=d("hsdir_unknown_prev_hop"),
         bytes_written=d("bytes_written"),
         bytes_read=d("bytes_read"),

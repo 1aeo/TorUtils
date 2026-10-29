@@ -1,0 +1,43 @@
+Format: 1.8
+Date: Thu, 29 Oct 2026 04:05:09 +0000
+Source: tor
+Binary: tor tor-geoipdb
+Built-For-Profiles: noudeb
+Architecture: amd64 all
+Version: 0.4.9.15-1~noble+1+tor41339.8
+Distribution: noble
+Urgency: medium
+Maintainer: Peter Palfrader <weasel@debian.org>
+Changed-By: 1aeo <github@1aeo.com>
+Description:
+ tor        - anonymizing overlay network for TCP
+ tor-geoipdb - GeoIP database for Tor
+Changes:
+ tor (0.4.9.15-1~noble+1+tor41339.8) noble; urgency=medium
+ .
+   * Apply the tor#41339 HSDir defensive series (patches 0001-0020) on
+     tor 0.4.9.15: HTTP and onion service descriptor hardening;
+     MetricsPort counters for HSDir fetches and uploads, tunneled
+     directory requests and response bytes by type and previous hop,
+     circuits and BEGIN_DIR cells by previous hop and by source and
+     descriptor per minute; the HSDirRefuseUnknownPrevHop and
+     HSDirFetchShedding defenses, both off by default; restore
+     doc/nofooter.conf. The .7 options HSDirOneRequestPerCircuit (tor
+     0.4.9.15 enforces one HSDir request per circuit),
+     DoSBeginDirLimitEnabled and DoSBeginDirMaxStreams (the open-stream
+     cap, dropped) and HSDirDescriptorFetchLimit are gone.
+Checksums-Sha1:
+ 10382eff531b0bb5585935eae75f6f8863c2c6d5 6956600 tor-dbgsym_0.4.9.15-1~noble+1+tor41339.8_amd64.ddeb
+ fa7ea2d9451922d27aed66b5ca488515b67f4888 2857406 tor-geoipdb_0.4.9.15-1~noble+1+tor41339.8_all.deb
+ 475736c0c8c5b26af8555ece8f5e175a6f3c3cfd 8662 tor_0.4.9.15-1~noble+1+tor41339.8_amd64.buildinfo
+ aa678538ee476d8d7e81aa028c2fb6d3171ac930 1765512 tor_0.4.9.15-1~noble+1+tor41339.8_amd64.deb
+Checksums-Sha256:
+ 7d3fb2085938185131cfef2102cac3bc7445bc737a5614efd9b253e4a2c7e585 6956600 tor-dbgsym_0.4.9.15-1~noble+1+tor41339.8_amd64.ddeb
+ 3c090f2d610b1af2ef05d1eafef221dac65907910eaad72c40d2812abde14a20 2857406 tor-geoipdb_0.4.9.15-1~noble+1+tor41339.8_all.deb
+ 317357d6cbca4b79b95d52eefabc0bc46c5c5208ae889ee020e833e07204eb99 8662 tor_0.4.9.15-1~noble+1+tor41339.8_amd64.buildinfo
+ 1776d77a2803ee2d373f3779c5859861c85fb8aea8a0ca8a77cdd70133e65b61 1765512 tor_0.4.9.15-1~noble+1+tor41339.8_amd64.deb
+Files:
+ 2910acddd2569ea8e3d8b8bdb2c0376f 6956600 debug optional tor-dbgsym_0.4.9.15-1~noble+1+tor41339.8_amd64.ddeb
+ dff73c021c44d901a76ebc33b40f1d15 2857406 net optional tor-geoipdb_0.4.9.15-1~noble+1+tor41339.8_all.deb
+ 677f9818482dced2a4501d0abe93de7b 8662 net optional tor_0.4.9.15-1~noble+1+tor41339.8_amd64.buildinfo
+ 2a2e721e23436f65e93ed80d66ff373e 1765512 net optional tor_0.4.9.15-1~noble+1+tor41339.8_amd64.deb

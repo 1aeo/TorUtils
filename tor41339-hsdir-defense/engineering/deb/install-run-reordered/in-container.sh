@@ -22,32 +22,31 @@ V=$(dpkg-query -W -f='${Version}' tor); echo "$V"
 check [ "${V##*+tor41339.}" = "$REV" ]
 echo "--- new option defaults (expect every defense off: auto with no consensus parameter, or 0)"
 install -d -m 700 /tmp/dc && printf 'DataDirectory /tmp/dc\nSocksPort 0\nLog notice stdout\n' > /tmp/dc.torrc
-OPTS='HSDirOneRequestPerCircuit|HSDirRefuseUnknownPrevHop|DoSBeginDirLimitEnabled|DoSBeginDirMaxStreams|HSDirDescriptorFetchRate|HSDirDescriptorFetchBurst|HSDirFetchShedding|HSDirFetchBudget'
-tor --defaults-torrc /dev/null -f /tmp/dc.torrc --dump-config full | grep -E "^($OPTS|RefuseUnknownExits) "
-NO=$(tor --list-torrc-options | grep -cxE "$OPTS"); echo "NEW_OPTIONS=$NO (expect 8)"; check [ "$NO" -eq 8 ]
-echo "--- the +tor41339.6 name of HSDirFetchShedding still works, with a warning (Debian-only patch)"
-printf 'HSDirDescriptorFetchLimit 1\n' | cat /tmp/dc.torrc - > /tmp/dc-old.torrc
-OLDOPT=$(tor --defaults-torrc /dev/null -f /tmp/dc-old.torrc --verify-config 2>&1)
-echo "$OLDOPT" | grep -E 'deprecated|Configuration was valid'
-check grep -q "The configuration option 'HSDirDescriptorFetchLimit' is deprecated; use 'HSDirFetchShedding' instead." <<< "$OLDOPT"
-check grep -q 'Configuration was valid' <<< "$OLDOPT"
-OLDV=$(tor --defaults-torrc /dev/null -f /tmp/dc-old.torrc --dump-config short 2>/dev/null | grep -E '^HSDirFetchShedding ')
-echo "$OLDV (expect HSDirFetchShedding 1)"; check [ "$OLDV" = "HSDirFetchShedding 1" ]
+OPTS='HSDirRefuseUnknownPrevHop|HSDirDescriptorFetchRate|HSDirDescriptorFetchBurst|HSDirFetchShedding|HSDirFetchBudget'
+# Stock tor 0.4.9.15's own BEGIN_DIR options, for reference.
+tor --defaults-torrc /dev/null -f /tmp/dc.torrc --dump-config full | grep -E "^($OPTS|RefuseUnknownExits|DoSBeginDir(Rate|Burst|RateEnabled|DefenseType)) "
+NO=$(tor --list-torrc-options | grep -cxE "$OPTS"); echo "NEW_OPTIONS=$NO (expect 5)"; check [ "$NO" -eq 5 ]
+echo "--- names that +tor41339.8 dropped are unknown options: a torrc that sets one must be fixed"
+for old in HSDirOneRequestPerCircuit DoSBeginDirLimitEnabled DoSBeginDirMaxStreams HSDirDescriptorFetchLimit; do
+  printf '%s 1\n' "$old" | cat /tmp/dc.torrc - > /tmp/dc-old.torrc
+  OLDOPT=$(tor --defaults-torrc /dev/null -f /tmp/dc-old.torrc --verify-config 2>&1)
+  echo "$OLDOPT" | grep -E "Unknown option|Configuration was valid"
+  check grep -q "Unknown option '$old'" <<< "$OLDOPT"
+done
 # The new series, by family: the exact labels tor writes (keys, values and
-# order) and how many series there must be. The 11 new tor_relay_dos_total
-# types and every series of each new family, 132 in all: no unset previous
+# order) and how many series there must be. The 7 new tor_relay_dos_total
+# types and every series of each new family, 121 in all: no unset previous
 # hop, no misspelled label, nothing missing.
 HOP='prev_hop="(client|known_relay|unknown_relay)"'
-TYPE='type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request)"'
+TYPE='type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"'
 BAND='nth="(1|2_10|11_100|101_1000|1001_plus)"'
-EXPECT="tor_relay_dos_total type=\"(hsdir_(req_reused|circ_reused|unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|begindir_over_(max|stream_rate)|circuit_(over_rate|untracked))\" 11
-tor_relay_hsdir_fetch_total action=\"(success|not_found|single_hop|circuit_dead|refused)\" 5
-tor_relay_hsdir_upload_total action=\"(success|bad_url|invalid|not_newer|single_hop|circuit_dead|refused)\" 7
+EXPECT="tor_relay_dos_total type=\"(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))\" 7
+tor_relay_hsdir_fetch_total action=\"(success|not_found|single_hop|refused)\" 4
+tor_relay_hsdir_upload_total action=\"(success|bad_url|invalid|not_newer|single_hop|refused)\" 6
 tor_relay_hsdir_fetch_descriptor_total lookup=\"(found|not_found)\",$BAND 10
-tor_relay_begindir_request_total $TYPE,$HOP 27
-tor_relay_begindir_request_over_max_total $TYPE 9
+tor_relay_begindir_request_total $TYPE,$HOP 30
 tor_relay_begindir_response_total type=\"(hs_descriptor|other)\" 2
-tor_relay_begindir_response_bytes_total $TYPE 9
+tor_relay_begindir_response_bytes_total $TYPE 10
 tor_relay_begindir_connections state=\"(command_wait|writing_hs_descriptor|writing_other|draining)\" 4
 tor_relay_begindir_cell_total $HOP,$BAND 15
 tor_relay_begindir_cell_source_total $HOP,$BAND 15
@@ -66,7 +65,7 @@ for i in 1 2 3 4; do
 done
 curl -s http://127.0.0.1:9650/metrics > /tmp/metrics.txt
 N=$(grep -E "^($SERIES) " /tmp/metrics.txt | cut -d' ' -f1 | sort -u | wc -l)
-echo "NEW_METRIC_SERIES=$N (expect 132)"; check [ "$N" -eq 132 ]
+echo "NEW_METRIC_SERIES=$N (expect 121)"; check [ "$N" -eq 121 ]
 while read -r f l n; do
   e=$(grep -E "^$f\{$l\} " /tmp/metrics.txt | cut -d' ' -f1 | sort -u | wc -l)
   echo "$f: $e (expect $n)"; check [ "$e" -eq "$n" ]
@@ -75,9 +74,15 @@ while read -r f l n; do
     a=$(grep -cE "^$f\{" /tmp/metrics.txt); check [ "$a" -eq "$n" ]
   fi
 done <<< "$EXPECT"
-# Names that +tor41339.7 replaced: none of their series may remain.
-GONE=$(grep -cE '^tor_relay_(dir_requests_total|dir_responses_total|dir_server_conns|begindir_streams_total|begindir_requests_total|begindir_over_max_requests_total|hsdir_get_total|hsdir_post_total|hsdir_fetch_target_total)\{|^tor_relay_dos_total\{type="hsdir_request(_total)?"\}|lookup="missing"' /tmp/metrics.txt)
+# Names that +tor41339.7 replaced, and the counters +tor41339.8 dropped:
+# those of the rules tor 0.4.9.15 replaced, of the open-stream cap, and the
+# HSDir action circuit_dead, which tor 0.4.9.15 left nothing to count. None
+# of their series may remain.
+GONE=$(grep -cE '^tor_relay_(dir_requests_total|dir_responses_total|dir_server_conns|begindir_streams_total|begindir_requests_total|begindir_over_max_requests_total|begindir_request_over_max_total|hsdir_get_total|hsdir_post_total|hsdir_fetch_target_total)\{|^tor_relay_dos_total\{type="(hsdir_request(_total)?|hsdir_req_reused|hsdir_circ_reused|begindir_over_stream_rate|begindir_over_max)"\}|^tor_relay_hsdir_(fetch|upload)_total\{action="circuit_dead"\}|lookup="missing"' /tmp/metrics.txt)
 echo "replaced names: $GONE series (expect 0)"; check [ "$GONE" -eq 0 ]
+# tor 0.4.9.15's own BEGIN_DIR counts, which the conclusions read.
+STOCK=$(grep -cE '^tor_relay_dos_total\{type="begindir_(rejected|rate_rejected|hsdir_rejected)"\}' /tmp/metrics.txt)
+echo "tor 0.4.9.15 BEGIN_DIR counts: $STOCK series (expect 3)"; check [ "$STOCK" -eq 3 ]
 grep -E "^($SERIES) " /tmp/metrics.txt
 grep -E '^# TYPE tor_relay_(hsdir|create|begindir)_' /tmp/metrics.txt
 echo "--- bootstrap"; check grep -qE 'Bootstrapped 100%' /var/lib/tor-lab/notice.log

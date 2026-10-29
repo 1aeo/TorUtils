@@ -10,15 +10,17 @@ It runs these phases, each with the same two loads running at once (a
 reuse load: groups of N fetches on one circuit; and a one-hop load from an
 unpublished relay identity) and a stock client fetching throughout:
 
-  P0 default          every defense off (auto / 0)
+  P0 default          every defense of the series off (auto / 0)
   P1 explicit off     every option set to its off value
   then, for each defense, "on" and then "off live" on the same target:
-  0011 reuse          HSDirOneRequestPerCircuit=1
   0011 prev hop       HSDirRefuseUnknownPrevHop=1
-  0012                DoSBeginDirLimitEnabled=1 with DoSBeginDirMaxStreams=2
-  0013                HSDirDescriptorFetchRate=1 and Burst=2 (count only)
-  0014                HSDirFetchShedding=1 with HSDirFetchBudget=28000
+  0012                HSDirDescriptorFetchRate=1 and Burst=2 (count only)
+  0013                HSDirFetchShedding=1 with HSDirFetchBudget=28000
                       (about two lab descriptors a second)
+
+In every phase, stock tor 0.4.9.15 refuses a second onion service request
+on a circuit, closing the circuit, and applies its BEGIN_DIR rate limit
+(on by default), so the reuse load's circuits end at their second fetch.
 
 The HSDir hashring rotates quickly in a test network, so the target (an
 HSDir that serves the onion right now) is chosen again before P0 and before
@@ -49,26 +51,21 @@ SERIES = re.compile(r'^(tor_relay_(?:dos_total|hsdir_fetch_total|'
                     r'hsdir_upload_total|begindir_request_total|'
                     r'begindir_response_total|begindir_connections|'
                     r'streams_total)\{[^}]*\}) (\d+)$', re.M)
-OPTS = ["HSDirOneRequestPerCircuit", "HSDirRefuseUnknownPrevHop",
-        "DoSBeginDirLimitEnabled", "DoSBeginDirMaxStreams",
-        "HSDirDescriptorFetchRate", "HSDirDescriptorFetchBurst",
-        "HSDirFetchShedding", "HSDirFetchBudget"]
-OFF = ("HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0 "
-       "DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 "
+# The series' options, and stock tor's BEGIN_DIR rate limit, for the record.
+OPTS = ["HSDirRefuseUnknownPrevHop", "HSDirDescriptorFetchRate",
+        "HSDirDescriptorFetchBurst", "HSDirFetchShedding", "HSDirFetchBudget",
+        "DoSBeginDirRateEnabled"]
+OFF = ("HSDirRefuseUnknownPrevHop=0 "
        "HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 "
        "HSDirFetchShedding=0 HSDirFetchBudget=0")
-DEFAULTS = OFF.replace("Circuit=0", "Circuit=auto").replace(
-    "PrevHop=0", "PrevHop=auto").replace(
-    "LimitEnabled=0", "LimitEnabled=auto").replace(
+DEFAULTS = OFF.replace("PrevHop=0", "PrevHop=auto").replace(
     "Shedding=0", "Shedding=auto")
 
 PAIRS = [
-    ("0011 reuse", "HSDirOneRequestPerCircuit=1"),
     ("0011 prev-hop", "HSDirRefuseUnknownPrevHop=1"),
-    ("0012 BEGIN_DIR limit", "DoSBeginDirLimitEnabled=1 DoSBeginDirMaxStreams=2"),
-    ("0013 over-rate count", "HSDirDescriptorFetchRate=1 "
+    ("0012 over-rate count", "HSDirDescriptorFetchRate=1 "
                              "HSDirDescriptorFetchBurst=2"),
-    ("0014 shedding", "HSDirFetchShedding=1 HSDirFetchBudget=28000"),
+    ("0013 shedding", "HSDirFetchShedding=1 HSDirFetchBudget=28000"),
 ]
 
 

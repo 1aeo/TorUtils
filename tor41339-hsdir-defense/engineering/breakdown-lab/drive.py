@@ -52,19 +52,21 @@ cmd[cmd.index("--interval") + 1] = "0"
 print("=== totals since start ===", flush=True)
 r = subprocess.run(cmd, capture_output=True, text=True)
 print(r.stdout, r.stderr, flush=True)
-# The .7 series at the target, nonzero ones only (counts; no identities).
+# The series' counts at the target, and tor 0.4.9.15's own BEGIN_DIR
+# counts, nonzero ones only (counts; no identities).
 import urllib.request
 raw = urllib.request.urlopen("http://127.0.0.1:%d/metrics" % sim.mport(tnick),
                              timeout=30).read().decode()
-print("=== nonzero .7 series at the target ===", flush=True)
+print("=== nonzero series at the target ===", flush=True)
 for l in raw.splitlines():
     if l.startswith(("tor_relay_begindir_", "tor_relay_create_cell",
                      "tor_relay_hsdir_fetch_descriptor",
-                     'tor_relay_hsdir_fetch_total{action="circuit_dead"',
-                     'tor_relay_hsdir_upload_total{action="circuit_dead"',
+                     "tor_relay_hsdir_fetch_total{",
+                     "tor_relay_hsdir_upload_total{",
                      'tor_relay_dos_total{type="circuit_over_rate"',
                      'tor_relay_dos_total{type="circuit_untracked"',
                      'tor_relay_dos_total{type="hsdir_descriptor_only',
-                     'tor_relay_dos_total{type="begindir_over_stream_rate"')) \
+                     'tor_relay_dos_total{type="hsdir_unknown_prev_hop"',
+                     'tor_relay_dos_total{type="begindir_')) \
             and not l.endswith(" 0"):
         print(l, flush=True)

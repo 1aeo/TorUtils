@@ -1,7 +1,7 @@
-From 51414788509334ca685cc4bfa640837643f5326c Mon Sep 17 00:00:00 2001
+From f39b998e62a9628dd142d62e6aaae040b8080e39 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 14 Oct 2026 01:49:22 +0000
-Subject: [PATCH 03/23] dirserv: Discard client input received after the
+Subject: [PATCH 03/20] dirserv: Discard client input received after the
  request
 
 A directory server handles one request per connection, but it keeps
@@ -43,7 +43,7 @@ index 0ee83870a7..8df0b647fa 100644
 +      instead of buffering up to 10 MB of it per connection while they send
 +      their answer. Part of ticket 41339.
 diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
-index 6b5c38c7c1..b8b01973ba 100644
+index 86693a38ac..a6c90c6e73 100644
 --- a/src/feature/dircommon/directory.c
 +++ b/src/feature/dircommon/directory.c
 @@ -18,6 +18,7 @@
@@ -157,6 +157,3 @@ index b4e69d19b6..6c75b9d935 100644
 +  DIR_HANDLE_CMD(server_discards_extra_input, TT_FORK),
    END_OF_TESTCASES
  };
--- 
-2.43.0
-

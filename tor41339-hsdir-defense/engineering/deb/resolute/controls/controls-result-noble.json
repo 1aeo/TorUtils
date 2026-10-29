@@ -7,140 +7,83 @@
    "target": "004r",
    "setconf": "(none: defaults)",
    "getconf": [
-    "HSDirOneRequestPerCircuit=auto",
     "HSDirRefuseUnknownPrevHop=auto",
-    "DoSBeginDirLimitEnabled=auto",
-    "DoSBeginDirMaxStreams=0",
     "HSDirDescriptorFetchRate=5",
     "HSDirDescriptorFetchBurst=20",
     "HSDirFetchShedding=auto",
     "HSDirFetchBudget=0",
+    "DoSBeginDirRateEnabled=auto",
     "Sandbox=1"
    ],
    "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 118,
-    "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 2,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 143,
+    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 53,
+    "tor_relay_begindir_response_total{type=\"other\"}": 3,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 83,
     "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 1,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 2,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 166,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 163,
-    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 163,
-    "tor_relay_begindir_response_total{type=\"other\"}": 3
+    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 2,
+    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 1,
+    "tor_relay_begindir_request_total{type=\"circuit_dead\",prev_hop=\"known_relay\"}": 40,
+    "tor_relay_hsdir_fetch_total{action=\"success\"}": 73,
+    "tor_relay_hsdir_fetch_total{action=\"refused\"}": 30,
+    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 146,
+    "tor_relay_dos_total{type=\"begindir_hsdir_rejected\"}": 30,
+    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 10
    },
    "reconcile": {
-    "begindir_streams": 166,
-    "buckets": 166,
+    "begindir_streams": 146,
+    "buckets": 146,
     "unbucketed": 0
    },
    "reuse_load": {
     "load_issued": 100,
-    "load_recv": 100,
+    "load_recv": 1,
     "load_fail": 0,
     "load_groups": 20
    },
    "onehop_load": {
     "load_issued": 20,
-    "load_recv": 20,
+    "load_recv": 10,
     "load_fail": 0
    },
    "legit": {
     "legit_attempts": 43,
     "legit_ok": 43,
     "legit_success_rate": 1.0,
-    "legit_mean_latency_s": 0.083,
-    "legit_p95_latency_s": 0.124
+    "legit_mean_latency_s": 0.078,
+    "legit_p95_latency_s": 0.085
    },
    "target_pid_unchanged": true
   },
   {
    "phase": "P1 explicit off",
    "target": "004r",
-   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0 DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
+   "setconf": "HSDirRefuseUnknownPrevHop=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
    "getconf": [
-    "HSDirOneRequestPerCircuit=0",
     "HSDirRefuseUnknownPrevHop=0",
-    "DoSBeginDirLimitEnabled=0",
-    "DoSBeginDirMaxStreams=0",
     "HSDirDescriptorFetchRate=5",
     "HSDirDescriptorFetchBurst=20",
     "HSDirFetchShedding=0",
     "HSDirFetchBudget=0",
+    "DoSBeginDirRateEnabled=auto",
     "Sandbox=1"
    ],
    "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 120,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 143,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 3,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 1,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 167,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 163,
-    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 163,
-    "tor_relay_begindir_response_total{type=\"other\"}": 4
-   },
-   "reconcile": {
-    "begindir_streams": 167,
-    "buckets": 167,
-    "unbucketed": 0
-   },
-   "reuse_load": {
-    "load_issued": 100,
-    "load_recv": 100,
-    "load_fail": 0,
-    "load_groups": 20
-   },
-   "onehop_load": {
-    "load_issued": 20,
-    "load_recv": 20,
-    "load_fail": 0
-   },
-   "legit": {
-    "legit_attempts": 43,
-    "legit_ok": 43,
-    "legit_success_rate": 1.0,
-    "legit_mean_latency_s": 0.086,
-    "legit_p95_latency_s": 0.103
-   },
-   "target_pid_unchanged": true
-  },
-  {
-   "phase": "0011 reuse on",
-   "target": "004r",
-   "setconf": "HSDirOneRequestPerCircuit=1 HSDirRefuseUnknownPrevHop=0 DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
-   "getconf": [
-    "HSDirOneRequestPerCircuit=1",
-    "HSDirRefuseUnknownPrevHop=0",
-    "DoSBeginDirLimitEnabled=0",
-    "DoSBeginDirMaxStreams=0",
-    "HSDirDescriptorFetchRate=5",
-    "HSDirDescriptorFetchBurst=20",
-    "HSDirFetchShedding=0",
-    "HSDirFetchBudget=0",
-    "Sandbox=1"
-   ],
-   "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 30,
-    "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 28,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 104,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 1,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 1,
-    "tor_relay_begindir_request_total{type=\"no_request\",prev_hop=\"known_relay\"}": 19,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 145,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 72,
-    "tor_relay_hsdir_fetch_total{action=\"circuit_dead\"}": 22,
-    "tor_relay_hsdir_fetch_total{action=\"refused\"}": 30,
     "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 53,
-    "tor_relay_begindir_response_total{type=\"other\"}": 2
+    "tor_relay_begindir_response_total{type=\"other\"}": 7,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 83,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
+    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 6,
+    "tor_relay_begindir_request_total{type=\"descriptor\",prev_hop=\"unknown_relay\"}": 1,
+    "tor_relay_begindir_request_total{type=\"circuit_dead\",prev_hop=\"known_relay\"}": 40,
+    "tor_relay_hsdir_fetch_total{action=\"success\"}": 73,
+    "tor_relay_hsdir_fetch_total{action=\"refused\"}": 30,
+    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 150,
+    "tor_relay_dos_total{type=\"begindir_hsdir_rejected\"}": 30,
+    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 10
    },
    "reconcile": {
-    "begindir_streams": 145,
-    "buckets": 145,
+    "begindir_streams": 150,
+    "buckets": 150,
     "unbucketed": 0
    },
    "reuse_load": {
@@ -158,553 +101,382 @@
     "legit_attempts": 43,
     "legit_ok": 43,
     "legit_success_rate": 1.0,
-    "legit_mean_latency_s": 0.121,
-    "legit_p95_latency_s": 0.606
-   },
-   "target_pid_unchanged": true
-  },
-  {
-   "phase": "0011 reuse off live",
-   "target": "004r",
-   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0 DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
-   "getconf": [
-    "HSDirOneRequestPerCircuit=0",
-    "HSDirRefuseUnknownPrevHop=0",
-    "DoSBeginDirLimitEnabled=0",
-    "DoSBeginDirMaxStreams=0",
-    "HSDirDescriptorFetchRate=5",
-    "HSDirDescriptorFetchBurst=20",
-    "HSDirFetchShedding=0",
-    "HSDirFetchBudget=0",
-    "Sandbox=1"
-   ],
-   "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 119,
-    "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 2,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 143,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 2,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 2,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 167,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 163,
-    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 163,
-    "tor_relay_begindir_response_total{type=\"other\"}": 4
-   },
-   "reconcile": {
-    "begindir_streams": 167,
-    "buckets": 167,
-    "unbucketed": 0
-   },
-   "reuse_load": {
-    "load_issued": 100,
-    "load_recv": 100,
-    "load_fail": 0,
-    "load_groups": 20
-   },
-   "onehop_load": {
-    "load_issued": 20,
-    "load_recv": 20,
-    "load_fail": 0
-   },
-   "legit": {
-    "legit_attempts": 43,
-    "legit_ok": 43,
-    "legit_success_rate": 1.0,
-    "legit_mean_latency_s": 0.095,
-    "legit_p95_latency_s": 0.091
+    "legit_mean_latency_s": 0.081,
+    "legit_p95_latency_s": 0.086
    },
    "target_pid_unchanged": true
   },
   {
    "phase": "0011 prev-hop on",
    "target": "004r",
-   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=1 DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
+   "setconf": "HSDirRefuseUnknownPrevHop=1 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
    "getconf": [
-    "HSDirOneRequestPerCircuit=0",
     "HSDirRefuseUnknownPrevHop=1",
-    "DoSBeginDirLimitEnabled=0",
-    "DoSBeginDirMaxStreams=0",
     "HSDirDescriptorFetchRate=5",
     "HSDirDescriptorFetchBurst=20",
     "HSDirFetchShedding=0",
     "HSDirFetchBudget=0",
+    "DoSBeginDirRateEnabled=auto",
     "Sandbox=1"
    ],
    "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 120,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 142,
+    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 41,
+    "tor_relay_begindir_response_total{type=\"other\"}": 12,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 81,
     "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
     "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 1,
     "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 1,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 164,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 142,
-    "tor_relay_hsdir_fetch_total{action=\"refused\"}": 20,
-    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 142,
-    "tor_relay_begindir_response_total{type=\"other\"}": 22
+    "tor_relay_begindir_request_total{type=\"circuit_dead\",prev_hop=\"known_relay\"}": 40,
+    "tor_relay_hsdir_fetch_total{action=\"success\"}": 61,
+    "tor_relay_hsdir_fetch_total{action=\"refused\"}": 40,
+    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 143,
+    "tor_relay_dos_total{type=\"begindir_hsdir_rejected\"}": 30,
+    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 10
    },
    "reconcile": {
-    "begindir_streams": 164,
-    "buckets": 164,
+    "begindir_streams": 143,
+    "buckets": 143,
     "unbucketed": 0
    },
    "reuse_load": {
     "load_issued": 100,
-    "load_recv": 100,
+    "load_recv": 0,
     "load_fail": 0,
     "load_groups": 20
    },
    "onehop_load": {
     "load_issued": 20,
-    "load_recv": 1,
+    "load_recv": 0,
     "load_fail": 0
    },
    "legit": {
-    "legit_attempts": 42,
-    "legit_ok": 42,
+    "legit_attempts": 41,
+    "legit_ok": 41,
     "legit_success_rate": 1.0,
-    "legit_mean_latency_s": 0.125,
-    "legit_p95_latency_s": 0.15
+    "legit_mean_latency_s": 0.26,
+    "legit_p95_latency_s": 1.001
    },
    "target_pid_unchanged": true
   },
   {
    "phase": "0011 prev-hop off live",
    "target": "004r",
-   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0 DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
+   "setconf": "HSDirRefuseUnknownPrevHop=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
    "getconf": [
-    "HSDirOneRequestPerCircuit=0",
     "HSDirRefuseUnknownPrevHop=0",
-    "DoSBeginDirLimitEnabled=0",
-    "DoSBeginDirMaxStreams=0",
     "HSDirDescriptorFetchRate=5",
     "HSDirDescriptorFetchBurst=20",
     "HSDirFetchShedding=0",
     "HSDirFetchBudget=0",
+    "DoSBeginDirRateEnabled=auto",
     "Sandbox=1"
    ],
    "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 120,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 143,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 4,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 167,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 163,
-    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 163,
-    "tor_relay_begindir_response_total{type=\"other\"}": 4
-   },
-   "reconcile": {
-    "begindir_streams": 167,
-    "buckets": 167,
-    "unbucketed": 0
-   },
-   "reuse_load": {
-    "load_issued": 100,
-    "load_recv": 100,
-    "load_fail": 0,
-    "load_groups": 20
-   },
-   "onehop_load": {
-    "load_issued": 20,
-    "load_recv": 20,
-    "load_fail": 0
-   },
-   "legit": {
-    "legit_attempts": 43,
-    "legit_ok": 43,
-    "legit_success_rate": 1.0,
-    "legit_mean_latency_s": 0.17,
-    "legit_p95_latency_s": 1.014
-   },
-   "target_pid_unchanged": true
-  },
-  {
-   "phase": "0012 BEGIN_DIR limit on",
-   "target": "004r",
-   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0 DoSBeginDirLimitEnabled=1 DoSBeginDirMaxStreams=2 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
-   "getconf": [
-    "HSDirOneRequestPerCircuit=0",
-    "HSDirRefuseUnknownPrevHop=0",
-    "DoSBeginDirLimitEnabled=1",
-    "DoSBeginDirMaxStreams=2",
-    "HSDirDescriptorFetchRate=5",
-    "HSDirDescriptorFetchBurst=20",
-    "HSDirFetchShedding=0",
-    "HSDirFetchBudget=0",
-    "Sandbox=1"
-   ],
-   "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 79,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_dos_total{type=\"begindir_over_max\"}": 41,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 102,
+    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 50,
+    "tor_relay_begindir_response_total{type=\"other\"}": 2,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 80,
     "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
     "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 2,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 124,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 122,
-    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 122,
-    "tor_relay_begindir_response_total{type=\"other\"}": 2
+    "tor_relay_begindir_request_total{type=\"circuit_dead\",prev_hop=\"known_relay\"}": 40,
+    "tor_relay_hsdir_fetch_total{action=\"success\"}": 70,
+    "tor_relay_hsdir_fetch_total{action=\"refused\"}": 30,
+    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 142,
+    "tor_relay_dos_total{type=\"begindir_hsdir_rejected\"}": 30,
+    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 10
    },
    "reconcile": {
-    "begindir_streams": 124,
-    "buckets": 124,
+    "begindir_streams": 142,
+    "buckets": 142,
     "unbucketed": 0
    },
    "reuse_load": {
     "load_issued": 100,
-    "load_recv": 59,
+    "load_recv": 0,
     "load_fail": 0,
     "load_groups": 20
    },
    "onehop_load": {
     "load_issued": 20,
-    "load_recv": 20,
-    "load_fail": 0
-   },
-   "legit": {
-    "legit_attempts": 43,
-    "legit_ok": 43,
-    "legit_success_rate": 1.0,
-    "legit_mean_latency_s": 0.103,
-    "legit_p95_latency_s": 0.089
-   },
-   "target_pid_unchanged": true
-  },
-  {
-   "phase": "0012 BEGIN_DIR limit off live",
-   "target": "004r",
-   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0 DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
-   "getconf": [
-    "HSDirOneRequestPerCircuit=0",
-    "HSDirRefuseUnknownPrevHop=0",
-    "DoSBeginDirLimitEnabled=0",
-    "DoSBeginDirMaxStreams=0",
-    "HSDirDescriptorFetchRate=5",
-    "HSDirDescriptorFetchBurst=20",
-    "HSDirFetchShedding=0",
-    "HSDirFetchBudget=0",
-    "Sandbox=1"
-   ],
-   "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 120,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 142,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 4,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 1,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 167,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 162,
-    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 162,
-    "tor_relay_begindir_response_total{type=\"other\"}": 5
-   },
-   "reconcile": {
-    "begindir_streams": 167,
-    "buckets": 167,
-    "unbucketed": 0
-   },
-   "reuse_load": {
-    "load_issued": 100,
-    "load_recv": 100,
-    "load_fail": 0,
-    "load_groups": 20
-   },
-   "onehop_load": {
-    "load_issued": 20,
-    "load_recv": 20,
-    "load_fail": 0
-   },
-   "legit": {
-    "legit_attempts": 42,
-    "legit_ok": 42,
-    "legit_success_rate": 1.0,
-    "legit_mean_latency_s": 0.128,
-    "legit_p95_latency_s": 0.13
-   },
-   "target_pid_unchanged": true
-  },
-  {
-   "phase": "0013 over-rate count on",
-   "target": "004r",
-   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0 DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchShedding=0 HSDirFetchBudget=0",
-   "getconf": [
-    "HSDirOneRequestPerCircuit=0",
-    "HSDirRefuseUnknownPrevHop=0",
-    "DoSBeginDirLimitEnabled=0",
-    "DoSBeginDirMaxStreams=0",
-    "HSDirDescriptorFetchRate=1",
-    "HSDirDescriptorFetchBurst=2",
-    "HSDirFetchShedding=0",
-    "HSDirFetchBudget=0",
-    "Sandbox=1"
-   ],
-   "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 120,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_dos_total{type=\"hsdir_fetch_over_rate\"}": 119,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 143,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 3,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 166,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 163,
-    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 163,
-    "tor_relay_begindir_response_total{type=\"other\"}": 3
-   },
-   "reconcile": {
-    "begindir_streams": 166,
-    "buckets": 166,
-    "unbucketed": 0
-   },
-   "reuse_load": {
-    "load_issued": 100,
-    "load_recv": 100,
-    "load_fail": 0,
-    "load_groups": 20
-   },
-   "onehop_load": {
-    "load_issued": 20,
-    "load_recv": 20,
-    "load_fail": 0
-   },
-   "legit": {
-    "legit_attempts": 43,
-    "legit_ok": 43,
-    "legit_success_rate": 1.0,
-    "legit_mean_latency_s": 0.104,
-    "legit_p95_latency_s": 0.102
-   },
-   "target_pid_unchanged": true
-  },
-  {
-   "phase": "0013 over-rate count off live",
-   "target": "004r",
-   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0 DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
-   "getconf": [
-    "HSDirOneRequestPerCircuit=0",
-    "HSDirRefuseUnknownPrevHop=0",
-    "DoSBeginDirLimitEnabled=0",
-    "DoSBeginDirMaxStreams=0",
-    "HSDirDescriptorFetchRate=5",
-    "HSDirDescriptorFetchBurst=20",
-    "HSDirFetchShedding=0",
-    "HSDirFetchBudget=0",
-    "Sandbox=1"
-   ],
-   "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 120,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 140,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
-    "tor_relay_begindir_request_total{type=\"hs_post\",prev_hop=\"known_relay\"}": 3,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 1,
-    "tor_relay_hsdir_upload_total{action=\"success\"}": 3,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 164,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 160,
-    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 160,
-    "tor_relay_begindir_response_total{type=\"other\"}": 4
-   },
-   "reconcile": {
-    "begindir_streams": 164,
-    "buckets": 164,
-    "unbucketed": 0
-   },
-   "reuse_load": {
-    "load_issued": 100,
-    "load_recv": 100,
-    "load_fail": 0,
-    "load_groups": 20
-   },
-   "onehop_load": {
-    "load_issued": 20,
-    "load_recv": 20,
+    "load_recv": 10,
     "load_fail": 0
    },
    "legit": {
     "legit_attempts": 40,
     "legit_ok": 40,
     "legit_success_rate": 1.0,
-    "legit_mean_latency_s": 0.386,
-    "legit_p95_latency_s": 2.002
+    "legit_mean_latency_s": 0.243,
+    "legit_p95_latency_s": 1.995
    },
    "target_pid_unchanged": true
   },
   {
-   "phase": "0014 shedding on",
+   "phase": "0012 over-rate count on",
    "target": "004r",
-   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0 DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=1 HSDirFetchBudget=28000",
+   "setconf": "HSDirRefuseUnknownPrevHop=0 HSDirDescriptorFetchRate=1 HSDirDescriptorFetchBurst=2 HSDirFetchShedding=0 HSDirFetchBudget=0",
    "getconf": [
-    "HSDirOneRequestPerCircuit=0",
     "HSDirRefuseUnknownPrevHop=0",
-    "DoSBeginDirLimitEnabled=0",
-    "DoSBeginDirMaxStreams=0",
-    "HSDirDescriptorFetchRate=5",
-    "HSDirDescriptorFetchBurst=20",
-    "HSDirFetchShedding=1",
-    "HSDirFetchBudget=28000",
-    "Sandbox=1"
-   ],
-   "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 41,
-    "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 14,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_dos_total{type=\"hsdir_fetch_pressure\"}": 44,
-    "tor_relay_dos_total{type=\"hsdir_fetch_shed\"}": 21,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 78,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 3,
-    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 1,
-    "tor_relay_begindir_request_total{type=\"no_request\",prev_hop=\"known_relay\"}": 18,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 120,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 53,
-    "tor_relay_hsdir_fetch_total{action=\"circuit_dead\"}": 24,
-    "tor_relay_hsdir_fetch_total{action=\"refused\"}": 21,
-    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 38,
-    "tor_relay_begindir_response_total{type=\"other\"}": 4
-   },
-   "reconcile": {
-    "begindir_streams": 120,
-    "buckets": 120,
-    "unbucketed": 0
-   },
-   "reuse_load": {
-    "load_issued": 100,
-    "load_recv": 5,
-    "load_fail": 0,
-    "load_groups": 20
-   },
-   "onehop_load": {
-    "load_issued": 20,
-    "load_recv": 20,
-    "load_fail": 0
-   },
-   "legit": {
-    "legit_attempts": 15,
-    "legit_ok": 13,
-    "legit_success_rate": 0.8666666666666667,
-    "legit_mean_latency_s": 0.081,
-    "legit_p95_latency_s": 0.089
-   },
-   "target_pid_unchanged": true
-  },
-  {
-   "phase": "0014 shedding off live",
-   "target": "004r",
-   "setconf": "HSDirOneRequestPerCircuit=0 HSDirRefuseUnknownPrevHop=0 DoSBeginDirLimitEnabled=0 DoSBeginDirMaxStreams=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
-   "getconf": [
-    "HSDirOneRequestPerCircuit=0",
-    "HSDirRefuseUnknownPrevHop=0",
-    "DoSBeginDirLimitEnabled=0",
-    "DoSBeginDirMaxStreams=0",
-    "HSDirDescriptorFetchRate=5",
-    "HSDirDescriptorFetchBurst=20",
+    "HSDirDescriptorFetchRate=1",
+    "HSDirDescriptorFetchBurst=2",
     "HSDirFetchShedding=0",
     "HSDirFetchBudget=0",
+    "DoSBeginDirRateEnabled=auto",
     "Sandbox=1"
    ],
    "counter_delta": {
-    "tor_relay_dos_total{type=\"hsdir_req_reused\"}": 119,
-    "tor_relay_dos_total{type=\"hsdir_circ_reused\"}": 1,
-    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 20,
-    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 143,
+    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 53,
+    "tor_relay_begindir_response_total{type=\"other\"}": 4,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 83,
     "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
+    "tor_relay_begindir_request_total{type=\"hs_post\",prev_hop=\"known_relay\"}": 1,
     "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 3,
-    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 166,
-    "tor_relay_hsdir_fetch_total{action=\"success\"}": 163,
-    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 163,
-    "tor_relay_begindir_response_total{type=\"other\"}": 3
+    "tor_relay_begindir_request_total{type=\"circuit_dead\",prev_hop=\"known_relay\"}": 40,
+    "tor_relay_hsdir_fetch_total{action=\"success\"}": 73,
+    "tor_relay_hsdir_fetch_total{action=\"refused\"}": 30,
+    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 147,
+    "tor_relay_dos_total{type=\"begindir_hsdir_rejected\"}": 30,
+    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 10,
+    "tor_relay_dos_total{type=\"hsdir_fetch_over_rate\"}": 29,
+    "tor_relay_hsdir_upload_total{action=\"success\"}": 1
    },
    "reconcile": {
-    "begindir_streams": 166,
-    "buckets": 166,
+    "begindir_streams": 147,
+    "buckets": 147,
     "unbucketed": 0
    },
    "reuse_load": {
     "load_issued": 100,
-    "load_recv": 100,
+    "load_recv": 0,
     "load_fail": 0,
     "load_groups": 20
    },
    "onehop_load": {
     "load_issued": 20,
-    "load_recv": 20,
+    "load_recv": 10,
     "load_fail": 0
    },
    "legit": {
     "legit_attempts": 43,
     "legit_ok": 43,
     "legit_success_rate": 1.0,
-    "legit_mean_latency_s": 0.151,
-    "legit_p95_latency_s": 1.006
+    "legit_mean_latency_s": 0.078,
+    "legit_p95_latency_s": 0.092
+   },
+   "target_pid_unchanged": true
+  },
+  {
+   "phase": "0012 over-rate count off live",
+   "target": "004r",
+   "setconf": "HSDirRefuseUnknownPrevHop=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
+   "getconf": [
+    "HSDirRefuseUnknownPrevHop=0",
+    "HSDirDescriptorFetchRate=5",
+    "HSDirDescriptorFetchBurst=20",
+    "HSDirFetchShedding=0",
+    "HSDirFetchBudget=0",
+    "DoSBeginDirRateEnabled=auto",
+    "Sandbox=1"
+   ],
+   "counter_delta": {
+    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 52,
+    "tor_relay_begindir_response_total{type=\"other\"}": 6,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 82,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
+    "tor_relay_begindir_request_total{type=\"hs_post\",prev_hop=\"known_relay\"}": 1,
+    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 4,
+    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 1,
+    "tor_relay_begindir_request_total{type=\"circuit_dead\",prev_hop=\"known_relay\"}": 40,
+    "tor_relay_hsdir_fetch_total{action=\"success\"}": 72,
+    "tor_relay_hsdir_fetch_total{action=\"refused\"}": 30,
+    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 148,
+    "tor_relay_dos_total{type=\"begindir_hsdir_rejected\"}": 30,
+    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 10,
+    "tor_relay_hsdir_upload_total{action=\"success\"}": 1
+   },
+   "reconcile": {
+    "begindir_streams": 148,
+    "buckets": 148,
+    "unbucketed": 0
+   },
+   "reuse_load": {
+    "load_issued": 100,
+    "load_recv": 0,
+    "load_fail": 0,
+    "load_groups": 20
+   },
+   "onehop_load": {
+    "load_issued": 20,
+    "load_recv": 10,
+    "load_fail": 0
+   },
+   "legit": {
+    "legit_attempts": 42,
+    "legit_ok": 42,
+    "legit_success_rate": 1.0,
+    "legit_mean_latency_s": 0.146,
+    "legit_p95_latency_s": 0.085
+   },
+   "target_pid_unchanged": true
+  },
+  {
+   "phase": "0013 shedding on",
+   "target": "004r",
+   "setconf": "HSDirRefuseUnknownPrevHop=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=1 HSDirFetchBudget=28000",
+   "getconf": [
+    "HSDirRefuseUnknownPrevHop=0",
+    "HSDirDescriptorFetchRate=5",
+    "HSDirDescriptorFetchBurst=20",
+    "HSDirFetchShedding=1",
+    "HSDirFetchBudget=28000",
+    "DoSBeginDirRateEnabled=auto",
+    "Sandbox=1"
+   ],
+   "counter_delta": {
+    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 32,
+    "tor_relay_begindir_response_total{type=\"other\"}": 8,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 58,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
+    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 6,
+    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 2,
+    "tor_relay_begindir_request_total{type=\"circuit_dead\",prev_hop=\"known_relay\"}": 46,
+    "tor_relay_hsdir_fetch_total{action=\"success\"}": 46,
+    "tor_relay_hsdir_fetch_total{action=\"refused\"}": 32,
+    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 132,
+    "tor_relay_dos_total{type=\"begindir_hsdir_rejected\"}": 24,
+    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 10,
+    "tor_relay_dos_total{type=\"hsdir_fetch_pressure\"}": 31,
+    "tor_relay_dos_total{type=\"hsdir_fetch_shed\"}": 8
+   },
+   "reconcile": {
+    "begindir_streams": 132,
+    "buckets": 132,
+    "unbucketed": 0
+   },
+   "reuse_load": {
+    "load_issued": 100,
+    "load_recv": 0,
+    "load_fail": 0,
+    "load_groups": 20
+   },
+   "onehop_load": {
+    "load_issued": 20,
+    "load_recv": 10,
+    "load_fail": 0
+   },
+   "legit": {
+    "legit_attempts": 24,
+    "legit_ok": 22,
+    "legit_success_rate": 0.9166666666666666,
+    "legit_mean_latency_s": 0.082,
+    "legit_p95_latency_s": 0.09
+   },
+   "target_pid_unchanged": true
+  },
+  {
+   "phase": "0013 shedding off live",
+   "target": "004r",
+   "setconf": "HSDirRefuseUnknownPrevHop=0 HSDirDescriptorFetchRate=5 HSDirDescriptorFetchBurst=20 HSDirFetchShedding=0 HSDirFetchBudget=0",
+   "getconf": [
+    "HSDirRefuseUnknownPrevHop=0",
+    "HSDirDescriptorFetchRate=5",
+    "HSDirDescriptorFetchBurst=20",
+    "HSDirFetchShedding=0",
+    "HSDirFetchBudget=0",
+    "DoSBeginDirRateEnabled=auto",
+    "Sandbox=1"
+   ],
+   "counter_delta": {
+    "tor_relay_begindir_response_total{type=\"hs_descriptor\"}": 53,
+    "tor_relay_begindir_response_total{type=\"other\"}": 3,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"known_relay\"}": 83,
+    "tor_relay_begindir_request_total{type=\"hs_get\",prev_hop=\"unknown_relay\"}": 20,
+    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"client\"}": 2,
+    "tor_relay_begindir_request_total{type=\"consensus\",prev_hop=\"unknown_relay\"}": 1,
+    "tor_relay_begindir_request_total{type=\"circuit_dead\",prev_hop=\"known_relay\"}": 40,
+    "tor_relay_hsdir_fetch_total{action=\"success\"}": 73,
+    "tor_relay_hsdir_fetch_total{action=\"refused\"}": 30,
+    "tor_relay_streams_total{type=\"BEGIN_DIR\"}": 146,
+    "tor_relay_dos_total{type=\"begindir_hsdir_rejected\"}": 30,
+    "tor_relay_dos_total{type=\"hsdir_unknown_prev_hop\"}": 10
+   },
+   "reconcile": {
+    "begindir_streams": 146,
+    "buckets": 146,
+    "unbucketed": 0
+   },
+   "reuse_load": {
+    "load_issued": 100,
+    "load_recv": 0,
+    "load_fail": 0,
+    "load_groups": 20
+   },
+   "onehop_load": {
+    "load_issued": 20,
+    "load_recv": 10,
+    "load_fail": 0
+   },
+   "legit": {
+    "legit_attempts": 43,
+    "legit_ok": 43,
+    "legit_success_rate": 1.0,
+    "legit_mean_latency_s": 0.127,
+    "legit_p95_latency_s": 0.23
    },
    "target_pid_unchanged": true
   }
  ],
  "final_getconf": {
   "004r": [
-   "HSDirOneRequestPerCircuit=auto",
    "HSDirRefuseUnknownPrevHop=auto",
-   "DoSBeginDirLimitEnabled=auto",
-   "DoSBeginDirMaxStreams=0",
    "HSDirDescriptorFetchRate=5",
    "HSDirDescriptorFetchBurst=20",
    "HSDirFetchShedding=auto",
    "HSDirFetchBudget=0",
+   "DoSBeginDirRateEnabled=auto",
    "Sandbox=1"
   ],
   "005r": [
-   "HSDirOneRequestPerCircuit=auto",
    "HSDirRefuseUnknownPrevHop=auto",
-   "DoSBeginDirLimitEnabled=auto",
-   "DoSBeginDirMaxStreams=0",
    "HSDirDescriptorFetchRate=5",
    "HSDirDescriptorFetchBurst=20",
    "HSDirFetchShedding=auto",
    "HSDirFetchBudget=0",
+   "DoSBeginDirRateEnabled=auto",
    "Sandbox=1"
   ],
   "006r": [
-   "HSDirOneRequestPerCircuit=auto",
    "HSDirRefuseUnknownPrevHop=auto",
-   "DoSBeginDirLimitEnabled=auto",
-   "DoSBeginDirMaxStreams=0",
    "HSDirDescriptorFetchRate=5",
    "HSDirDescriptorFetchBurst=20",
    "HSDirFetchShedding=auto",
    "HSDirFetchBudget=0",
+   "DoSBeginDirRateEnabled=auto",
    "Sandbox=1"
   ],
   "007r": [
-   "HSDirOneRequestPerCircuit=auto",
    "HSDirRefuseUnknownPrevHop=auto",
-   "DoSBeginDirLimitEnabled=auto",
-   "DoSBeginDirMaxStreams=0",
    "HSDirDescriptorFetchRate=5",
    "HSDirDescriptorFetchBurst=20",
    "HSDirFetchShedding=auto",
    "HSDirFetchBudget=0",
+   "DoSBeginDirRateEnabled=auto",
    "Sandbox=1"
   ],
   "008r": [
-   "HSDirOneRequestPerCircuit=auto",
    "HSDirRefuseUnknownPrevHop=auto",
-   "DoSBeginDirLimitEnabled=auto",
-   "DoSBeginDirMaxStreams=0",
    "HSDirDescriptorFetchRate=5",
    "HSDirDescriptorFetchBurst=20",
    "HSDirFetchShedding=auto",
    "HSDirFetchBudget=0",
+   "DoSBeginDirRateEnabled=auto",
    "Sandbox=1"
   ],
   "009r": [
-   "HSDirOneRequestPerCircuit=auto",
    "HSDirRefuseUnknownPrevHop=auto",
-   "DoSBeginDirLimitEnabled=auto",
-   "DoSBeginDirMaxStreams=0",
    "HSDirDescriptorFetchRate=5",
    "HSDirDescriptorFetchBurst=20",
    "HSDirFetchShedding=auto",
    "HSDirFetchBudget=0",
+   "DoSBeginDirRateEnabled=auto",
    "Sandbox=1"
   ]
  }

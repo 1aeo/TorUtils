@@ -1,0 +1,541 @@
+From c106bc4590959fe262bf1c094e11192fa7455774 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Thu, 29 Oct 2026 02:42:39 +0000
+Subject: [PATCH 11/20] dos: Add an off-by-default HSDir defense against
+ unknown previous hops
+
+Tor and Arti clients and onion services build the circuit of each onion
+service descriptor fetch or upload through relays from the consensus.
+Stock software doesn't break that, apart from brief windows where an
+HSDir's consensus lags a client's, but a previous hop missing from the
+consensus escapes DoSCircuitCreation, which only counts client
+connections (tor#41339).
+
+Add HSDirRefuseUnknownPrevHop, an AUTOBOOL option whose "auto" default
+follows the consensus parameter of the same name, which defaults to 0.
+When enabled, an HSDir answers a request whose previous hop is neither
+in its consensus nor in its descriptor list with a 503, the check
+RefuseUnknownExits applies to exit streams. It applies after the limit
+of one HSDir request per circuit. As with
+DoSRefuseSingleHopClientRendezvous, it only applies on public relays,
+and dos_should_refuse_single_hop_client() now shares its helper.
+
+The requests this defense applies to are already counted on the
+MetricsPort, as tor_relay_dos_total{type="hsdir_unknown_prev_hop"}, so
+operators can see what enabling it would refuse. Refused requests are
+counted as action "refused" in tor_relay_hsdir_fetch_total and
+tor_relay_hsdir_upload_total, so each tunneled request is still counted
+once. The heartbeat shows the count once the defense is enabled.
+
+Part of #41339.
+---
+ changes/ticket41339_dos           |   6 ++
+ doc/man/tor.1.txt                 |  15 +++++
+ src/core/or/dos.c                 |  45 +++++++++----
+ src/core/or/dos.h                 |   1 +
+ src/core/or/dos_options.inc       |   5 ++
+ src/feature/dircache/dircache.c   |  33 ++++++++++
+ src/feature/relay/relay_metrics.h |   8 +--
+ src/test/opts_test_helpers.c      |   9 +++
+ src/test/opts_test_helpers.h      |   1 +
+ src/test/test_dos.c               |  55 ++++++++++++++++
+ src/test/test_hs_cache.c          | 105 ++++++++++++++++++++++++++++++
+ src/test/test_status.c            |   3 +-
+ 12 files changed, 269 insertions(+), 17 deletions(-)
+ create mode 100644 changes/ticket41339_dos
+
+diff --git a/changes/ticket41339_dos b/changes/ticket41339_dos
+new file mode 100644
+index 0000000000..1ce08e6a5a
+--- /dev/null
++++ b/changes/ticket41339_dos
+@@ -0,0 +1,6 @@
++  o Minor features (denial-of-service, onion service directory):
++    - Add the HSDirRefuseUnknownPrevHop option and consensus parameter, off by
++      default. It lets an HSDir refuse onion service descriptor requests whose
++      previous hop is not a known relay. Refused requests are counted as
++      action "refused" in tor_relay_hsdir_fetch_total and
++      tor_relay_hsdir_upload_total. Part of ticket 41339.
+diff --git a/doc/man/tor.1.txt b/doc/man/tor.1.txt
+index 20536f0a4b..26db254676 100644
+--- a/doc/man/tor.1.txt
++++ b/doc/man/tor.1.txt
+@@ -3186,6 +3186,21 @@ The following options are useful only for a directory cache.
+     controlled by a consensus parameter. If not defined in the consensus, the
+     value is 60. (Default: 0)
+ 
++The following options are useful only for an onion service directory
++(HSDir). Whatever their value, the requests they apply to are counted on the
++MetricsPort.
++
++[[HSDirRefuseUnknownPrevHop]] **HSDirRefuseUnknownPrevHop** **0**|**1**|**auto**::
++
++    Refuse, with a 503, an onion service descriptor fetch or upload whose
++    previous hop is not a relay in our consensus or for which we have a
++    descriptor: the check RefuseUnknownExits applies to exit streams. A
++    relay that is new in the client's consensus but not yet in ours is also
++    refused, so clients then use another HSDir. Such requests are counted as
++    tor_relay_dos_total\{type="hsdir_unknown_prev_hop"}. "auto" means use
++    the consensus parameter. If not defined in the consensus, the value is
++    0. (Default: auto)
++
+ 
+ For onion services, mitigations are a work in progress and multiple options
+ are currently available.
+diff --git a/src/core/or/dos.c b/src/core/or/dos.c
+index 53afcdf3d5..ecb0b36dc8 100644
+--- a/src/core/or/dos.c
++++ b/src/core/or/dos.c
+@@ -823,6 +823,28 @@ dos_get_dir_stat(dos_dir_stat_t stat)
+   return dos_dir_stats[stat];
+ }
+ 
++/* Return whether the defense with the AUTOBOOL torrc option <b>opt</b> and
++ * the consensus parameter <b>name</b> (default 0) is enabled. If we aren't a
++ * public relay, it shouldn't apply to anything. */
++static int
++dos_defense_enabled(int opt, const char *name)
++{
++  if (!public_server_mode(get_options()))
++    return 0;
++  if (opt != -1)
++    return opt;
++  return (int) networkstatus_get_param(NULL, name, 0 /* default */, 0, 1);
++}
++
++/** Return true iff an HSDir should refuse an onion service directory request
++ * whose previous hop is not a known relay. */
++int
++dos_should_refuse_unknown_hsdir_prev_hop(void)
++{
++  return dos_defense_enabled(dos_get_options()->HSDirRefuseUnknownPrevHop,
++                             "HSDirRefuseUnknownPrevHop");
++}
++
+ /* Called when a CREATE cell is received from the given channel. */
+ void
+ dos_cc_new_create_cell(channel_t *chan)
+@@ -1226,18 +1248,9 @@ dos_note_refuse_single_hop_client(void)
+ int
+ dos_should_refuse_single_hop_client(void)
+ {
+-  /* If we aren't a public relay, this shouldn't apply to anything. */
+-  if (!public_server_mode(get_options())) {
+-    return 0;
+-  }
+-
+-  if (dos_get_options()->DoSRefuseSingleHopClientRendezvous != -1) {
+-    return dos_get_options()->DoSRefuseSingleHopClientRendezvous;
+-  }
+-
+-  return (int) networkstatus_get_param(NULL,
+-                                       "DoSRefuseSingleHopClientRendezvous",
+-                                       0 /* default */, 0, 1);
++  return dos_defense_enabled(
++                      dos_get_options()->DoSRefuseSingleHopClientRendezvous,
++                      "DoSRefuseSingleHopClientRendezvous");
+ }
+ 
+ /* Log a heartbeat message with some statistics. */
+@@ -1314,6 +1327,14 @@ dos_log_heartbeat(void)
+                          "%" PRIu64 " INTRODUCE2 rejected",
+                          hs_dos_get_intro2_rejected_count());
+ 
++  if (dos_should_refuse_unknown_hsdir_prev_hop()) {
++    smartlist_add_asprintf(elems,
++                           "%" PRIu64 " HSDir requests from unknown relays",
++                           dos_dir_stats[DOS_DIR_HSDIR_UNKNOWN_PREV_HOP]);
++  } else {
++    smartlist_add_asprintf(elems, "[HSDirRefuseUnknownPrevHop disabled]");
++  }
++
+   char *msg = smartlist_join_strings(elems, ", ", 0, NULL);
+ 
+   log_notice(LD_HEARTBEAT,
+diff --git a/src/core/or/dos.h b/src/core/or/dos.h
+index 50e4d653cc..4c58da2bd1 100644
+--- a/src/core/or/dos.h
++++ b/src/core/or/dos.h
+@@ -95,6 +95,7 @@ typedef enum dos_dir_stat_t {
+ 
+ void dos_note_dir_stat(dos_dir_stat_t stat);
+ uint64_t dos_get_dir_stat(dos_dir_stat_t stat);
++int dos_should_refuse_unknown_hsdir_prev_hop(void);
+ void dos_note_circ_max_outq(const channel_t *chan);
+ void dos_note_begindir_hsdir_rejected(void);
+ 
+diff --git a/src/core/or/dos_options.inc b/src/core/or/dos_options.inc
+index ce58bd6e85..ff4534fb7c 100644
+--- a/src/core/or/dos_options.inc
++++ b/src/core/or/dos_options.inc
+@@ -82,4 +82,9 @@ CONF_VAR(DoSBeginDirDefenseType, INT, 0, "0")
+ * value. */
+ CONF_VAR(DoSConnectionConnectDefenseTimePeriod, INTERVAL, 0, "0")
+ 
++/** Autobool: Should an HSDir refuse an onion service directory request whose
++ * previous hop is not a known relay? Overrides the consensus parameter of the
++ * same name. */
++CONF_VAR(HSDirRefuseUnknownPrevHop, AUTOBOOL, 0, "auto")
++
+ END_CONF_STRUCT(dos_options_t)
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index 270421804c..392cfcea10 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1441,6 +1441,31 @@ note_hs_dir_request(dir_connection_t *conn)
+     dos_note_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
+ }
+ 
++/** Return false if we refuse the onion service directory request on
++ * <b>conn</b>, which note_hs_dir_request() has counted and
++ * hsdir_request_allowed_on_circuit() has allowed: if HSDirRefuseUnknownPrevHop
++ * applies, we answer a request whose previous hop is not a known relay with a
++ * 503. Relays fetching other documents over one-hop circuits don't make
++ * these requests, so the rule doesn't cover them. */
++static bool
++allow_hs_dir_request(dir_connection_t *conn)
++{
++  const or_circuit_t *circ =
++    TO_OR_CIRCUIT(TO_EDGE_CONN(TO_CONN(conn)->linked_conn)->on_circuit);
++
++  if (dos_should_refuse_unknown_hsdir_prev_hop() &&
++      !connection_or_digest_is_known_relay(circ->p_chan->identity_digest)) {
++    static ratelim_t prev_hop_lim = RATELIM_INIT(600);
++    log_fn_ratelim(&prev_hop_lim, LOG_PROTOCOL_WARN, LD_REND,
++                   "Refusing an onion service directory request from unknown "
++                   "relay %s.", safe_str(channel_describe_peer(circ->p_chan)));
++    write_short_http_response(conn, 503, "Rejecting HS request: previous hop "
++                              "is not a known relay");
++    return false;
++  }
++  return true;
++}
++
+ /** Helper function for GET `/tor/hs/3/...`. Only for version 3.
+  */
+ STATIC int
+@@ -1470,6 +1495,10 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+     goto done;
+   }
+   note_hs_dir_request(conn);
++  if (!allow_hs_dir_request(conn)) {
++    relay_increment_hsdir_get_action(HSDIR_GET_REFUSED);
++    goto done;
++  }
+ 
+   /* After the path prefix follows the base64 encoded blinded pubkey which we
+    * use to get the descriptor from the cache. Skip the prefix and get the
+@@ -1739,6 +1768,10 @@ directory_handle_command_post,(dir_connection_t *conn, const char *headers,
+       goto done;
+     }
+     note_hs_dir_request(conn);
++    if (!allow_hs_dir_request(conn)) {
++      relay_increment_hsdir_post_action(HSDIR_POST_REFUSED);
++      goto done;
++    }
+     const char *msg = "HS descriptor stored successfully.";
+ 
+     /* We most probably have a publish request for an HS descriptor. */
+diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
+index 3ff548d279..9f6f264768 100644
+--- a/src/feature/relay/relay_metrics.h
++++ b/src/feature/relay/relay_metrics.h
+@@ -155,8 +155,8 @@ typedef enum {
+   /** Not over an anonymous circuit, because the previous hop never
+    * authenticated (see connection_dir_is_anonymous()): 503. */
+   HSDIR_GET_SINGLE_HOP,
+-  /** Refused by a DoS defense, such as the limit of one HSDir request per
+-   * circuit: no answer. */
++  /** Refused by a DoS defense: no answer if it was the second HSDir request
++   * on its circuit, a 503 if HSDirRefuseUnknownPrevHop refused it. */
+   HSDIR_GET_REFUSED,
+ 
+   HSDIR_GET_ACTION_COUNT
+@@ -179,8 +179,8 @@ typedef enum {
+   /** Not over an anonymous circuit, because the previous hop never
+    * authenticated (see connection_dir_is_anonymous()): 503. */
+   HSDIR_POST_SINGLE_HOP,
+-  /** Refused by a DoS defense, such as the limit of one HSDir request per
+-   * circuit: no answer. */
++  /** Refused by a DoS defense: no answer if it was the second HSDir request
++   * on its circuit, a 503 if HSDirRefuseUnknownPrevHop refused it. */
+   HSDIR_POST_REFUSED,
+ 
+   HSDIR_POST_ACTION_COUNT
+diff --git a/src/test/opts_test_helpers.c b/src/test/opts_test_helpers.c
+index 2c0f8dbd82..ed1cee1f3b 100644
+--- a/src/test/opts_test_helpers.c
++++ b/src/test/opts_test_helpers.c
+@@ -20,6 +20,7 @@
+ 
+ #include "lib/crypt_ops/crypto_sys.h"
+ #include "feature/dirauth/dirauth_sys.h"
++#include "core/or/dos_sys.h"
+ 
+ struct dirauth_options_t *
+ get_dirauth_options(struct or_options_t *opt)
+@@ -36,3 +37,11 @@ get_crypto_options(struct or_options_t *opt)
+   tor_assert(idx >= 0);
+   return config_mgr_get_obj_mutable(get_options_mgr(), opt, idx);
+ }
++
++struct dos_options_t *
++get_dos_options(struct or_options_t *opt)
++{
++  int idx = subsystems_get_options_idx(&sys_dos);
++  tor_assert(idx >= 0);
++  return config_mgr_get_obj_mutable(get_options_mgr(), opt, idx);
++}
+diff --git a/src/test/opts_test_helpers.h b/src/test/opts_test_helpers.h
+index a6d31551a4..840772bc0a 100644
+--- a/src/test/opts_test_helpers.h
++++ b/src/test/opts_test_helpers.h
+@@ -18,5 +18,6 @@ struct or_options_t;
+ 
+ struct crypto_options_t *get_crypto_options(struct or_options_t *opt);
+ struct dirauth_options_t *get_dirauth_options(struct or_options_t *opt);
++struct dos_options_t *get_dos_options(struct or_options_t *opt);
+ 
+ #endif /* !defined(TOR_TEST_OPTS_TESTING_HELPERS_H) */
+diff --git a/src/test/test_dos.c b/src/test/test_dos.c
+index f9b5e6ea86..08c46b95ac 100644
+--- a/src/test/test_dos.c
++++ b/src/test/test_dos.c
+@@ -6,6 +6,7 @@
+ #define CIRCUITLIST_PRIVATE
+ 
+ #include "core/or/or.h"
++#include "app/config/config.h"
+ #include "core/or/dos.h"
+ #include "core/or/circuitlist.h"
+ #include "lib/crypt_ops/crypto_rand.h"
+@@ -19,11 +20,14 @@
+ 
+ #include "feature/nodelist/networkstatus_st.h"
+ #include "core/or/or_circuit_st.h"
++#include "app/config/or_options_st.h"
++#include "core/or/dos_options_st.h"
+ #include "core/or/or_connection_st.h"
+ #include "feature/nodelist/routerstatus_st.h"
+ 
+ #include "test/test.h"
+ #include "test/log_test_helpers.h"
++#include "test/opts_test_helpers.h"
+ 
+ static const uint64_t BILLION = 1000000000;
+ 
+@@ -613,6 +617,55 @@ test_dos_begindir_limit(void *arg)
+   dos_free_all();
+ }
+ 
++/** Test that dos_should_refuse_single_hop_client() follows the torrc, else
++ * the consensus, and only applies on public relays. */
++static void
++test_dos_refuse_single_hop(void *arg)
++{
++  dos_options_t *dos_opts = get_dos_options(get_options_mutable());
++  (void) arg;
++
++  MOCK(networkstatus_get_latest_consensus,
++       mock_networkstatus_get_latest_consensus);
++  dummy_ns = tor_malloc_zero(sizeof(networkstatus_t));
++  dummy_ns->net_params = smartlist_new();
++  smartlist_add(dummy_ns->net_params,
++                (char *) "DoSRefuseSingleHopClientRendezvous=1");
++  get_options_mutable()->ORPort_set = 1;
++  tt_int_op(dos_should_refuse_single_hop_client(), OP_EQ, 1);
++  dos_opts->DoSRefuseSingleHopClientRendezvous = 0;
++  tt_int_op(dos_should_refuse_single_hop_client(), OP_EQ, 0);
++  dos_opts->DoSRefuseSingleHopClientRendezvous = 1;
++  get_options_mutable()->ORPort_set = 0;
++  tt_int_op(dos_should_refuse_single_hop_client(), OP_EQ, 0);
++
++ done:
++  UNMOCK(networkstatus_get_latest_consensus);
++  if (dummy_ns)
++    smartlist_free(dummy_ns->net_params);
++  tor_free(dummy_ns);
++}
++
++/** Test that the heartbeat shows the directory request counts of each
++ * defense once it is enabled. */
++static void
++test_dos_dir_heartbeat(void *arg)
++{
++  dos_options_t *dos_opts = get_dos_options(get_options_mutable());
++  (void) arg;
++
++  get_options_mutable()->ORPort_set = 1;
++  dos_opts->HSDirRefuseUnknownPrevHop = 1;
++  dos_note_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
++  dos_note_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
++  setup_full_capture_of_logs(LOG_NOTICE);
++  dos_log_heartbeat();
++  expect_single_log_msg_containing("2 HSDir requests from unknown relays");
++
++ done:
++  teardown_capture_of_logs();
++}
++
+ struct testcase_t dos_tests[] = {
+   { "conn_creation", test_dos_conn_creation, TT_FORK, NULL, NULL },
+   { "circuit_creation", test_dos_circuit_creation, TT_FORK, NULL, NULL },
+@@ -621,5 +674,7 @@ struct testcase_t dos_tests[] = {
+     NULL, NULL },
+   { "conn_rate", test_dos_conn_rate, TT_FORK, NULL, NULL },
+   { "begindir_limit", test_dos_begindir_limit, TT_FORK, NULL, NULL },
++  { "refuse_single_hop", test_dos_refuse_single_hop, TT_FORK, NULL, NULL },
++  { "dir_heartbeat", test_dos_dir_heartbeat, TT_FORK, NULL, NULL },
+   END_OF_TESTCASES
+ };
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index 49098eb992..39133cfd42 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -35,6 +35,7 @@
+ #include "lib/metrics/metrics_store.h"
+ 
+ #include "core/or/edge_connection_st.h"
++#include "core/or/dos_options_st.h"
+ #include "core/or/or_circuit_st.h"
+ #include "core/or/or_connection_st.h"
+ #include "feature/dircommon/dir_connection_st.h"
+@@ -43,6 +44,7 @@
+ 
+ #include "test/hs_test_helpers.h"
+ #include "test/log_test_helpers.h"
++#include "test/opts_test_helpers.h"
+ #include "test/test_helpers.h"
+ #include "test/test.h"
+ 
+@@ -1371,6 +1373,107 @@ test_hsdir_prev_hop_counter(void *arg)
+   tor_free(chan);
+ }
+ 
++static const char *
++mock_channel_describe_peer(channel_t *chan)
++{
++  (void) chan;
++  return "a relay";
++}
++
++/* HSDirRefuseUnknownPrevHop only refuses when the torrc, or else the
++ * consensus, enables it, and only on public relays. Requests are counted
++ * either way, and refused ones as "refused". */
++static void
++test_hsdir_prev_hop_defense(void *arg)
++{
++  channel_t *chan = tor_malloc_zero(sizeof(channel_t));
++  routerstatus_t known_rs;
++  dos_options_t *dos_opts;
++  or_circuit_t *circ;
++  const char *get = GET("/tor/hs/3/x");
++  const char *post = "POST /tor/hs/3/publish HTTP/1.0\r\n\r\n";
++  int64_t get_refused, post_refused, not_found;
++  uint64_t unknown0;
++  (void) arg;
++
++  init_test();
++  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
++  /* Closing a circuit looks up the fake channel's address. */
++  MOCK(channel_get_addr_if_possible, mock_channel_get_addr_if_possible);
++  MOCK(channel_describe_peer, mock_channel_describe_peer);
++  mock_hsdir_ns = tor_malloc_zero(sizeof(networkstatus_t));
++  mock_hsdir_ns->net_params = smartlist_new();
++  mock_hsdir_ns->routerstatus_list = smartlist_new();
++  MOCK(networkstatus_get_latest_consensus, mock_hsdir_get_latest_consensus);
++  get_options_mutable()->ORPort_set = 1;
++  dos_opts = get_dos_options(get_options_mutable());
++  memset(&known_rs, 0, sizeof(known_rs)); /* Matches the zeroed identity. */
++  get_refused = GET_METRIC("refused");
++  post_refused = POST_METRIC("refused");
++  not_found = GET_METRIC("not_found");
++  unknown0 = dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP);
++
++  /* By default, a request from an unknown relay is served. */
++  tt_int_op(hsdir_request_on_circuit(new_or_circ(chan), get, NULL),
++            OP_EQ, 404);
++
++  /* The consensus can refuse unknown previous hops, but not known ones. A
++   * refused request gets a 503, and its circuit stays open. */
++  smartlist_add_strdup(mock_hsdir_ns->net_params,
++                       "HSDirRefuseUnknownPrevHop=1");
++  circ = new_or_circ(chan);
++  tt_int_op(hsdir_request_on_circuit(circ, get, NULL), OP_EQ, 503);
++  tt_int_op(TO_CIRCUIT(circ)->marked_for_close, OP_EQ, 0);
++  tt_int_op(hsdir_request_on_circuit(new_or_circ(chan), post, "x"),
++            OP_EQ, 503);
++  smartlist_add(mock_hsdir_ns->routerstatus_list, &known_rs);
++  tt_int_op(hsdir_request_on_circuit(new_or_circ(chan), get, NULL),
++            OP_EQ, 404);
++  smartlist_clear(mock_hsdir_ns->routerstatus_list);
++  /* The torrc overrides the consensus, either way. */
++  dos_opts->HSDirRefuseUnknownPrevHop = 0;
++  tt_int_op(hsdir_request_on_circuit(new_or_circ(chan), get, NULL),
++            OP_EQ, 404);
++  SMARTLIST_FOREACH(mock_hsdir_ns->net_params, char *, cp, tor_free(cp));
++  smartlist_clear(mock_hsdir_ns->net_params);
++  dos_opts->HSDirRefuseUnknownPrevHop = 1;
++  tt_int_op(hsdir_request_on_circuit(new_or_circ(chan), get, NULL),
++            OP_EQ, 503);
++  /* A second request on a circuit is refused first by the limit of one per
++   * circuit, which closes the circuit without an answer. */
++  tt_int_op(hsdir_request_on_circuit(circ, get, NULL), OP_EQ, 0);
++  tt_assert(TO_CIRCUIT(circ)->marked_for_close);
++
++  /* Each request was counted once: the 4 refused ones as refused, and the 3
++   * others as not found. */
++  tt_i64_op(GET_METRIC("refused"), OP_EQ, get_refused + 3);
++  tt_i64_op(POST_METRIC("refused"), OP_EQ, post_refused + 1);
++  tt_i64_op(GET_METRIC("not_found"), OP_EQ, not_found + 3);
++  /* hsdir_unknown_prev_hop counts what the defense refuses or would refuse:
++   * the requests while the previous hop was unknown, less the second one on
++   * a circuit. */
++  tt_u64_op(dos_get_dir_stat(DOS_DIR_HSDIR_UNKNOWN_PREV_HOP), OP_EQ,
++            unknown0 + 5);
++
++  /* Relays that aren't public never refuse. */
++  get_options_mutable()->ORPort_set = 0;
++  tt_int_op(dos_should_refuse_unknown_hsdir_prev_hop(), OP_EQ, 0);
++
++ done:
++  UNMOCK(connection_write_to_buf_impl_);
++  UNMOCK(channel_get_addr_if_possible);
++  UNMOCK(channel_describe_peer);
++  UNMOCK(networkstatus_get_latest_consensus);
++  SMARTLIST_FOREACH(mock_hsdir_ns->net_params, char *, cp, tor_free(cp));
++  smartlist_free(mock_hsdir_ns->net_params);
++  smartlist_free(mock_hsdir_ns->routerstatus_list);
++  tor_free(mock_hsdir_ns);
++  SMARTLIST_FOREACH(circuit_get_global_list(), circuit_t *, c,
++                    TO_OR_CIRCUIT(c)->p_chan = NULL);
++  circuit_free_all();
++  tor_free(chan);
++}
++
+ struct testcase_t hs_cache[] = {
+   { "hsdir_request_limit_get", test_hsdir_request_limit, TT_FORK,
+     &passthrough_setup, (void *) "get" },
+@@ -1397,6 +1500,8 @@ struct testcase_t hs_cache[] = {
+     NULL, NULL },
+   { "hsdir_prev_hop_counter", test_hsdir_prev_hop_counter, TT_FORK,
+     NULL, NULL },
++  { "hsdir_prev_hop_defense", test_hsdir_prev_hop_defense, TT_FORK,
++    NULL, NULL },
+   { "downloaded_counter_as_dir", test_downloaded_counter_as_dir, TT_FORK,
+     NULL, NULL },
+   { "downloaded_counter_non_hs", test_downloaded_counter_non_hs, TT_FORK,
+diff --git a/src/test/test_status.c b/src/test/test_status.c
+index 12b13160bf..fcd05c5700 100644
+--- a/src/test/test_status.c
++++ b/src/test/test_status.c
+@@ -369,7 +369,8 @@ test_status_hb_not_in_consensus(void *arg)
+                  "[DoSBeginDirLimitEnabled disabled], "
+                  "[DoSBeginDirRateEnabled disabled], "
+                  "0 BEGIN_DIR HSDir requests rejected, "
+-                 "0 INTRODUCE2 rejected.\n");
++                 "0 INTRODUCE2 rejected, "
++                 "[HSDirRefuseUnknownPrevHop disabled].\n");
+   tt_int_op(mock_saved_log_n_entries(), OP_EQ, 6);
+ 
+  done:
