@@ -12,6 +12,18 @@ conflux/pool/begindir_rejects_one_leg_with_end: [forking] OK
 conflux/pool/circuit_get_best_rejects_internal: [forking] OK
 conflux/pool/ooo_q_teardown_accounting: [forking] OK
 conflux/pool/recovery_leg: [forking] OK
+connection/list_indices: [forking] OK
+connection/list_index_recovery: [forking] OK
+connection/linked_list_teardown: [forking] OK
+connection/closeable_list_delayed: [forking] OK
+connection/get_basic: [forking] OK
+connection/get_rsrc: [forking] OK
+connection/download_status/microdesc: [forking] OK
+connection/download_status/ns: [forking] OK
+connection/https_proxy_connect/https: [forking] OK
+connection/haproxy_proxy_connect/haproxy: [forking] OK
+connection/failed_orconn_tracker: [forking] OK
+connection/describe: [forking] OK
 dir/nicknames: [forking] OK
 dir/formats_rsa_ed25519_: [forking] OK
 dir/formats_rsa_ed25519_b: [forking] OK
@@ -57,6 +69,7 @@ dir/download_status_increment: [forking] OK
 dir/authdir_type_to_string: OK
 dir/conn_purpose_to_string: OK
 dir/should_use_directory_guards: OK
+dir/tunnel_isolation_flags: OK
 dir/should_not_init_request_to_ourselves: [forking] OK
 dir/should_not_init_request_to_dir_auths_without_v3_info: OK
 dir/should_init_request_to_dir_auths: OK
@@ -98,15 +111,76 @@ dir/voting/flags/minimal: OK
 dir/voting/flags/ipv6: [forking] OK
 dir/voting/flags/staledesc: [forking] OK
 dir/voting/schedule/interval_start: OK
+dir_handle_get/not_found: OK
+dir_handle_get/bad_request: OK
+dir_handle_get/v1_command_not_found: OK
+dir_handle_get/v1_command: OK
+dir_handle_get/robots_txt: OK
+dir_handle_get/micro_d_not_found: OK
+dir_handle_get/micro_d_server_busy: OK
+dir_handle_get/micro_d: OK
+dir_handle_get/networkstatus_bridges_not_found_without_auth: OK
+dir_handle_get/networkstatus_bridges_not_found_wrong_auth: OK
+dir_handle_get/networkstatus_bridges: OK
+dir_handle_get/server_descriptors_not_found: OK
+dir_handle_get/server_descriptors_busy: [forking] OK
+dir_handle_get/server_descriptors_all: [forking] OK
+dir_handle_get/server_descriptors_authority: [forking] OK
+dir_handle_get/server_descriptors_fp: [forking] OK
+dir_handle_get/server_descriptors_d: [forking] OK
+dir_handle_get/server_keys_bad_req: OK
+dir_handle_get/server_keys_busy: OK
+dir_handle_get/server_keys_all_not_found: OK
+dir_handle_get/server_keys_all: OK
+dir_handle_get/server_keys_authority_not_found: OK
+dir_handle_get/server_keys_authority: OK
+dir_handle_get/server_keys_fp_not_found: OK
+dir_handle_get/server_keys_fp: OK
+dir_handle_get/server_keys_sk_not_found: OK
+dir_handle_get/server_keys_sk: OK
+dir_handle_get/server_keys_fpsk_not_found: OK
+dir_handle_get/server_keys_fpsk: OK
+dir_handle_get/status_vote_current_not_found: OK
+dir_handle_get/status_vote_next_not_found: OK
+dir_handle_get/status_vote_current_authority_not_found: OK
+dir_handle_get/status_vote_current_authority: OK
+dir_handle_get/status_vote_too_late/min: OK
+dir_handle_get/status_vote_too_late/chutney: OK
+dir_handle_get/status_vote_too_late/half-public: OK
+dir_handle_get/status_vote_too_late/public: OK
+dir_handle_get/status_vote_next_authority_not_found: OK
+dir_handle_get/status_vote_next_authority: OK
+dir_handle_get/status_vote_next_bandwidth_not_found: OK
+dir_handle_get/status_vote_next_bandwidth: OK
+dir_handle_get/status_vote_current_consensus_ns_not_enough_sigs: [forking] OK
+dir_handle_get/status_vote_current_consensus_ns_not_found: [forking] OK
+dir_handle_get/status_vote_current_consensus_too_old: [forking] OK
+dir_handle_get/status_vote_current_consensus_ns_busy: [forking] OK
+dir_handle_get/status_vote_current_consensus_ns: [forking] OK
+dir_handle_get/status_vote_current_d_not_found: OK
+dir_handle_get/status_vote_next_d_not_found: OK
+dir_handle_get/status_vote_d: OK
+dir_handle_get/status_vote_next_consensus_not_found: OK
+dir_handle_get/status_vote_next_consensus_busy: OK
+dir_handle_get/status_vote_next_consensus: OK
+dir_handle_get/status_vote_next_consensus_signatures_not_found: OK
+dir_handle_get/status_vote_next_consensus_signatures_busy: OK
+dir_handle_get/status_vote_next_consensus_signatures: OK
+dir_handle_get/parse_accept_encoding: OK
+dos/conn_creation: [forking] OK
+dos/circuit_creation: [forking] OK
+dos/bucket_refill: [forking] OK
+dos/known_relay: [forking] OK
+dos/conn_rate: [forking] OK
+dos/begindir_limit: [forking] OK
+hs_cache/hsdir_request_limit_get: [forking] OK
+hs_cache/hsdir_request_limit_post: [forking] OK
+hs_cache/hsdir_request_limit_authority: [forking] OK
 hs_cache/directory: [forking] OK
 hs_cache/clean_as_dir: [forking] OK
 hs_cache/clean_oom_as_dir: [forking] OK
 hs_cache/hsdir_revision_counter_check: [forking] OK
 hs_cache/upload_and_download_hs_desc: [forking] OK
-hs_cache/hsdir_one_request_per_circ: [forking] OK
-hs_cache/hsdir_refuse_unknown_prev_hop: [forking] OK
-hs_cache/downloaded_counter_as_dir: [forking] OK
-hs_cache/downloaded_counter_non_hs: [forking] OK
 hs_cache/client_cache: [forking] OK
 hs_cache/client_cache_decrypt: [forking] OK
 hs_cache/client_cache_remove: [forking] OK
@@ -151,12 +225,7 @@ mainloop/user_activity: [forking] OK
 mainloop/check_participation: [forking] OK
 mainloop/dormant_load_state: [forking] OK
 mainloop/dormant_save_state: [forking] OK
-mainloop/active_linked_list_indexing: [forking] OK
-mainloop/linked_peer_teardown_and_oom_reorder: [forking] OK
-mainloop/index_corruption_assertions: [forking] OK
-mainloop/randomized_cleanup_lifecycle: [forking] OK
-mainloop/normal_directory_and_slow_flush_lifecycle: [forking] OK
-mainloop/observability_metrics_conservation: [forking] OK
+mainloop/normal_directory_and_metrics: [forking] OK
 metrics/config: [forking] OK
 metrics/connection: [forking] OK
 metrics/prometheus: [forking] OK
@@ -164,9 +233,22 @@ metrics/prometheus_histogram: [forking] OK
 metrics/store: [forking] OK
 oom/circbuf: [forking] OK
 oom/streambuf: [forking] OK
+relay/append_cell_to_circuit_queue: [forking] OK
+relay/close_circ_rephist: [forking] OK
+relay/suggested_address: [forking] OK
+relay/find_addr_to_publish: [forking] OK
 relaycell/resolved: [forking] OK
 relaycell/circbw: [forking] OK
 relaycell/halfstream: [forking] OK
 relaycell/streamwrap: [forking] OK
 relaycell/end_no_reason: [forking] OK
-171 tests ok.  (0 skipped)
+status/count_circuits: [forking] OK
+status/secs_to_uptime: [forking] OK
+status/bytes_to_usage: [forking] OK
+status/hb_fails: [forking] OK
+status/hb_simple: [forking] OK
+status/hb_not_in_consensus: [forking] OK
+status/hb_calls_log_accounting: [forking] OK
+status/hb_packaged_cell_fullness: [forking] OK
+status/hb_tls_write_overhead: [forking] OK
+253 tests ok.  (0 skipped)
