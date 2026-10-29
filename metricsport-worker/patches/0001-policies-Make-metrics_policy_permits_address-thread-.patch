@@ -1,67 +1,38 @@
-From e0dbe1f994116da4a64977709d1a25be9f5fac8f Mon Sep 17 00:00:00 2001
+From 7bee953562d5ed59dfc8cb21d7a2abd4d2c367e6 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
-Date: Wed, 21 Oct 2026 06:12:15 +0000
+Date: Wed, 28 Oct 2026 22:10:01 -0700
 Subject: [PATCH 1/4] policies: Make metrics_policy_permits_address()
  thread-safe
 
-A following commit checks MetricsPortPolicy from a MetricsPort worker
-thread, while the main thread may rebuild metrics_policy on SIGHUP or
-SETCONF. load_policy_from_option() frees the old list and sets it to
-NULL before parsing the new one, so an unlocked reader could walk freed
-memory, or see a NULL policy, which compare_tor_addr_to_addr_policy()
-treats as "accept".
+A following commit checks MetricsPortPolicy from a MetricsPort worker thread while the main thread may rebuild metrics_policy on SIGHUP or SETCONF.
 
-Guard metrics_policy with a mutex that is created on first use, like
-socket_accounting_lock() in lib/net/socket.c, and return 0 when no
-policy has been parsed. Always append the trailing "reject *:*", even
-when parsing fails, so that the policy fails closed.
-
-policies_free_all() is left unlocked: it runs from the "or" subsystem
-shutdown, after the metrics subsystem has stopped the worker from
-accepting connections.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018ZfqW8PgStnaE5cg75wM9u
+Stage reloaded MetricsPortPolicy entries into a temporary list before swapping under metrics_policy_mutex, validate MetricsPortPolicy in validate_addr_policies(), and fail closed when metrics_policy is NULL.
 ---
- src/core/or/policies.c  | 28 ++++++++++++++++++++++------
- src/test/test_metrics.c |  4 ++++
- 2 files changed, 26 insertions(+), 6 deletions(-)
+ src/core/or/policies.c  | 32 +++++++++++++++++++++++++++-----
+ src/test/test_metrics.c | 16 ++++++++++++++++
+ 2 files changed, 43 insertions(+), 5 deletions(-)
 
 diff --git a/src/core/or/policies.c b/src/core/or/policies.c
-index 375568d..950235d 100644
+index 375568d..899e137 100644
 --- a/src/core/or/policies.c
 +++ b/src/core/or/policies.c
-@@ -50,6 +50,9 @@ static smartlist_t *socks_policy = NULL;
+@@ -50,6 +50,8 @@ static smartlist_t *socks_policy = NULL;
  static smartlist_t *dir_policy = NULL;
  /** Policy for incoming MetricsPort connections that must match. */
  static smartlist_t *metrics_policy = NULL;
-+/** Mutex protecting metrics_policy, which the MetricsPort worker thread also
-+ * reads. Created on first use, which is on the main thread. */
++/** Mutex protecting metrics_policy across main and MetricsPort threads. */
 +static tor_mutex_t *metrics_policy_mutex = NULL;
  /** Policy that addresses for incoming router descriptors must match in order
   * to be published by us. */
  static smartlist_t *authdir_reject_policy = NULL;
-@@ -1065,13 +1068,26 @@ socks_policy_permits_address(const tor_addr_t *addr)
-   return addr_policy_permits_tor_addr(addr, 1, socks_policy);
- }
- 
-+/** Helper: acquire the metrics_policy lock. */
-+static void
-+metrics_policy_lock(void)
-+{
-+  if (PREDICT_UNLIKELY(!metrics_policy_mutex))
-+    metrics_policy_mutex = tor_mutex_new_nonrecursive();
-+  tor_mutex_acquire(metrics_policy_mutex);
-+}
-+
- /** Return 1 if <b>addr</b> is permitted to connect to our metrics port,
-  * based on <b>metrics_policy</b>. Else return 0.
-  */
+@@ -1071,7 +1073,13 @@ socks_policy_permits_address(const tor_addr_t *addr)
  int
  metrics_policy_permits_address(const tor_addr_t *addr)
  {
 -  return addr_policy_permits_tor_addr(addr, 1, metrics_policy);
-+  metrics_policy_lock();
++  if (!metrics_policy_mutex)
++    return 0;
++  tor_mutex_acquire(metrics_policy_mutex);
 +  int r = metrics_policy &&
 +          addr_policy_permits_tor_addr(addr, 1, metrics_policy);
 +  tor_mutex_release(metrics_policy_mutex);
@@ -69,40 +40,87 @@ index 375568d..950235d 100644
  }
  
  /** Return true iff the address <b>addr</b> is in a country listed in the
-@@ -1253,13 +1269,13 @@ load_policy_from_option(config_line_t *config, const char *option_name,
+@@ -1178,6 +1186,8 @@ validate_addr_policies(const or_options_t *options, char **msg)
+     REJECT("Error in DirPolicy entry.");
+   if (parse_addr_policy(options->SocksPolicy, &addr_policy, -1))
+     REJECT("Error in SocksPolicy entry.");
++  if (parse_addr_policy(options->MetricsPortPolicy, &addr_policy, -1))
++    REJECT("Error in MetricsPortPolicy entry.");
+   if (parse_addr_policy(options->AuthDirReject, &addr_policy,
+                         ADDR_POLICY_REJECT))
+     REJECT("Error in AuthDirReject entry.");
+@@ -1253,12 +1263,20 @@ load_policy_from_option(config_line_t *config, const char *option_name,
  static int
  parse_metrics_port_policy(const or_options_t *options)
  {
--  if (load_policy_from_option(options->MetricsPortPolicy, "MetricsPortPolicy",
++  smartlist_t *policy = NULL, *old;
+   if (load_policy_from_option(options->MetricsPortPolicy, "MetricsPortPolicy",
 -                              &metrics_policy, -1) < 0) {
--    return -1;
--  }
-+  metrics_policy_lock();
-+  int r = load_policy_from_option(options->MetricsPortPolicy,
-+                                  "MetricsPortPolicy", &metrics_policy, -1);
++                              &policy, -1) < 0) {
+     return -1;
+   }
    /* It is a reject all by default. */
-   append_exit_policy_string(&metrics_policy, "reject *:*");
--  return 0;
+-  append_exit_policy_string(&metrics_policy, "reject *:*");
++  append_exit_policy_string(&policy, "reject *:*");
++  if (!metrics_policy_mutex)
++    metrics_policy_mutex = tor_mutex_new_nonrecursive();
++  tor_mutex_acquire(metrics_policy_mutex);
++  old = metrics_policy;
++  metrics_policy = policy;
 +  tor_mutex_release(metrics_policy_mutex);
-+  return r;
++  addr_policy_list_free(old);
+   return 0;
  }
  
- /** Set all policies based on <b>options</b>, which should have been validated
+@@ -3126,8 +3144,12 @@ policies_free_all(void)
+   socks_policy = NULL;
+   addr_policy_list_free(dir_policy);
+   dir_policy = NULL;
+-  addr_policy_list_free(metrics_policy);
+-  metrics_policy = NULL;
++  if (metrics_policy_mutex) {
++    tor_mutex_acquire(metrics_policy_mutex);
++    addr_policy_list_free(metrics_policy);
++    metrics_policy = NULL;
++    tor_mutex_release(metrics_policy_mutex);
++  }
+   addr_policy_list_free(authdir_reject_policy);
+   authdir_reject_policy = NULL;
+   addr_policy_list_free(authdir_invalid_policy);
 diff --git a/src/test/test_metrics.c b/src/test/test_metrics.c
-index 0bf072d..0e79e32 100644
+index 0bf072d..59e2349 100644
 --- a/src/test/test_metrics.c
 +++ b/src/test/test_metrics.c
-@@ -61,6 +61,10 @@ test_config(void *arg)
+@@ -61,6 +61,11 @@ test_config(void *arg)
  
    (void) arg;
  
 +  /* Without a parsed MetricsPortPolicy, nothing is permitted. */
++  policies_free_all();
 +  tor_addr_from_ipv4h(&addr, 0x01020304); /* 1.2.3.4 */
 +  tt_int_op(metrics_policy_permits_address(&addr), OP_EQ, false);
 +
    set_metrics_port(options);
  
    int ret = metrics_parse_ports(options, ports, &err_msg);
+@@ -83,6 +88,17 @@ test_config(void *arg)
+   ret = metrics_policy_permits_address(&addr);
+   tt_int_op(ret, OP_EQ, false);
+ 
++  /* A malformed reload is rejected and preserves the active policy. */
++  config_free_lines(options->MetricsPortPolicy);
++  config_get_lines("MetricsPortPolicy bad_token *4:*",
++                   &options->MetricsPortPolicy, 0);
++  tt_int_op(validate_addr_policies(options, &err_msg), OP_EQ, -1);
++  tor_free(err_msg);
++  tt_int_op(policies_parse_from_options(options), OP_EQ, -1);
++  tt_int_op(metrics_policy_permits_address(&addr), OP_EQ, false);
++  tor_addr_from_ipv4h(&addr, 0x01020304);
++  tt_int_op(metrics_policy_permits_address(&addr), OP_EQ, true);
++
+  done:
+   SMARTLIST_FOREACH(ports, port_cfg_t *, c, port_cfg_free(c));
+   smartlist_free(ports);
 -- 
-2.43.0
+2.39.5 (Apple Git-154)
 

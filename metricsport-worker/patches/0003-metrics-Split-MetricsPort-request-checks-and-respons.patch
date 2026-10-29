@@ -1,26 +1,16 @@
-From 0680563c82dd0e43056a12ed3742a2b49f820605 Mon Sep 17 00:00:00 2001
+From 2e4d0de6d743d35abe0ca6037260e33958641d32 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
-Date: Wed, 21 Oct 2026 06:13:06 +0000
+Date: Wed, 28 Oct 2026 22:11:48 -0700
 Subject: [PATCH 3/4] metrics: Split MetricsPort request checks and response
  into helpers
 
-Move the HTTP request validation of metrics_connection_process_inbuf()
-into metrics_check_http_request(), and build the whole HTTP response,
-headers and body, in metrics_get_http_response() instead of writing the
-headers to the connection in write_metrics_http_response().
-
-No behavior change. This lets the MetricsPort worker thread added in the
-next commit answer requests exactly like the main thread does, without
-using a connection_t.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018ZfqW8PgStnaE5cg75wM9u
+Factor HTTP request validation into metrics_check_http_request() and full HTTP response construction into metrics_get_http_response() so the MetricsPort worker thread added in the next commit shares exact request and response formatting without a connection_t.
 ---
  src/feature/metrics/metrics.c | 67 +++++++++++++++++++----------------
  1 file changed, 36 insertions(+), 31 deletions(-)
 
 diff --git a/src/feature/metrics/metrics.c b/src/feature/metrics/metrics.c
-index 5c10d55..b8946d5 100644
+index 5c10d55..2bf5873 100644
 --- a/src/feature/metrics/metrics.c
 +++ b/src/feature/metrics/metrics.c
 @@ -45,12 +45,14 @@ metrics_request_allowed(const tor_addr_t *peer_addr)
@@ -32,7 +22,7 @@ index 5c10d55..b8946d5 100644
 -static void
 -write_metrics_http_response(const size_t data_len, connection_t *conn)
 +/** Helper: Return a newly allocated buffer holding the whole MetricsPort HTTP
-+ * response: the headers followed by the output of all subsystems. */
++ * response: headers followed by the output of all subsystems. */
 +static buf_t *
 +metrics_get_http_response(void)
  {
@@ -54,8 +44,8 @@ index 5c10d55..b8946d5 100644
 +  return buf;
 +}
 +
-+/** Helper: Return NULL if <b>headers</b> start with a request for the
-+ * metrics, else the HTTP error response to send back. */
++/** Helper: Return NULL if <b>headers</b> starts with a GET /metrics request,
++ * else the HTTP error response to send back. */
 +static const char *
 +metrics_check_http_request(const char *headers)
 +{
@@ -64,7 +54,7 @@ index 5c10d55..b8946d5 100644
 +
 +  if (parse_http_command(headers, &command, &url) < 0) {
 +    errmsg = "HTTP/1.0 400 Bad Request\r\n\r\n";
-+  } else if (strcmpstart(command, "GET")) {
++  } else if (strcmp(command, "GET")) {
 +    errmsg = "HTTP/1.0 405 Method Not Allowed\r\n\r\n";
 +  } else if (strcmp(url, "/metrics")) {
 +    errmsg = "HTTP/1.0 404 Not Found\r\n\r\n";
@@ -104,11 +94,11 @@ index 5c10d55..b8946d5 100644
 -  /* Where we expect the query to come for. */
 -#define EXPECTED_URL_PATH "/metrics"
 -#define EXPECTED_URL_PATH_LEN (sizeof(EXPECTED_URL_PATH) - 1) /* No NUL */
- 
+-
 -  if (!strcmpstart(url, EXPECTED_URL_PATH) &&
 -      strlen(url) == EXPECTED_URL_PATH_LEN) {
 -    buf_t *data = metrics_get_output(the_format);
--
+ 
 -    write_metrics_http_response(buf_datalen(data), conn);
 -    connection_buf_add_buf(conn, data);
 -    buf_free(data);
@@ -132,5 +122,5 @@ index 5c10d55..b8946d5 100644
    return ret;
  }
 -- 
-2.43.0
+2.39.5 (Apple Git-154)
 

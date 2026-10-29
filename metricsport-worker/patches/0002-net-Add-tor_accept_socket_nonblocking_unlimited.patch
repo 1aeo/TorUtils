@@ -1,28 +1,18 @@
-From ad413c405c02dacde890ea527e97b59281481296 Mon Sep 17 00:00:00 2001
+From 2f939b4e8fd8bce8e353ce39828ce884730e5d33 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
-Date: Wed, 21 Oct 2026 07:11:10 +0000
+Date: Wed, 28 Oct 2026 22:10:55 -0700
 Subject: [PATCH 2/4] net: Add tor_accept_socket_nonblocking_unlimited()
 
-tor_accept_socket_with_extensions() refuses new sockets once we have
-max_sockets - 1 open, even though set_max_file_descriptors() keeps
-ULIMIT_BUFFER more file descriptors than that. The MetricsPort worker
-thread added in a later commit needs to accept its one client at that
-point, since running out of sockets is one of the overloads that
-operators scrape the MetricsPort to see.
+tor_accept_socket_with_extensions() refuses new sockets once we have max_sockets - 1 open, even though set_max_file_descriptors() reserves ULIMIT_BUFFER additional descriptors.
 
-Add a variant that skips the limit check, sharing the code of
-tor_accept_socket_with_extensions(). Its callers must bound how many
-sockets they hold.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018ZfqW8PgStnaE5cg75wM9u
+Add a variant that skips the max_sockets check for callers holding a bounded number of sockets, such as the MetricsPort worker thread.
 ---
- src/lib/net/socket.c | 31 ++++++++++++++++++++++++++-----
+ src/lib/net/socket.c | 29 ++++++++++++++++++++++++-----
  src/lib/net/socket.h |  3 +++
- 2 files changed, 29 insertions(+), 5 deletions(-)
+ 2 files changed, 27 insertions(+), 5 deletions(-)
 
 diff --git a/src/lib/net/socket.c b/src/lib/net/socket.c
-index e36e3a0..454c82f 100644
+index e36e3a0..8078f07 100644
 --- a/src/lib/net/socket.c
 +++ b/src/lib/net/socket.c
 @@ -372,16 +372,18 @@ tor_accept_socket_nonblocking(tor_socket_t sockfd, struct sockaddr *addr,
@@ -49,11 +39,11 @@ index e36e3a0..454c82f 100644
  #ifdef _WIN32
      WSASetLastError(WSAEMFILE);
  #else
-@@ -435,6 +437,25 @@ tor_accept_socket_with_extensions(tor_socket_t sockfd, struct sockaddr *addr,
+@@ -435,6 +437,23 @@ tor_accept_socket_with_extensions(tor_socket_t sockfd, struct sockaddr *addr,
    return s;
  }
  
-+/** As tor_accept_socket_impl(), with the max_sockets limit. */
++/** As tor_accept_socket_impl(), enforcing the max_sockets limit. */
 +tor_socket_t
 +tor_accept_socket_with_extensions(tor_socket_t sockfd, struct sockaddr *addr,
 +                                 socklen_t *len, int cloexec, int nonblock)
@@ -61,10 +51,8 @@ index e36e3a0..454c82f 100644
 +  return tor_accept_socket_impl(sockfd, addr, len, cloexec, nonblock, 1);
 +}
 +
-+/** As tor_accept_socket_nonblocking(), but accept even when we already have
-+ * max_sockets - 1 open sockets, using the ULIMIT_BUFFER headroom. Only for
-+ * code that holds a fixed, small number of such sockets, like the MetricsPort
-+ * worker thread, which serves one client at a time. */
++/** As tor_accept_socket_nonblocking(), but accept past max_sockets - 1 using
++ * ULIMIT_BUFFER headroom. Only for callers holding a bounded socket count. */
 +tor_socket_t
 +tor_accept_socket_nonblocking_unlimited(tor_socket_t sockfd,
 +                                        struct sockaddr *addr, socklen_t *len)
@@ -90,5 +78,5 @@ index bb44d49..d16505d 100644
                                              const struct sockaddr *address,
                                              socklen_t address_len));
 -- 
-2.43.0
+2.39.5 (Apple Git-154)
 
