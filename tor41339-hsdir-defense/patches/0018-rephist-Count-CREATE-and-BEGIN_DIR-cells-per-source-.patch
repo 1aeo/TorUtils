@@ -1,4 +1,4 @@
-From 7c6f39db4cd1eea0888c0c87bfdbecbf29462c7a Mon Sep 17 00:00:00 2001
+From 8a4964493652b59b09b43727b205061538d9bce2 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Fri, 23 Oct 2026 05:28:25 +0000
 Subject: [PATCH 18/20] rephist: Count CREATE and BEGIN_DIR cells per source
@@ -193,7 +193,7 @@ index 470f513f29..145647d74f 100644
   * mean that the client received them): onion service descriptors, and
   * anything else, including error responses. */
 diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
-index d76263aaa4..65bddd20ac 100644
+index 607e6e4fb4..3ca7f14e7c 100644
 --- a/src/feature/relay/relay_metrics.h
 +++ b/src/feature/relay/relay_metrics.h
 @@ -79,6 +79,12 @@ typedef enum {

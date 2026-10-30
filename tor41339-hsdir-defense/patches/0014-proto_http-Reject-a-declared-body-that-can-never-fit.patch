@@ -1,4 +1,4 @@
-From c39a3f1e4e243e96b9f330d76bedd67641f30eef Mon Sep 17 00:00:00 2001
+From 62884954f0dc687aed0dad5d3eeaa0aa8e2b58d7 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Thu, 22 Oct 2026 08:16:54 +0000
 Subject: [PATCH 14/20] proto_http: Reject a declared body that can never fit

@@ -50,8 +50,14 @@ only in its changelog entry):
 
 Quilt series applied (debian/patches), identical for both builds: 0000
 restoring doc/nofooter.conf, which the 0.4.9.15 tarball still omits, then
-tor41339-hsdir-defense/patches/0001-0020 (byte-identical copies in
-../engineering/deb/build-reordered/debian-patches/):
+0001-0020 as they were at this build, kept byte-identical in
+../engineering/deb/build-reordered/debian-patches/. Since then,
+tor41339-hsdir-defense/patches/ has two small changes these packages
+don't have: 0011 and 0013 correct three comments that still said
+HSDirRefuseUnknownPrevHop answers with a 503 (it closes the circuit), and
+0012 adds a BUG() guard against a NULL fetch limiter, which no caller
+passes today; 0014-0020 differ only in their commit and blob hashes. The
+series as built:
   feac23ee1a832a71ae4e57b8f34cdaf43b024ec342764814b86e504bf2502e0d  0000-restore-doc-nofooter.conf.patch
   d3dfba8f223ef6a9486ba1a7e9aef51fa18e5c20ea8c0109493915177eff2f0f  0001-dirserv-Stop-unthrottled-warnings-on-malformed-HTTP-.patch
   bfca88f4d082d7c701c08021dfdd30e413b2c197407fadf22483290ad7a2261d  0002-dirserv-Don-t-buffer-request-bodies-larger-than-an-H.patch

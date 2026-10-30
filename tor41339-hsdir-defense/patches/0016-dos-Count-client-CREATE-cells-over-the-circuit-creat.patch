@@ -1,4 +1,4 @@
-From 4910c8b969bd8f34d8587756dba2e44a5f79e55f Mon Sep 17 00:00:00 2001
+From d81c35927cdbc35ab1b2b71a40e96fa554c49b70 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Thu, 22 Oct 2026 19:24:21 +0000
 Subject: [PATCH 16/20] dos: Count client CREATE cells over the circuit
@@ -56,7 +56,7 @@ index 6c07fb9fb6..b02735b1d1 100644
 +      Together with the client CREATE cells, they bound the number of client
 +      addresses from below. Part of ticket 41339.
 diff --git a/src/core/or/dos.c b/src/core/or/dos.c
-index 74c9c1925c..45b4119d5c 100644
+index c2ae913ddd..724b2040ea 100644
 --- a/src/core/or/dos.c
 +++ b/src/core/or/dos.c
 @@ -54,6 +54,10 @@ static int32_t dos_cc_defense_time_period;

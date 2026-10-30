@@ -2,7 +2,9 @@
 
 The attached packages in `../../packages/` are `+tor41339.9` for Ubuntu 24.04
 (`~noble+1`) and 26.04 (`~resolute+1`), built on tor 0.4.9.15 from
-`../../patches/0001`–`0020` (provenance: `../../packages/BUILD-INFO.txt`). Use
+`../../patches/0001`–`0020` before two small later changes, comment fixes in
+0011 and 0013 and a `BUG()` guard in 0012 (provenance:
+`../../packages/BUILD-INFO.txt`). Use
 this runbook whenever `patches/` changes, bumping the suffix (`+tor41339.9`,
 …) so `dpkg` sees the new build as newer. Rebuild **both** releases from the same
 series, and regenerate every artifact below together, so the binaries, the

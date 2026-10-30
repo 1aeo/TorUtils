@@ -1,4 +1,4 @@
-From d8bb41b719a8ea4172781a0844f21ba01b3dabf5 Mon Sep 17 00:00:00 2001
+From d56e5c0d58df3b9abb900ad8a62e6b25d67a6186 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Fri, 23 Oct 2026 05:31:02 +0000
 Subject: [PATCH 19/20] relay_metrics: Count HSDir fetches per descriptor and
@@ -56,7 +56,7 @@ index 8a79b2d583..4a75da1ac6 100644
 +      minute. Bridges don't count these, and other relays count them only while
 +      a MetricsPort is configured. Part of ticket 41339.
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 080d3833a5..7e6602733e 100644
+index 2d2bc6c289..3597e7029e 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
 @@ -1470,6 +1470,7 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
@@ -216,7 +216,7 @@ index 145647d74f..05caf007fd 100644
   * mean that the client received them): onion service descriptors, and
   * anything else, including error responses. */
 diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
-index 65bddd20ac..5dde655f25 100644
+index 3ca7f14e7c..6c5ea3b023 100644
 --- a/src/feature/relay/relay_metrics.h
 +++ b/src/feature/relay/relay_metrics.h
 @@ -85,6 +85,9 @@ typedef enum {

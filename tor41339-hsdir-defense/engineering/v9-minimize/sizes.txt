@@ -12,8 +12,8 @@
 0009   102 ->   102   prod  102 ->  102   tests    0 ->    0  relay_metrics: Make fill_dos_values() table-driven
 0010   130 ->   122   prod   49 ->   49   tests   76 ->   66  dos: Count HSDir requests from unknown previous hops
 0011   286 ->   260   prod   92 ->   93   tests  173 ->  146  dos: Add an off-by-default HSDir defense against unk
-0012   186 ->   173   prod   66 ->   63   tests  101 ->   91  hs_cache: Count fetches of each descriptor over a pe
-0013   727 ->   667   prod  202 ->  188   tests  480 ->  434  dos: Shed onion service descriptor fetches over a by
+0012   186 ->   175   prod   66 ->   65   tests  101 ->   91  hs_cache: Count fetches of each descriptor over a pe
+0013   727 ->   665   prod  202 ->  186   tests  480 ->  434  dos: Shed onion service descriptor fetches over a by
 0014    54 ->    37   prod    9 ->    7   tests   40 ->   25  proto_http: Reject a declared body that can never fi
 0015  1001 ->   586   prod  349 ->  205   tests  639 ->  374  relay_metrics: Count circuits and directory streams 
 0016   113 ->   114   prod   28 ->   28   tests   78 ->   78  dos: Count client CREATE cells over the circuit crea

@@ -1,4 +1,4 @@
-From 9c10c892b3c7c8a59c34f5a8c3bf2d89697022db Mon Sep 17 00:00:00 2001
+From 7a4cbcaa1f93ec143f88764427e77131e2c687bd Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Fri, 23 Oct 2026 05:20:50 +0000
 Subject: [PATCH 17/20] relay_metrics: Count tunneled directory response bytes
@@ -125,7 +125,7 @@ index 6c7e0f311c..470f513f29 100644
  static void
  fill_begindir_request_values(void)
 diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
-index e90c9b0e3b..d76263aaa4 100644
+index 3ea16f6435..607e6e4fb4 100644
 --- a/src/feature/relay/relay_metrics.h
 +++ b/src/feature/relay/relay_metrics.h
 @@ -77,6 +77,8 @@ typedef enum {

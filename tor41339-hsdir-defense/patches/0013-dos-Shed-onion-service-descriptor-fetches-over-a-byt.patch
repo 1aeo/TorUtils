@@ -1,4 +1,4 @@
-From 8accd6adc72fe96bafbaeafb9f4cab19e7848877 Mon Sep 17 00:00:00 2001
+From 27501b0951396422167433846645272d8d2beddc Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Thu, 29 Oct 2026 02:48:42 +0000
 Subject: [PATCH 13/20] dos: Shed onion service descriptor fetches over a byte
@@ -57,11 +57,11 @@ Part of #41339.
  src/core/or/dos_options.inc              |  11 +-
  src/feature/dircache/dircache.c          |  14 +-
  src/feature/relay/relay_metrics.c        |   3 +
- src/feature/relay/relay_metrics.h        |   5 +-
+ src/feature/relay/relay_metrics.h        |   3 +-
  src/test/test_dos.c                      | 350 ++++++++++++++++++++++-
  src/test/test_hs_cache.c                 |  81 ++++++
  src/test/test_status.c                   |   3 +-
- 12 files changed, 660 insertions(+), 7 deletions(-)
+ 12 files changed, 659 insertions(+), 6 deletions(-)
 
 diff --git a/changes/ticket41339_dos b/changes/ticket41339_dos
 index a7c39c49fc..e695675e79 100644
@@ -146,7 +146,7 @@ index cc649d8a6c..ca776a41cd 100644
  problem dependency-violation /src/core/or/onion.c 2
  problem file-size /src/core/or/or.h 1150
 diff --git a/src/core/or/dos.c b/src/core/or/dos.c
-index a6e0522b85..74c9c1925c 100644
+index 89eecbd481..c2ae913ddd 100644
 --- a/src/core/or/dos.c
 +++ b/src/core/or/dos.c
 @@ -18,7 +18,9 @@
@@ -159,7 +159,7 @@ index a6e0522b85..74c9c1925c 100644
  #include "feature/stats/geoip_stats.h"
  #include "lib/crypt_ops/crypto_rand.h"
  #include "lib/time/compat_time.h"
-@@ -1139,6 +1141,140 @@ dos_hsdir_note_desc_fetch(token_bucket_ctr_t *bucket)
+@@ -1141,6 +1143,140 @@ dos_hsdir_note_desc_fetch(token_bucket_ctr_t *bucket)
    return false;
  }
  
@@ -300,7 +300,7 @@ index a6e0522b85..74c9c1925c 100644
  /* General API */
  
  /* Take any appropriate actions for the given geoip entry that is about to get
-@@ -1355,6 +1491,15 @@ dos_log_heartbeat(void)
+@@ -1357,6 +1493,15 @@ dos_log_heartbeat(void)
      smartlist_add_asprintf(elems, "[HSDirRefuseUnknownPrevHop disabled]");
    }
  
@@ -378,7 +378,7 @@ index 09cea98e64..4a52ee60a4 100644
 +
  END_CONF_STRUCT(dos_options_t)
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 14ec056450..080d3833a5 100644
+index 4747a1d9ae..2d2bc6c289 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
 @@ -1506,7 +1506,19 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
@@ -417,18 +417,16 @@ index efaead3375..260c3fe319 100644
  
    for (size_t i = 0; i < ARRAY_LENGTH(entries); i++) {
 diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
-index 20e9f1fec4..152a1962d8 100644
+index 62cf25d830..d53a8ca6cd 100644
 --- a/src/feature/relay/relay_metrics.h
 +++ b/src/feature/relay/relay_metrics.h
-@@ -155,8 +155,9 @@ typedef enum {
-   /** Not over an anonymous circuit, because the previous hop never
+@@ -156,7 +156,8 @@ typedef enum {
     * authenticated (see connection_dir_is_anonymous()): 503. */
    HSDIR_GET_SINGLE_HOP,
--  /** Refused by a DoS defense: no answer if it was the second HSDir request
--   * on its circuit, a 503 if HSDirRefuseUnknownPrevHop refused it. */
-+  /** Refused by a DoS defense: no answer, closing the circuit, if it was the
-+   * second HSDir request on its circuit or HSDirFetchShedding shed it, and a
-+   * 503 if HSDirRefuseUnknownPrevHop refused it. */
+   /** Refused, closing the circuit without an answer: the second HSDir
+-   * request on its circuit, or one HSDirRefuseUnknownPrevHop refused. */
++   * request on its circuit, or one HSDirRefuseUnknownPrevHop refused or
++   * HSDirFetchShedding shed. */
    HSDIR_GET_REFUSED,
  
    HSDIR_GET_ACTION_COUNT

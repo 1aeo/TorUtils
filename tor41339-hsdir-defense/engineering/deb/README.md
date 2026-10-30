@@ -81,8 +81,10 @@ on `tor_0.4.9.15-1~resolute+1`. The two source packages share the orig tarball
 (sha256 `1911f5b2…63f3`, identical to dist.torproject.org), and their Debian
 packaging differs only in the changelog entry. The quilt series in
 `debian-patches/` is `0000` (restores `doc/nofooter.conf`, which the release
-tarball omits), then `0001`–`0020`, byte-identical to `../../patches/`; it
-is the same for both builds. `changelog` is the 24.04 build's
+tarball omits), then `0001`–`0020` as they were at the build; it is the
+same for both builds. `../../patches/` has since corrected three comments
+in 0011 and 0013 and added a `BUG()` guard in 0012, which the packages
+don't have (`BUILD-INFO.txt`). `changelog` is the 24.04 build's
 `debian/changelog`; `resolute/changelog` is the 26.04 one.
 
 - `dh_auto_test` (`make test`, the full unit binary), both builds: **1639 tests

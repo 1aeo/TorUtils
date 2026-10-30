@@ -22,8 +22,8 @@ Lines changed per patch (added plus removed), `.8` → `.9` (`sizes.txt`):
 | 0009 | 102 → 102 | 102 → 102 | 0 → 0 |
 | 0010 | 130 → 122 | 49 → 49 | 76 → 66 |
 | 0011 | 286 → 260 | 92 → 93 | 173 → 146 |
-| 0012 | 186 → 173 | 66 → 63 | 101 → 91 |
-| 0013 | 727 → 667 | 202 → 188 | 480 → 434 |
+| 0012 | 186 → 175 | 66 → 65 | 101 → 91 |
+| 0013 | 727 → 665 | 202 → 186 | 480 → 434 |
 | 0014 | 54 → 37 | 9 → 7 | 40 → 25 |
 | 0015 | 1001 → 586 | 349 → 205 | 639 → 374 |
 | 0016 | 113 → 114 | 28 → 28 | 78 → 78 |
@@ -178,6 +178,28 @@ test or doc change in the commit named.
 - The `dir_conn_is_closing()` checks in the HS handlers can't fire, because
   `directory_handle_command()` checks first. That is tor 0.4.9.15's code.
 
+**After the packages were built,** another reviewer read `.9` and found:
+- three comments, added by 0011 and 0013, that still said
+  `HSDirRefuseUnknownPrevHop` answers with a 503 rather than closing the
+  circuit;
+- that `dos_hsdir_note_desc_fetch()` (0012) dereferences the limiter that
+  `hs_cache_get_dir_fetch_limiter()` returns, which is NULL for a
+  descriptor we don't have. Its only caller asks right after finding the
+  descriptor, so it can't be NULL today; 0012 now has a `BUG()` guard,
+  which no test reaches.
+
+`patches/` has both fixes; the `.9` packages don't
+(`../../packages/BUILD-INFO.txt`). Commits 11 to 20 were built and tested
+again (`per-commit.txt`, `practracker.txt`). The same reviewer proposed
+three more changes, left as they are:
+- refactoring `directory_handle_command_post()`, and moving 0013's
+  bandwidth lookup from `dos.c` to `dircache.c`, so that no practracker
+  exception changes: both make the patches larger, for no change in
+  behavior, and the check passes without them;
+- adjusting 0012's bucket only when its options change: the adjustment is
+  two assignments, and making it on every fetch is how a live change of
+  the options applies.
+
 ## Checks
 
 - **`per-commit.txt`:** every commit, built with `--enable-fatal-warnings`:
@@ -222,4 +244,4 @@ test or doc change in the commit named.
   breakdown lab checks the operator tool against the 24.04 package. Both
   `tor` binaries are byte-identical to the ones built before the last edit
   of the commit messages, and the install checks and labs ran on both
-  builds.
+  builds. The packages predate the two fixes made after the review above.

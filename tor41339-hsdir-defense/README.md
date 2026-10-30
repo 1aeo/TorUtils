@@ -135,8 +135,10 @@ limit, among them `connection_exit_begin_conn()`,
 `command_process_create_cell()`, `connection_edge.c` and `rephist.c`.
 
 `packages/` holds the `+tor41339.9` `.deb`s for Ubuntu 24.04 and 26.04:
-tor 0.4.9.15 with 0001–0020, every defense off (see
-`packages/BUILD-INFO.txt`). They replace `+tor41339.8` on every relay. `.9`
+tor 0.4.9.15 with 0001–0020 as they were before two small later changes in
+`patches/` (comment fixes in 0011 and 0013, and a `BUG()` guard in 0012),
+every defense off (see `packages/BUILD-INFO.txt`). They replace
+`+tor41339.8` on every relay. `.9`
 is `.8` with 790 fewer changed lines and the fixes of a three-lens review
 (`engineering/v9-minimize/`). It has `.8`'s options, defaults and metric
 names. What changes: `no_request` also counts the streams closed before

@@ -1,8 +1,9 @@
 # Each commit of the 20-patch series on tor-0.4.9.15, built with
 # --disable-asciidoc --enable-fatal-warnings --disable-zstd: compiler warnings,
 # make check-spaces (exit status/lines reported), lintChanges.py on changes/*
-# (exit status), and the full unit suite (./src/test/test). They ran on
-# commits with these same trees, before the last edit of their messages.
+# (exit status), and the full unit suite (./src/test/test). 1 to 10 ran on
+# commits with the same trees before the last edit of their messages; 11 to
+# 20 ran on these commits, after the two fixes the README's review ends with.
 fd6966b3811dec54d8e8c3e097e0976e4192ad4e warnings=0 spaces=0/0 lint=0 [1605 tests ok.  (31 skipped)] dirserv: Stop unthrottled warnings on malformed HTTP request
 0ca736187af84ae276df38c3b35e93764d4d2b90 warnings=0 spaces=0/0 lint=0 [1606 tests ok.  (31 skipped)] dirserv: Don't buffer request bodies larger than an HS descr
 3f97b2c8449a55841f7dc2e842fdd4a9d8315a1a warnings=0 spaces=0/0 lint=0 [1607 tests ok.  (31 skipped)] dirserv: Discard client input received after the request
@@ -13,13 +14,13 @@ a07c77010aa65edd7f6db15a8a874707fc299d9b warnings=0 spaces=0/0 lint=0 [1611 test
 3ef3e1df19e26995cb4df617be8abd164282259e warnings=0 spaces=0/0 lint=0 [1612 tests ok.  (31 skipped)] relay_metrics: Add a gauge of tunneled directory server conn
 fc310067526f862e0251c5507f52d8aa36d4aa88 warnings=0 spaces=0/0 lint=0 [1612 tests ok.  (31 skipped)] relay_metrics: Make fill_dos_values() table-driven
 3515631840e68bafd5ea8e19f6d0f99ffdeb88ad warnings=0 spaces=0/0 lint=0 [1613 tests ok.  (31 skipped)] dos: Count HSDir requests from unknown previous hops
-6b4e3cd11c4c643ca9bc1d7e35d119c150181dfc warnings=0 spaces=0/0 lint=0 [1616 tests ok.  (31 skipped)] dos: Add an off-by-default HSDir defense against unknown pre
-6445c569d6beb418cd54d1f9ef1cadd61c31371c warnings=0 spaces=0/0 lint=0 [1617 tests ok.  (31 skipped)] hs_cache: Count fetches of each descriptor over a per-descri
-8accd6adc72fe96bafbaeafb9f4cab19e7848877 warnings=0 spaces=0/0 lint=0 [1620 tests ok.  (31 skipped)] dos: Shed onion service descriptor fetches over a byte budge
-c39a3f1e4e243e96b9f330d76bedd67641f30eef warnings=0 spaces=0/0 lint=0 [1620 tests ok.  (31 skipped)] proto_http: Reject a declared body that can never fit
-ee2a1126c9a065b8b14267a4af151e83955072ee warnings=0 spaces=0/0 lint=0 [1625 tests ok.  (31 skipped)] relay_metrics: Count circuits and directory streams by previ
-4910c8b969bd8f34d8587756dba2e44a5f79e55f warnings=0 spaces=0/0 lint=0 [1626 tests ok.  (31 skipped)] dos: Count client CREATE cells over the circuit creation rat
-9c10c892b3c7c8a59c34f5a8c3bf2d89697022db warnings=0 spaces=0/0 lint=0 [1628 tests ok.  (31 skipped)] relay_metrics: Count tunneled directory response bytes by re
-7c6f39db4cd1eea0888c0c87bfdbecbf29462c7a warnings=0 spaces=0/0 lint=0 [1629 tests ok.  (31 skipped)] rephist: Count CREATE and BEGIN_DIR cells per source and min
-d8bb41b719a8ea4172781a0844f21ba01b3dabf5 warnings=0 spaces=0/0 lint=0 [1632 tests ok.  (31 skipped)] relay_metrics: Count HSDir fetches per descriptor and minute
-40a20c40e884d2807471c51e493fac36dbc2dc68 warnings=0 spaces=0/0 lint=0 [1632 tests ok.  (31 skipped)] dos: Count HSDir requests from relays known only by descript
+54376ba39a36cfce939d741ea9997516743beeac warnings=0 spaces=0/0 lint=0 [1616 tests ok.  (31 skipped)] dos: Add an off-by-default HSDir defense against unknown pre
+e2b13900ac3c706c2864d749f5b4f32301b355ce warnings=0 spaces=0/0 lint=0 [1617 tests ok.  (31 skipped)] hs_cache: Count fetches of each descriptor over a per-descri
+27501b0951396422167433846645272d8d2beddc warnings=0 spaces=0/0 lint=0 [1620 tests ok.  (31 skipped)] dos: Shed onion service descriptor fetches over a byte budge
+62884954f0dc687aed0dad5d3eeaa0aa8e2b58d7 warnings=0 spaces=0/0 lint=0 [1620 tests ok.  (31 skipped)] proto_http: Reject a declared body that can never fit
+f07ebc0feb28ef5c13fd6a1a69c0ce591342b588 warnings=0 spaces=0/0 lint=0 [1625 tests ok.  (31 skipped)] relay_metrics: Count circuits and directory streams by previ
+d81c35927cdbc35ab1b2b71a40e96fa554c49b70 warnings=0 spaces=0/0 lint=0 [1626 tests ok.  (31 skipped)] dos: Count client CREATE cells over the circuit creation rat
+7a4cbcaa1f93ec143f88764427e77131e2c687bd warnings=0 spaces=0/0 lint=0 [1628 tests ok.  (31 skipped)] relay_metrics: Count tunneled directory response bytes by re
+8a4964493652b59b09b43727b205061538d9bce2 warnings=0 spaces=0/0 lint=0 [1629 tests ok.  (31 skipped)] rephist: Count CREATE and BEGIN_DIR cells per source and min
+d56e5c0d58df3b9abb900ad8a62e6b25d67a6186 warnings=0 spaces=0/0 lint=0 [1632 tests ok.  (31 skipped)] relay_metrics: Count HSDir fetches per descriptor and minute
+983a84fb876e9a2f90144d095de07e6f50aa61f4 warnings=0 spaces=0/0 lint=0 [1632 tests ok.  (31 skipped)] dos: Count HSDir requests from relays known only by descript

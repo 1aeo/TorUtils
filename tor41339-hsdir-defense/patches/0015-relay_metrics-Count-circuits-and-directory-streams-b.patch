@@ -1,4 +1,4 @@
-From ee2a1126c9a065b8b14267a4af151e83955072ee Mon Sep 17 00:00:00 2001
+From f07ebc0feb28ef5c13fd6a1a69c0ce591342b588 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Thu, 29 Oct 2026 03:55:29 +0000
 Subject: [PATCH 15/20] relay_metrics: Count circuits and directory streams by
@@ -318,7 +318,7 @@ index 260c3fe319..41cdb03755 100644
  
  /** Tunneled directory responses fully handed to their stream (which doesn't
 diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
-index 152a1962d8..e90c9b0e3b 100644
+index d53a8ca6cd..3ea16f6435 100644
 --- a/src/feature/relay/relay_metrics.h
 +++ b/src/feature/relay/relay_metrics.h
 @@ -67,12 +67,16 @@ typedef enum {

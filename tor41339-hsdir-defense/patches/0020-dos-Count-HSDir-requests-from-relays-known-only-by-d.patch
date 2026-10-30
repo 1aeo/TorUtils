@@ -1,4 +1,4 @@
-From 40a20c40e884d2807471c51e493fac36dbc2dc68 Mon Sep 17 00:00:00 2001
+From 983a84fb876e9a2f90144d095de07e6f50aa61f4 Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Fri, 23 Oct 2026 05:33:17 +0000
 Subject: [PATCH 20/20] dos: Count HSDir requests from relays known only by
@@ -77,7 +77,7 @@ index 2c939ecc4e..322123e584 100644
     * HSDirDescriptorFetchRate. */
    DOS_DIR_HSDIR_FETCH_OVER_RATE,
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 7e6602733e..f6ef6341ac 100644
+index 3597e7029e..6c8e031d0f 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
 @@ -18,7 +18,6 @@

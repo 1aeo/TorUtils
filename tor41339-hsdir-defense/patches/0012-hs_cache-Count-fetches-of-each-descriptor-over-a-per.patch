@@ -1,4 +1,4 @@
-From 6445c569d6beb418cd54d1f9ef1cadd61c31371c Mon Sep 17 00:00:00 2001
+From e2b13900ac3c706c2864d749f5b4f32301b355ce Mon Sep 17 00:00:00 2001
 From: 1aeo <github@1aeo.com>
 Date: Wed, 21 Oct 2026 09:05:25 +0000
 Subject: [PATCH 12/20] hs_cache: Count fetches of each descriptor over a
@@ -22,7 +22,7 @@ Part of #41339.
 ---
  changes/ticket41339_dos           |  5 ++
  doc/man/tor.1.txt                 | 14 +++++
- src/core/or/dos.c                 | 20 +++++++
+ src/core/or/dos.c                 | 22 ++++++++
  src/core/or/dos.h                 |  4 ++
  src/core/or/dos_options.inc       |  8 +++
  src/feature/dircache/dircache.c   | 14 ++---
@@ -30,7 +30,7 @@ Part of #41339.
  src/feature/hs/hs_cache.h         |  5 ++
  src/feature/relay/relay_metrics.c |  2 +
  src/test/test_hs_cache.c          | 91 +++++++++++++++++++++++++++++++
- 10 files changed, 166 insertions(+), 7 deletions(-)
+ 10 files changed, 168 insertions(+), 7 deletions(-)
 
 diff --git a/changes/ticket41339_dos b/changes/ticket41339_dos
 index 11b5159f2b..a7c39c49fc 100644
@@ -71,10 +71,10 @@ index 3877608383..f64212968d 100644
  For onion services, mitigations are a work in progress and multiple options
  are currently available.
 diff --git a/src/core/or/dos.c b/src/core/or/dos.c
-index ecb0b36dc8..a6e0522b85 100644
+index ecb0b36dc8..89eecbd481 100644
 --- a/src/core/or/dos.c
 +++ b/src/core/or/dos.c
-@@ -1119,6 +1119,26 @@ dos_get_num_begindir_hsdir_rejected(void)
+@@ -1119,6 +1119,28 @@ dos_get_num_begindir_hsdir_rejected(void)
    return begindir_hsdir_num_rejected;
  }
  
@@ -87,6 +87,8 @@ index ecb0b36dc8..a6e0522b85 100644
 +  const uint32_t rate = MAX(options->HSDirDescriptorFetchRate, 1);
 +  const uint32_t burst = MAX(options->HSDirDescriptorFetchBurst, 1);
 +
++  if (BUG(!bucket))
++    return true;
 +  if (!bucket->cfg.rate)
 +    token_bucket_ctr_init(bucket, rate, burst,
 +                          (uint32_t) monotime_coarse_absolute_sec());
@@ -141,7 +143,7 @@ index ff4534fb7c..09cea98e64 100644
 +
  END_CONF_STRUCT(dos_options_t)
 diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
-index 0c497a1d79..14ec056450 100644
+index ebc3da1adc..4747a1d9ae 100644
 --- a/src/feature/dircache/dircache.c
 +++ b/src/feature/dircache/dircache.c
 @@ -1469,6 +1469,7 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
