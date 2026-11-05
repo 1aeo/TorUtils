@@ -2,7 +2,7 @@
 
 When a relay's main thread is saturated, its `MetricsPort` stops answering. Scrapes wait behind the main `libevent` loop, so Prometheus times out during the overload that operators most need to see. Separately, once tor has `max_sockets - 1` sockets open, `tor_accept_socket_with_extensions()` refuses the scrape connection itself.
 
-While `0.4.9.15` fixed quadratic connection-list removal (`tor#41339`), `MetricsPort` listeners and connections still execute on the single-threaded main loop. We would like feedback on a proof of concept (rebased onto `tor-0.4.9.15`) that serves `MetricsPort` from a dedicated thread, before we open an MR.
+While `0.4.9.15` fixed quadratic connection-list removal (commit b035c0f), `MetricsPort` listeners and connections still execute on the single-threaded main loop. We would like feedback on a proof of concept (rebased onto `tor-0.4.9.15`) that serves `MetricsPort` from a dedicated thread, before we open an MR.
 
 ### Current behavior (production)
 
