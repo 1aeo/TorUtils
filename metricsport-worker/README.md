@@ -4,6 +4,8 @@ A 4-commit patch series rebased onto Tor `0.4.9.15` that answers `MetricsPort` s
 
 Upstream issue: [tpo/core/tor#41458](https://gitlab.torproject.org/tpo/core/tor/-/work_items/41458), "MetricsPort stops answering when the main loop is saturated. Dedicated thread?" Its text (updated for `tor-0.4.9.15`) is in [`GITLAB-ISSUE.md`](./GITLAB-ISSUE.md).
 
+**Maintained branch:** [`tor41458-metricsport-worker`](https://github.com/1aeo/tor/tree/tor41458-metricsport-worker) in `1aeo/tor`, which mirrors upstream tor. It carries this series on `tor-0.4.9.16`; rebase it as upstream moves. The series also applies cleanly to upstream `main` (checked 2026-11-05). `patches/` holds the `tor-0.4.9.15` export.
+
 ## Patch series (`patches/`)
 
 | # | Commit | Files | Lines |
@@ -33,6 +35,8 @@ cd tor && git am /path/to/metricsport-worker/patches/*.patch
 ./src/test/test metrics/.. policy/.. buffer/..   # includes metrics/worker
 make check-spaces && make check-includes && python3 scripts/maint/lintChanges.py changes/ticket41458
 ```
+
+Or start from the maintained branch: `git clone --branch tor41458-metricsport-worker https://github.com/1aeo/tor.git`. On that branch (`tor-0.4.9.16`, Ubuntu 24.04, gcc 13, glibc 2.39), the series builds with `--enable-fatal-warnings`, passes the full unit test suite (1605 ok, 31 skipped), `check-spaces` and `lintChanges.py`, and gave these lab results: 20/20 scrapes with the main thread stopped, 5/5 at the socket limit, every thread filtered under `Sandbox 1`, and no `BUG()` across 50 SIGHUPs in `stress.sh`.
 
 ## Lab scripts (`lab/`)
 
