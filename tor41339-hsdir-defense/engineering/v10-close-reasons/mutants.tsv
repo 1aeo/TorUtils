@@ -1,0 +1,32 @@
+# Mutants of the lines 0021 adds, each built at the tip (tor commit
+# 0ec553a702) and run with hs_cache/dir_close_reason_metrics,
+# hs_cache/prev_hop_metric_series, hs_cache/hsdir_prev_hop_defense,
+# hs_cache/hsdir_desc_fetch_shedding, dos/begindir_refused and oom/..
+# (--enable-fatal-warnings). killed_by is the first failing check; a
+# crash before any check shows as -.
+id	patch	result	mutation	killed_by
+m01	0021	killed	a RELAY_END on the stream notes nothing	test_hs_cache.c:1492
+m02	0021	killed	a DATA cell over the stream window notes nothing	test_hs_cache.c:1517
+m03	0021	killed	a full cell queue tags the circuit unknown	test_hs_cache.c:1545
+m04	0021	killed	a full cell queue tags the circuit only toward the client	test_hs_cache.c:1552
+m05	0021	killed	the BEGIN_DIR rate limit closes the circuit untagged	test_dos.c:910
+m06	0021	killed	marking an OR circuit for close notes none of its streams	test_dos.c:910
+m07	0021	killed	the mapping uses the close reason with its remote flag	test_hs_cache.c:1473
+m08	0021	killed	a DESTROY maps to other	test_hs_cache.c:1472
+m09	0021	killed	the walk also notes streams already marked for close	test_hs_cache.c:1502
+m10	0021	killed	the mapped reason overwrites a defense's tag	test_dos.c:910
+m11	0021	killed	the OOM handler closing an exit connection notes nothing	test_oom.c:422
+m12	0021	killed	the OOM handler tags the circuit unknown	test_oom.c:355
+m13	0021	killed	a stalled connection notes nothing	test_hs_cache.c:1589
+m14	0021	killed	the second onion service request closes the circuit untagged	test_hs_cache.c:1531
+m15	0021	killed	HSDirRefuseUnknownPrevHop closes the circuit untagged	test_hs_cache.c:2077
+m16	0021	killed	HSDirFetchShedding tags the circuit unknown	test_hs_cache.c:2264
+m17	0021	killed	a later cause overwrites the directory connection's first	test_hs_cache.c:1589
+m18	0021	killed	the counter is never incremented	test_hs_cache.c:1472
+m19	0021	killed	circuit_dead is counted as no_request	test_hs_cache.c:1531
+m20	0021	killed	a full queue on an origin circuit is tagged as an OR circuit	-
+m21	0021	killed	HSDirRefuseUnknownPrevHop tags the circuit after marking it	test_hs_cache.c:2077
+m22	0021	killed	HSDirFetchShedding tags the circuit after marking it	test_hs_cache.c:2264
+m23	0021	killed	the OOM handler tags the circuit after marking it	test_oom.c:355
+m24	0021	killed	every request is counted under the first previous hop	test_hs_cache.c:1472
+m25	0021	killed	the begindir_rate and oom labels are swapped	test_hs_cache.c:1599

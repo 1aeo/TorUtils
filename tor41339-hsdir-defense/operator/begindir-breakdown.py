@@ -7,7 +7,9 @@ the BEGIN_DIR streams were: onion service descriptor fetches and uploads,
 other directory requests, or streams that never sent a request. On
 +tor41339.8 and later (tor 0.4.9.15) it also shows what tor's own BEGIN_DIR limits
 refused: a second onion service request on a circuit, which tor 0.4.9.15
-always refuses, and BEGIN_DIR cells over the per-circuit rate. With
+always refuses, and BEGIN_DIR cells over the per-circuit rate. On
++tor41339.10 it also shows what first closed the streams that never sent a
+request and the requests dropped unread. With
 --control it also counts the relay's open OR connections by kind of peer
 (relay we know, unlisted relay identity, or unauthenticated client)
 from GETINFO orconn-status.
@@ -200,6 +202,14 @@ REQUEST_TYPES = (('hs_get', 'onion service descriptor fetches'),
 # source's, or its descriptor's, in the same minute.
 BANDS = ('1', '2_10', '11_100', '101_1000', '1001_plus')
 HOPS = ('client', 'known_relay', 'unknown_relay')
+# +tor41339.10 counts the no_request and circuit_dead requests again, by the
+# first cause tor noted of their closing (the reason label). DEFENSES are the
+# reasons that name the relay's own defenses closing the circuit: tor
+# 0.4.9.15's BEGIN_DIR rate limit and limit of one onion service request per
+# circuit, HSDirRefuseUnknownPrevHop and HSDirFetchShedding.
+CLOSE = 'tor_relay_begindir_close_reason_total'
+DEFENSES = ('begindir_rate', 'hsdir_second_request', 'hsdir_unknown_prev_hop',
+            'hsdir_fetch_shed')
 # The kinds of request the conclusions name, as groups of
 # tor_relay_begindir_request_total types: a short name, what they were, and
 # their types.
@@ -265,6 +275,16 @@ def mean_gauge(a, b, name, **labels):
 
 def pct(part, whole):
     return 100.0 * part / whole if whole else 0.0
+
+
+def close_reasons(b, d, t):
+    """(reason, count) of the requests of type <t> that tor closed unread,
+    most first, nonzero only: none before +tor41339.10."""
+    why = {dict(ls).get('reason') for n, ls in b
+           if n == CLOSE and ('type', t) in ls} - {None}
+    v = [(r, d(CLOSE, type=t, reason=r)) for r in why]
+    # By name too: a set's order changes from run to run.
+    return sorted((x for x in v if x[1] > 0), key=lambda x: (-x[1], x[0]))
 
 
 def size(v, rate):
@@ -490,12 +510,42 @@ def conclude(d, a, b, rate, elapsed, streams, anon):
                         pct(d(es, circuit='hsdir'), empty)))
         say(line)
 
+    # +tor41339.10: what first closed the streams that sent nothing, and the
+    # requests dropped unread.
+    for t, what in (('no_request', 'empty streams'),
+                    ('circuit_dead', 'requests dropped unread')):
+        why = close_reasons(b, d, t)
+        whole = d(req, type=t)
+        if why:
+            own = pct(sum(v for x, v in why if x in DEFENSES), whole)
+            say('What first closed the %s, by the cause tor noted: %s (%s '
+                "by the relay's own defenses%s)."
+                % (what, '; '.join('%s %.0f%%' % (x, pct(v, whole))
+                                   for x, v in why),
+                   ('%.0f%%' % own) if own else 'none',
+                   '; unknown is a close tor does not note, such as at '
+                   'hibernation or an exit policy reload'
+                   if 'unknown' in dict(why) else ''))
+        # From each previous hop, a type's causes add up to its requests,
+        # exactly, unless a count is wrong.
+        for h in HOPS if has(b, CLOSE, type=t) else ():
+            got = d(CLOSE, type=t, prev_hop=h)
+            want = d(req, type=t, prev_hop=h)
+            apart = abs(got - want) * (elapsed if rate else 1)
+            if apart >= 0.5:
+                say('The causes counted for the %s from %s add up to %s, but '
+                    '%s{type="%s",prev_hop="%s"} is %s, %.0f requests apart: '
+                    'a counting bug.'
+                    % (what, h, r(got), req, t, h, r(want), apart))
+
     if not proposed:
+        ended = ('how long empty streams lasted and on which circuits'
+                 if has(b, CLOSE) else
+                 'how empty streams end and on which circuits')
         say('Not in these metrics (see analysis/v8-metrics-proposal.md): '
-            'which kinds of request sit deep in their circuits, how empty '
-            'streams end and on which circuits, the response bytes each '
-            'rule would avoid, descriptor and not-found bytes apart, and '
-            'bytes dropped at close.')
+            'which kinds of request sit deep in their circuits, %s, the '
+            'response bytes each rule would avoid, descriptor and not-found '
+            'bytes apart, and bytes dropped at close.' % ended)
 
     print('What this says (%s):' % ('rates over %.1f s' % elapsed if rate
                                     else 'since the relay started'))
@@ -504,7 +554,7 @@ def conclude(d, a, b, rate, elapsed, streams, anon):
             if para.startswith('|'):    # a table row, as it is
                 print(('       ' + para[1:]).rstrip())
                 continue
-            lines = textwrap.wrap(para, 73)
+            lines = textwrap.wrap(para, 73, break_long_words=False)
             print((('  %d. ' % i) if j == 0 else '     ') + lines[0])
             for l in lines[1:]:
                 print('     ' + l)
@@ -664,6 +714,10 @@ def main():
             if has(b, 'tor_relay_begindir_request_total', type=t):
                 line('    ' + what, 'tor_relay_begindir_request_total',
                      type=t)
+                # +tor41339.10: no_request and circuit_dead by what first
+                # closed them.
+                for why, _ in close_reasons(b, d, t):
+                    line('      closed: ' + why, CLOSE, type=t, reason=why)
         line('circuits that sent BEGIN_DIR',
              'tor_relay_begindir_cell_total', nth='1')
         per, past10, past100 = [], [], []

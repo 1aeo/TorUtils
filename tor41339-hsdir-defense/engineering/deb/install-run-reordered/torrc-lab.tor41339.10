@@ -1,0 +1,15 @@
+TestingTorNetwork 1
+DirAuthority fakeauth orport=5000 no-v2 v3ident=0000000000000000000000000000000000000001 127.0.0.1:7000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0001
+DataDirectory /var/lib/tor-lab
+User debian-tor
+Nickname deblab
+Address 127.0.0.1
+ORPort 127.0.0.1:5650
+PublishServerDescriptor 0
+AssumeReachable 1
+ExitRelay 0
+SocksPort 0
+MetricsPort 127.0.0.1:9650
+MetricsPortPolicy accept 127.0.0.1
+Sandbox 0
+Log notice file /var/lib/tor-lab/notice.log

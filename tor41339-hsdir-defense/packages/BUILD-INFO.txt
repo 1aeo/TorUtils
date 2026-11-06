@@ -1,3 +1,99 @@
+Provenance: tor 0.4.9.15 + the tor#41339 series, +tor41339.10, amd64, a
+canary build beside +tor41339.9 (the rest of this file, as it was), for
+  Ubuntu 24.04 (noble):    tor_0.4.9.15-1~noble+1+tor41339.10_amd64.deb
+  Ubuntu 26.04 (resolute): tor_0.4.9.15-1~resolute+1+tor41339.10_amd64.deb
+plus tor-geoipdb (all) for each. .9 stays the fleet build. .10 is .9's
+series exactly as built (0000-0020 as listed for .9 below) plus 0021,
+which adds one MetricsPort counter family and changes nothing else: .9's
+options, defaults and metric names, and
+tor_relay_begindir_close_reason_total{type,prev_hop,reason}, 78 series
+(no_request and circuit_dead, by 3 previous hops and 13 reasons), so 199
+new series in all. For each type and previous hop, its reasons add up to
+tor_relay_begindir_request_total{type,prev_hop}.
+
+Checksums: SHA256SUMS, which has the .10 lines after .9's. The tor package
+and its binary:
+  tor_0.4.9.15-1~noble+1+tor41339.10_amd64.deb     sha256 e3773afec2bc14df3278fb8c2aaa6b2dab96d14ca86c457cb40f8e089043d7e4
+  tor_0.4.9.15-1~resolute+1+tor41339.10_amd64.deb  sha256 46b0fe916ae7b6bccd3e77b3e730707eb97422b7d2ff1b8ded22bf147c584629
+  usr/bin/tor in the noble .deb                    sha256 09bdb55cf6f9a3715d8ecfc8fddb1b66a1dc5cd7a051bfb17453aa039492aa41
+  usr/bin/tor in the resolute .deb                 sha256 0a5e3d0714e608d36f7ddaf263819ef103b40f72fa32b4e86ef32d23ce5395b9
+
+Source packages: the five listed for .9 below, with the same sha256.
+deb.torproject.org no longer serves the two 0.4.9.15 backport sources, so
+they were rebuilt from Debian's tor 0.4.9.15-1 and the orig tarball
+(../engineering/deb/REBUILD-FROM-CURRENT-SERIES.md):
+  tor_0.4.9.15-1.dsc      sha256 f9221ae36764a04b5eacef28ee8d146fd1ce43de5b0297058a9065a9ac79093d
+                          https://snapshot.debian.org/file/03e0ced847faea5f87103ca7917141a29972e825 (by its sha1)
+  tor_0.4.9.15-1.diff.gz  sha256 a2e8beab0e4ba9649013573816bfb5ee5818786cdd5beba72ffb2a8a26c00f89
+
+Quilt series applied (debian/patches), identical for both builds: 0000-0020
+as listed for .9 below, then 0021, git format-patch of tor commit
+0ec553a702 (parent 40a20c40e8, .9's 0020; the patch ids of its 21 commits
+since tor-0.4.9.15 are those of 0001-0021 as built), byte-identical in
+../patches/ and ../engineering/deb/build-reordered/debian-patches/ (it
+also applies with git am on ../patches/0001-0020). The driver writes the
+series file from the 22 staged patches; .9's series file, below and in
+debian-patches/, is unchanged:
+  43d7cf10f2d252a9a24b85018ec3f5c625ac7ba86920079a1faf35ca79784b89  0021-relay_metrics-Count-tunneled-directory-streams-close.patch
+  be5586233460f3ea949339522f5b213386f0069c700d8cfe1d89963854e499f9  series (.10's: .9's and the 0021 line)
+
+Builders: .9's driver (below), in fresh containers of .9's two images (the
+same two digests), with REV=10, EXPECT_PATCHES=22 and the CHANGELOG_MSG in
+../engineering/deb/REBUILD-FROM-CURRENT-SERIES.md. Unlike .9, both ran
+under amd64 emulation on an arm64 host:
+  noble:    Rosetta 2, on one CPU (with more, gcc's -flto=auto jobserver
+            crashed lto1 under emulation);
+  resolute: QEMU 10.2.3 user-mode, on 8 CPUs (Rosetta and older QEMU lack
+            the openat2 system call that 26.04's tar uses).
+Tor's seccomp sandbox cannot load under either, so both set
+TOR_SKIP_TESTCASES=sandbox/.., which skips the 7 sandbox tests .9 ran (the
+other 2 are skipped in every build). Otherwise each build is .9's for its
+release: the same Depends, package file list and linked libraries, and the
+same build-dependency versions, except a newer Ubuntu update of
+linux-libc-dev (noble 6.8.0-149.149, resolute 7.0.0-43.43) and, on noble,
+of libsqlite3-0 (3.45.1-1ubuntu2.9), which tor does not link.
+
+dh_auto_test (make test), both builds: 1634 tests ok, 31 skipped, 0
+failed: .9's 1639 and 0021's 2 make 1641, of which the 7 sandbox tests
+were skipped, on top of .9's 24. Compiler warnings on lines the series
+adds: none in either build; those in files it touches are .9's, in
+unchanged upstream test code (test_hs_descriptor.c:151, and
+test_dir_handle_get.c:2413 with gcc 15 only). Each binary contains every
+metric family and option name .9's does, and one family more,
+tor_relay_begindir_close_reason_total. Between the two builds, as for .9:
+the same configure summary and line, package file list, Depends, linked
+libraries, /etc files, systemd units, manual pages and option defaults.
+
+Install check, offline: a container of each release's image installed only
+the built tor .deb, with its dependencies and curl and procps from the
+Ubuntu archive, and was committed;
+../engineering/deb/install-run-reordered/in-container.sh with REV=10 then
+ran in a fresh container of that image with no network (its apt-get update
+fails, and its install finds the package already there). The relay's only
+authority is a fake one on loopback, so it cannot bootstrap, and that one
+check fails, as expected; Sandbox 0, as above. Every other check passes in
+both: the version, the 5 options and their defaults, the dropped option
+names, all 199 new series with exactly their labels (78 of them 0021's,
+all 0), none of the replaced names, tor 0.4.9.15's 3 BEGIN_DIR counts, no
+bad syscall (which cannot occur here: with Sandbox 0, tor's seccomp filter
+never loaded, Seccomp_filters: 1, Docker's alone) and a clean SIGTERM.
+Each transcript ends "RESULT: FAIL" for the bootstrap check alone
+(../engineering/deb/install-run-reordered/install-run-transcript.tor41339.10.txt
+and ../engineering/deb/resolute/install-run-transcript.tor41339.10.txt,
+with their torrc-lab.tor41339.10). The live controls and the breakdown lab
+were not rerun for .10. So no .10 binary has yet run under Sandbox 1: run
+it once there on amd64 (run-deb-test.sh) before a relay that uses Sandbox 1
+takes the canary.
+
+Built from git with --enable-fatal-warnings, 0021 passes make check (1641
+unit tests ok), and also with --disable-module-relay; practracker reports
+the same problems as .9, with run_connection_housekeeping()'s exception
+raised from 123 to 124 lines; 25 mutants, all killed
+(../engineering/v10-close-reasons/mutants.tsv); or_circuit_t and
+dir_connection_t are no larger.
+
+========================================================================
+
 Provenance: tor 0.4.9.15 + the tor#41339 series, +tor41339.9, amd64, for
   Ubuntu 24.04 (noble):    tor_0.4.9.15-1~noble+1+tor41339.9_amd64.deb
   Ubuntu 26.04 (resolute): tor_0.4.9.15-1~resolute+1+tor41339.9_amd64.deb

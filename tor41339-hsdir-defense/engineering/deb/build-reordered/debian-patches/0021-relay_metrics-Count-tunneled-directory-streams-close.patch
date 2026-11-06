@@ -1,0 +1,1026 @@
+From 0ec553a7028f6e4463b439fe9d03ec6d240a7712 Mon Sep 17 00:00:00 2001
+From: 1aeo <github@1aeo.com>
+Date: Fri, 6 Nov 2026 00:30:57 -0800
+Subject: [PATCH] relay_metrics: Count tunneled directory streams closed unread
+ by cause
+
+tor_relay_begindir_request_total counts the tunneled directory streams
+an HSDir closes without reading a request, as "no_request" (nothing
+arrived) and "circuit_dead" (a request dropped unread because its stream
+or circuit was closing), but not what closed them. By the time we count
+them, the cause is gone: connection_edge_destroy() rewrites the stream's
+end reason to DESTROY, and the exit connection is freed before the
+directory connection reads its end.
+
+Note the first cause where it happens. A RELAY_END on the stream, a DATA
+cell over its window, a stall, and the out-of-memory handler closing the
+stream go on the directory connection. The BEGIN_DIR rate limit, the
+onion service request defenses, a full cell queue and the out-of-memory
+handler go on the circuit, since the reasons they close it with don't
+say which closed it. When we mark an OR circuit for close, we tell the
+directory connections of its streams why, and otherwise map DESTROY, a
+closed channel, a protocol violation and any other reason. A stream we
+are closing already keeps its own cause, or none.
+
+relay_note_dir_request() counts each of these requests once, by that
+cause, as tor_relay_begindir_close_reason_total{type,prev_hop,reason}:
+the reasons of each type and previous hop add up to its requests.
+
+The causes take four bits of padding on the directory connection and on
+the circuit: neither grows.
+
+Part of #41339.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ changes/ticket41339_metrics               |   7 +
+ scripts/maint/practracker/exceptions.txt  |   2 +-
+ src/core/mainloop/mainloop.c              |   1 +
+ src/core/or/circuitlist.c                 |  22 ++
+ src/core/or/connection_edge.c             |   1 +
+ src/core/or/or.h                          |  21 ++
+ src/core/or/or_circuit_st.h               |   3 +
+ src/core/or/relay.c                       |   5 +
+ src/feature/dircache/dircache.c           |   8 +-
+ src/feature/dircommon/dir_connection_st.h |   3 +
+ src/feature/dircommon/directory.c         |  13 +
+ src/feature/dircommon/directory.h         |   2 +
+ src/feature/relay/relay_metrics.c         |  63 ++++-
+ src/feature/relay/relay_metrics.h         |   3 +
+ src/test/test_dos.c                       |  20 +-
+ src/test/test_hs_cache.c                  | 289 ++++++++++++++++++++--
+ src/test/test_oom.c                       |  74 ++++++
+ 17 files changed, 515 insertions(+), 22 deletions(-)
+
+diff --git a/changes/ticket41339_metrics b/changes/ticket41339_metrics
+index 6f75d02749..2519eb20b8 100644
+--- a/changes/ticket41339_metrics
++++ b/changes/ticket41339_metrics
+@@ -60,3 +60,10 @@
+       HSDirRefuseUnknownPrevHop treats these as known: the count shows how much
+       traffic comes from relays that recently left the consensus. Part of
+       ticket 41339.
++    - Count the tunneled directory requests of types "no_request" and
++      "circuit_dead" by the first cause we noted for their closing, as
++      tor_relay_begindir_close_reason_total{type,prev_hop,reason}: a
++      RELAY_END, a DESTROY, a closed channel, a protocol violation, the
++      BEGIN_DIR rate limit, an onion service request defense, a full cell
++      queue, the out-of-memory handler, a stall, or another reason closing
++      its circuit. Part of ticket 41339.
+diff --git a/scripts/maint/practracker/exceptions.txt b/scripts/maint/practracker/exceptions.txt
+index ca776a41cd..75e1fa28f8 100644
+--- a/scripts/maint/practracker/exceptions.txt
++++ b/scripts/maint/practracker/exceptions.txt
+@@ -75,7 +75,7 @@ problem dependency-violation /src/core/mainloop/connection.c 47
+ problem dependency-violation /src/core/mainloop/cpuworker.c 12
+ problem include-count /src/core/mainloop/mainloop.c 64
+ problem function-size /src/core/mainloop/mainloop.c:conn_close_if_marked() 107
+-problem function-size /src/core/mainloop/mainloop.c:run_connection_housekeeping() 123
++problem function-size /src/core/mainloop/mainloop.c:run_connection_housekeeping() 124
+ problem dependency-violation /src/core/mainloop/mainloop.c 50
+ problem dependency-violation /src/core/mainloop/mainloop_pubsub.c 1
+ problem dependency-violation /src/core/mainloop/mainloop_sys.c 1
+diff --git a/src/core/mainloop/mainloop.c b/src/core/mainloop/mainloop.c
+index 4ebfd1341f..0fd6eb4fae 100644
+--- a/src/core/mainloop/mainloop.c
++++ b/src/core/mainloop/mainloop.c
+@@ -1266,6 +1266,7 @@ run_connection_housekeeping(int i, time_t now)
+                "download.");
+       connection_dir_reached_eof(TO_DIR_CONN(conn));
+     } else {
++      connection_dir_note_close_reason(conn, DIR_CLOSE_TIMEOUT);
+       connection_mark_for_close(conn);
+     }
+     return;
+diff --git a/src/core/or/circuitlist.c b/src/core/or/circuitlist.c
+index 3a57d683ee..2971886398 100644
+--- a/src/core/or/circuitlist.c
++++ b/src/core/or/circuitlist.c
+@@ -2182,6 +2182,24 @@ circuit_synchronize_written_or_bandwidth(const circuit_t *c,
+   bwhist_note_bytes_written(written_sync, time(NULL), is_ipv6);
+ }
+ 
++/** Tell the directory connections tunneled over the OR circuit <b>circ</b>,
++ * which we are closing for <b>reason</b> (an END_CIRC_REASON_*, without
++ * END_CIRC_REASON_FLAG_REMOTE), why their circuit is closing. Those whose
++ * stream we are closing already, or that noted a cause, keep theirs. */
++static void
++circuit_note_dir_streams_closing(or_circuit_t *circ, int reason)
++{
++  if (!circ->dir_close_reason)
++    circ->dir_close_reason =
++      reason == END_CIRC_REASON_DESTROYED ? DIR_CLOSE_DESTROY_CELL :
++      reason == END_CIRC_REASON_CHANNEL_CLOSED ? DIR_CLOSE_CHANNEL_CLOSED :
++      reason == END_CIRC_REASON_TORPROTOCOL ? DIR_CLOSE_PROTOCOL :
++      DIR_CLOSE_OTHER;
++  for (edge_connection_t *s = circ->n_streams; s; s = s->next_stream)
++    if (!TO_CONN(s)->marked_for_close)
++      connection_dir_note_close_reason(TO_CONN(s), circ->dir_close_reason);
++}
++
+ /** Mark <b>circ</b> to be closed next time we call
+  * circuit_close_all_marked(). Do any cleanup needed:
+  *   - If state is CHAN_WAIT, remove circ from circuits_pending_chans.
+@@ -2282,6 +2300,7 @@ circuit_mark_for_close_, (circuit_t *circ, int reason, int line,
+ 
+   if (!CIRCUIT_IS_ORIGIN(circ)) {
+     or_circuit_t *or_circ = TO_OR_CIRCUIT(circ);
++    circuit_note_dir_streams_closing(or_circ, reason);
+     if (or_circ->rend_splice) {
+       if (!or_circ->rend_splice->base_.marked_for_close) {
+         /* do this after marking this circuit, to avoid infinite recursion. */
+@@ -2779,6 +2798,7 @@ circuits_handle_oom(size_t current_allocation)
+         if (!conn->marked_for_close) {
+           if (CONN_IS_EDGE(conn)) {
+             TO_EDGE_CONN(conn)->end_reason = END_STREAM_REASON_RESOURCELIMIT;
++            connection_dir_note_close_reason(conn, DIR_CLOSE_OOM);
+           }
+           connection_mark_for_close(conn);
+         }
+@@ -2800,6 +2820,8 @@ circuits_handle_oom(size_t current_allocation)
+     n = n_cells_in_circ_queues(circ);
+     const size_t half_stream_alloc = circuit_alloc_in_half_streams(circ);
+     if (! circ->marked_for_close) {
++      if (! CIRCUIT_IS_ORIGIN(circ))
++        TO_OR_CIRCUIT(circ)->dir_close_reason = DIR_CLOSE_OOM;
+       circuit_mark_for_close(circ, END_CIRC_REASON_RESOURCELIMIT);
+     }
+     marked_circuit_free_cells(circ);
+diff --git a/src/core/or/connection_edge.c b/src/core/or/connection_edge.c
+index 6252898d79..72ce4edba3 100644
+--- a/src/core/or/connection_edge.c
++++ b/src/core/or/connection_edge.c
+@@ -4258,6 +4258,7 @@ connection_exit_begin_conn(const relay_msg_t *msg, circuit_t *circ)
+                                       END_STREAM_REASON_MISC, layer_hint);
+         return 0;
+       case DOS_STREAM_DEFENSE_CLOSE_CIRCUIT:
++        or_circ->dir_close_reason = DIR_CLOSE_BEGINDIR_RATE;
+         return -END_CIRC_REASON_RESOURCELIMIT;
+     }
+     if (dos_begindir_should_refuse(or_circ)) {
+diff --git a/src/core/or/or.h b/src/core/or/or.h
+index 42f863f607..06a9938a80 100644
+--- a/src/core/or/or.h
++++ b/src/core/or/or.h
+@@ -450,6 +450,27 @@ typedef enum channel_prev_hop_t {
+   CHANNEL_PREV_HOP_COUNT
+ } channel_prev_hop_t;
+ 
++/** What closed a tunneled directory server connection, or its stream or
++ * circuit: the first cause we noted. We count it for the connections we
++ * closed without reading a request: see relay_note_dir_request(). */
++typedef enum dir_close_reason_t {
++  DIR_CLOSE_UNKNOWN = 0, /**< Nothing we noted. */
++  DIR_CLOSE_END_CELL, /**< Its stream received a RELAY_END. */
++  DIR_CLOSE_DESTROY_CELL, /**< Its circuit received a DESTROY. */
++  DIR_CLOSE_CHANNEL_CLOSED, /**< A channel of its circuit closed. */
++  DIR_CLOSE_TIMEOUT, /**< It stalled for TestingDirConnectionMaxStall. */
++  DIR_CLOSE_BEGINDIR_RATE, /**< DoSBeginDirRate closed its circuit. */
++  DIR_CLOSE_HSDIR_SECOND_REQUEST, /**< Its circuit's second HSDir request. */
++  DIR_CLOSE_HSDIR_UNKNOWN_PREV_HOP, /**< By HSDirRefuseUnknownPrevHop. */
++  DIR_CLOSE_HSDIR_FETCH_SHED, /**< HSDirFetchShedding closed its circuit. */
++  DIR_CLOSE_CELL_QUEUE_FULL, /**< Its circuit's cell queue was full. */
++  DIR_CLOSE_OOM, /**< The out-of-memory handler closed it. */
++  DIR_CLOSE_PROTOCOL, /**< Another protocol violation closed its circuit. */
++  DIR_CLOSE_OTHER, /**< Its circuit closed for any other reason. */
++
++  DIR_CLOSE_REASON_COUNT
++} dir_close_reason_t;
++
+ /** The cells one source of circuits sent in its latest minute: see
+  * rep_hist_note_source_cell(). */
+ typedef struct source_minute_t {
+diff --git a/src/core/or/or_circuit_st.h b/src/core/or/or_circuit_st.h
+index 6e9f37ea1e..c5bbbcc217 100644
+--- a/src/core/or/or_circuit_st.h
++++ b/src/core/or/or_circuit_st.h
+@@ -118,6 +118,9 @@ struct or_circuit_t {
+   /** Number of BEGIN_DIR cells received on this circuit, stopping at
+    * NTH_BAND_MAX. */
+   unsigned int n_begindir : 10;
++  /** Why we close this circuit, for its tunneled directory streams: a
++   * dir_close_reason_t, set right before or when we mark it for close. */
++  unsigned int dir_close_reason : 4;
+ 
+   /** INTRODUCE2 cell bucket controlling how much can go on this circuit. Only
+    * used if this is a service introduction circuit at the intro point
+diff --git a/src/core/or/relay.c b/src/core/or/relay.c
+index 528981ca8a..d391ff8ace 100644
+--- a/src/core/or/relay.c
++++ b/src/core/or/relay.c
+@@ -1726,6 +1726,7 @@ handle_relay_msg(const relay_msg_t *msg, circuit_t *circ,
+       if (sendme_stream_data_received(conn) < 0) {
+         log_fn(LOG_PROTOCOL_WARN, LD_PROTOCOL,
+                "(relay data) conn deliver_window below 0. Killing.");
++        connection_dir_note_close_reason(TO_CONN(conn), DIR_CLOSE_PROTOCOL);
+         connection_edge_end_close(conn, END_STREAM_REASON_TORPROTOCOL);
+         return -END_CIRC_REASON_TORPROTOCOL;
+       }
+@@ -1851,6 +1852,7 @@ handle_relay_msg(const relay_msg_t *msg, circuit_t *circ,
+       if (!conn->base_.marked_for_close) {
+         /* only mark it if not already marked. it's possible to
+          * get the 'end' right around when the client hangs up on us. */
++        connection_dir_note_close_reason(TO_CONN(conn), DIR_CLOSE_END_CELL);
+         connection_mark_and_flush(TO_CONN(conn));
+ 
+         /* Total all valid application bytes delivered */
+@@ -3490,6 +3492,9 @@ append_cell_to_circuit_queue(circuit_t *circ, channel_t *chan,
+            (exitward) ? "Outbound" : "Inbound", queue->n,
+            max_queue_size);
+     stats_n_circ_max_cell_reached++;
++    /* Our callers close it, for a reason that doesn't always say why. */
++    if (CIRCUIT_IS_ORCIRC(circ))
++      TO_OR_CIRCUIT(circ)->dir_close_reason = DIR_CLOSE_CELL_QUEUE_FULL;
+     return -1;
+   }
+ 
+diff --git a/src/feature/dircache/dircache.c b/src/feature/dircache/dircache.c
+index f6ef6341ac..a7c37d3ea0 100644
+--- a/src/feature/dircache/dircache.c
++++ b/src/feature/dircache/dircache.c
+@@ -1425,6 +1425,7 @@ hsdir_request_allowed_on_circuit(dir_connection_t *conn)
+ 
+   if (circ->already_received_hsdir_request) {
+     dos_note_begindir_hsdir_rejected();
++    circ->dir_close_reason = DIR_CLOSE_HSDIR_SECOND_REQUEST;
+     circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_TORPROTOCOL);
+     return false;
+   }
+@@ -1460,6 +1461,7 @@ allow_hs_dir_request(dir_connection_t *conn)
+   log_fn_ratelim(&prev_hop_lim, LOG_PROTOCOL_WARN, LD_REND,
+                  "Refusing an onion service directory request from unknown "
+                  "relay %s.", safe_str(channel_describe_peer(circ->p_chan)));
++  circ->dir_close_reason = DIR_CLOSE_HSDIR_UNKNOWN_PREV_HOP;
+   circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_RESOURCELIMIT);
+   return false;
+ }
+@@ -1523,9 +1525,9 @@ handle_get_hs_descriptor_v3(dir_connection_t *conn,
+                    "Closing a circuit that fetched an onion service "
+                    "descriptor while we are over HSDirFetchBudget.");
+     relay_increment_hsdir_get_action(HSDIR_GET_REFUSED);
+-    circuit_mark_for_close(
+-                       TO_EDGE_CONN(TO_CONN(conn)->linked_conn)->on_circuit,
+-                       END_CIRC_REASON_RESOURCELIMIT);
++    circuit_t *circ = TO_EDGE_CONN(TO_CONN(conn)->linked_conn)->on_circuit;
++    TO_OR_CIRCUIT(circ)->dir_close_reason = DIR_CLOSE_HSDIR_FETCH_SHED;
++    circuit_mark_for_close(circ, END_CIRC_REASON_RESOURCELIMIT);
+     goto done;
+   }
+ 
+diff --git a/src/feature/dircommon/dir_connection_st.h b/src/feature/dircommon/dir_connection_st.h
+index 395405b1d3..2b1dbb4227 100644
+--- a/src/feature/dircommon/dir_connection_st.h
++++ b/src/feature/dircommon/dir_connection_st.h
+@@ -37,6 +37,9 @@ struct dir_connection_t {
+   /** For a tunneled (BEGIN_DIR) server connection: 0 until its request is
+    * counted, then one more than its dir_request_type_t. */
+   unsigned int request_type:4;
++  /** For a tunneled (BEGIN_DIR) server connection: the first cause we
++   * noted of its closing, a dir_close_reason_t. */
++  unsigned int close_reason:4;
+ 
+   /** If we're fetching descriptors, what router purpose shall we assign
+    * to them? */
+diff --git a/src/feature/dircommon/directory.c b/src/feature/dircommon/directory.c
+index 6846429ce1..c775308a01 100644
+--- a/src/feature/dircommon/directory.c
++++ b/src/feature/dircommon/directory.c
+@@ -523,6 +523,19 @@ connection_dir_process_inbuf(dir_connection_t *conn)
+   return 0;
+ }
+ 
++/** Note <b>reason</b> as what is closing the directory connection
++ * <b>conn</b>, or the one linked to the stream <b>conn</b>, unless it noted
++ * a cause already. relay_note_dir_request() counts the first one of a
++ * tunneled server connection we close without reading a request. */
++void
++connection_dir_note_close_reason(connection_t *conn, dir_close_reason_t reason)
++{
++  if (conn->type != CONN_TYPE_DIR)
++    conn = conn->linked_conn;
++  if (conn && conn->type == CONN_TYPE_DIR && !TO_DIR_CONN(conn)->close_reason)
++    TO_DIR_CONN(conn)->close_reason = reason;
++}
++
+ /** Called when we're about to finally unlink and free a directory connection:
+  * perform necessary accounting and cleanup */
+ void
+diff --git a/src/feature/dircommon/directory.h b/src/feature/dircommon/directory.h
+index ffb2a87257..e143235854 100644
+--- a/src/feature/dircommon/directory.h
++++ b/src/feature/dircommon/directory.h
+@@ -101,6 +101,8 @@ int connection_dir_process_inbuf(dir_connection_t *conn);
+ int connection_dir_finished_flushing(dir_connection_t *conn);
+ int connection_dir_finished_connecting(dir_connection_t *conn);
+ void connection_dir_about_to_close(dir_connection_t *dir_conn);
++void connection_dir_note_close_reason(connection_t *conn,
++                                      dir_close_reason_t reason);
+ 
+ #define DSR_HEX       (1<<0)
+ #define DSR_BASE64    (1<<1)
+diff --git a/src/feature/relay/relay_metrics.c b/src/feature/relay/relay_metrics.c
+index 2344e48c61..37254543ef 100644
+--- a/src/feature/relay/relay_metrics.c
++++ b/src/feature/relay/relay_metrics.c
+@@ -85,6 +85,7 @@ static void fill_begindir_response_bytes_values(void);
+ static void fill_create_cell_source_values(void);
+ static void fill_begindir_cell_source_values(void);
+ static void fill_hsdir_fetch_descriptor_values(void);
++static void fill_begindir_close_reason_values(void);
+ 
+ /** The base metrics that is a static array of metrics added to the metrics
+  * store.
+@@ -342,6 +343,14 @@ static const relay_metrics_entry_t base_metrics[] =
+             "minute",
+     .fill_fn = fill_hsdir_fetch_descriptor_values,
+   },
++  {
++    .key = RELAY_METRICS_NUM_BEGINDIR_CLOSE_REASONS,
++    .type = METRICS_TYPE_COUNTER,
++    .name = METRICS_NAME(relay_begindir_close_reason_total),
++    .help = "Total number of tunneled directory streams we closed without "
++            "reading a request, by the first cause we noted",
++    .fill_fn = fill_begindir_close_reason_values,
++  },
+ };
+ static const size_t num_base_metrics = ARRAY_LENGTH(base_metrics);
+ 
+@@ -1433,9 +1442,36 @@ static const char *const dir_request_names[] = {
+  * bits. */
+ CTASSERT(DIR_REQUEST_TYPE_COUNT < 16);
+ 
++/** Tunneled directory requests we closed without reading, of the last two
++ * types (no_request and circuit_dead), by type, the previous hop of their
++ * circuit, and the first cause their connection noted of its closing. */
++static uint64_t dir_close_reasons[2][CHANNEL_PREV_HOP_COUNT]
++                                 [DIR_CLOSE_REASON_COUNT];
++CTASSERT(DIR_REQUEST_NO_REQUEST + 2 == DIR_REQUEST_TYPE_COUNT);
++/** Label values for a dir_close_reason_t. */
++static const char *const dir_close_reason_names[] = {
++  [DIR_CLOSE_UNKNOWN] = "unknown",
++  [DIR_CLOSE_END_CELL] = "end_cell",
++  [DIR_CLOSE_DESTROY_CELL] = "destroy_cell",
++  [DIR_CLOSE_CHANNEL_CLOSED] = "channel_closed",
++  [DIR_CLOSE_TIMEOUT] = "timeout",
++  [DIR_CLOSE_BEGINDIR_RATE] = "begindir_rate",
++  [DIR_CLOSE_HSDIR_SECOND_REQUEST] = "hsdir_second_request",
++  [DIR_CLOSE_HSDIR_UNKNOWN_PREV_HOP] = "hsdir_unknown_prev_hop",
++  [DIR_CLOSE_HSDIR_FETCH_SHED] = "hsdir_fetch_shed",
++  [DIR_CLOSE_CELL_QUEUE_FULL] = "cell_queue_full",
++  [DIR_CLOSE_OOM] = "oom",
++  [DIR_CLOSE_PROTOCOL] = "protocol",
++  [DIR_CLOSE_OTHER] = "other",
++};
++CTASSERT(ARRAY_LENGTH(dir_close_reason_names) == DIR_CLOSE_REASON_COUNT);
++/* close_reason and dir_close_reason are four-bit fields. */
++CTASSERT(DIR_CLOSE_REASON_COUNT <= 16);
++
+ /** Count the request on the tunneled directory server connection <b>conn</b>
+  * as <b>type</b>, once: later calls for <b>conn</b> do nothing. DirPort
+- * connections aren't counted. */
++ * connections aren't counted. A request we close without reading is also
++ * counted by the first cause <b>conn</b> noted of its closing. */
+ void
+ relay_note_dir_request(dir_connection_t *conn, dir_request_type_t type)
+ {
+@@ -1443,6 +1479,9 @@ relay_note_dir_request(dir_connection_t *conn, dir_request_type_t type)
+     return;
+   conn->request_type = type + 1;
+   dir_requests[type][conn->prev_hop]++;
++  if (type >= DIR_REQUEST_NO_REQUEST)
++    dir_close_reasons[type - DIR_REQUEST_NO_REQUEST][conn->prev_hop]
++                     [conn->close_reason]++;
+ }
+ 
+ /** Directory response bytes their stream read, by one more than the type of
+@@ -1481,6 +1520,28 @@ fill_begindir_request_values(void)
+                         CHANNEL_PREV_HOP_COUNT);
+ }
+ 
++/** Fill function for the RELAY_METRICS_NUM_BEGINDIR_CLOSE_REASONS metric. */
++static void
++fill_begindir_close_reason_values(void)
++{
++  const relay_metrics_entry_t *rentry =
++    &base_metrics[RELAY_METRICS_NUM_BEGINDIR_CLOSE_REASONS];
++
++  for (int t = 0; t < 2; t++)
++    for (int p = 0; p < CHANNEL_PREV_HOP_COUNT; p++)
++      for (int r = 0; r < DIR_CLOSE_REASON_COUNT; r++) {
++        metrics_store_entry_t *sentry = metrics_store_add(
++            the_store, rentry->type, rentry->name, rentry->help, 0, NULL);
++        metrics_store_entry_add_label(sentry, metrics_format_label("type",
++                         dir_request_names[DIR_REQUEST_NO_REQUEST + t]));
++        metrics_store_entry_add_label(sentry,
++                         metrics_format_label("prev_hop", prev_hop_names[p]));
++        metrics_store_entry_add_label(sentry,
++                  metrics_format_label("reason", dir_close_reason_names[r]));
++        metrics_store_entry_update(sentry, dir_close_reasons[t][p][r]);
++      }
++}
++
+ /** Fill function for the RELAY_METRICS_NUM_CREATE_CELLS metric. */
+ static void
+ fill_create_cell_values(void)
+diff --git a/src/feature/relay/relay_metrics.h b/src/feature/relay/relay_metrics.h
+index 5dde655f25..4d1dbb046c 100644
+--- a/src/feature/relay/relay_metrics.h
++++ b/src/feature/relay/relay_metrics.h
+@@ -88,6 +88,9 @@ typedef enum {
+   /** Onion service descriptor fetches, by whether we found the descriptor
+    * and place among the fetches of the same one in the same minute. */
+   RELAY_METRICS_NUM_HSDIR_FETCH_DESCRIPTORS,
++  /** Tunneled directory requests we closed without reading, by type,
++   * previous hop and the first cause their connection noted. */
++  RELAY_METRICS_NUM_BEGINDIR_CLOSE_REASONS,
+ } relay_metrics_key_t;
+ 
+ /** The metadata of a relay metric. */
+diff --git a/src/test/test_dos.c b/src/test/test_dos.c
+index baa3089051..4a9c5c3ada 100644
+--- a/src/test/test_dos.c
++++ b/src/test/test_dos.c
+@@ -827,8 +827,9 @@ test_dos_create_cell_prev_hop(void *arg)
+ }
+ 
+ /** Test that connection_exit_begin_conn() counts every BEGIN_DIR cell by its
+- * place on its circuit, also those that tor refuses, and that the directory
+- * connections it opens know the circuit's previous hop. */
++ * place on its circuit, also those that tor refuses, that the directory
++ * connections it opens know the circuit's previous hop, and that closing the
++ * circuit, the default defense, tells them why. */
+ static void
+ test_dos_begindir_refused(void *arg)
+ {
+@@ -866,6 +867,8 @@ test_dos_begindir_refused(void *arg)
+   tt_int_op(n_end, OP_EQ, 1);
+   tt_int_op(end_reason, OP_EQ, END_STREAM_REASON_MISC);
+   tt_u64_op(dos_get_num_begindir_rate_rejected(), OP_EQ, 1);
++  /* Refusing a stream doesn't close the circuit. */
++  tt_int_op(circ->dir_close_reason, OP_EQ, DIR_CLOSE_UNKNOWN);
+   /* Two linked pairs, whose directory connections know the previous hop. */
+   tt_int_op(smartlist_len(get_connection_array()), OP_EQ, 4);
+   SMARTLIST_FOREACH(get_connection_array(), connection_t *, c, {
+@@ -894,6 +897,19 @@ test_dos_begindir_refused(void *arg)
+   tt_u64_op(rep_hist_get_begindir_cells(hop)[NTH_BAND_2_10], OP_EQ, 4);
+   tt_int_op(n_connected, OP_EQ, 2);
+ 
++  /* The bucket is still empty, and by default the rate limit closes the
++   * circuit, which tells the directory connections of its streams why. */
++  dos_opts->DoSBeginDirRateEnabled = 1;
++  dos_opts->DoSBeginDirDefenseType = 0;
++  dos_init();
++  tt_int_op(connection_exit_begin_conn(&msg, TO_CIRCUIT(circ)), OP_EQ,
++            -END_CIRC_REASON_RESOURCELIMIT);
++  circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_RESOURCELIMIT);
++  SMARTLIST_FOREACH(get_connection_array(), connection_t *, c, {
++    if (c->type == CONN_TYPE_DIR)
++      tt_int_op(TO_DIR_CONN(c)->close_reason, OP_EQ, DIR_CLOSE_BEGINDIR_RATE);
++  });
++
+  done:
+   UNMOCK(relay_send_command_from_edge_);
+   UNMOCK(we_are_hibernating);
+diff --git a/src/test/test_hs_cache.c b/src/test/test_hs_cache.c
+index 67fed28d01..da481aac70 100644
+--- a/src/test/test_hs_cache.c
++++ b/src/test/test_hs_cache.c
+@@ -13,7 +13,9 @@
+ #define CHANNEL_OBJECT_PRIVATE
+ #define CIRCUITLIST_PRIVATE
+ #define DOS_PRIVATE
++#define MAINLOOP_PRIVATE
+ #define RELAY_METRICS_PRIVATE
++#define RELAY_PRIVATE
+ 
+ #include "app/config/config.h"
+ #include "app/config/or_options_st.h"
+@@ -32,6 +34,7 @@
+ #include "core/or/connection_edge.h"
+ #include "core/or/channel.h"
+ #include "core/or/dos.h"
++#include "core/or/relay.h"
+ #include "feature/relay/relay_metrics.h"
+ #include "feature/stats/geoip_stats.h"
+ #include "feature/stats/rephist.h"
+@@ -41,10 +44,12 @@
+ #include "lib/metrics/metrics_store.h"
+ #include "ext/siphash.h"
+ 
++#include "core/or/cell_st.h"
+ #include "core/or/edge_connection_st.h"
+ #include "core/or/dos_options_st.h"
+ #include "core/or/or_circuit_st.h"
+ #include "core/or/or_connection_st.h"
++#include "core/or/origin_circuit_st.h"
+ #include "feature/dircommon/dir_connection_st.h"
+ #include "feature/nodelist/networkstatus_st.h"
+ #include "feature/nodelist/routerinfo_st.h"
+@@ -563,11 +568,12 @@ helper_fetch_desc_from_hsdir(const ed25519_public_key_t *blinded_key)
+ }
+ 
+ /* Return the value of <b>name</b>{<b>key1</b>="<b>value1</b>",
+- * <b>key2</b>="<b>value2</b>"} in the relay metrics store. If there is no
+- * such entry, fail the test and return -1. */
++ * <b>key2</b>="<b>value2</b>",<b>key3</b>="<b>value3</b>"} in the relay
++ * metrics store. If there is no such entry, fail the test and return -1. */
+ static int64_t
+-get_metric2(const char *name, const char *key1, const char *value1,
+-            const char *key2, const char *value2)
++get_metric3(const char *name, const char *key1, const char *value1,
++            const char *key2, const char *value2, const char *key3,
++            const char *value3)
+ {
+   const smartlist_t *entries =
+     metrics_store_get_all(smartlist_get(relay_metrics_get_stores(), 0), name);
+@@ -576,15 +582,20 @@ get_metric2(const char *name, const char *key1, const char *value1,
+ 
+   SMARTLIST_FOREACH_BEGIN(entries, const metrics_store_entry_t *, e) {
+     if (metrics_store_entry_has_label(e, label1) &&
+-        metrics_store_entry_has_label(e, metrics_format_label(key2, value2)))
++        metrics_store_entry_has_label(e, metrics_format_label(key2, value2)) &&
++        metrics_store_entry_has_label(e, metrics_format_label(key3, value3)))
+       value = metrics_store_entry_get_value(e);
+   } SMARTLIST_FOREACH_END(e);
+   tor_free(label1);
+   if (value == -1)
+-    TT_FAIL(("no series %s{%s=\"%s\",%s=\"%s\"}", name, key1, value1,
+-             key2, value2));
++    TT_FAIL(("no series %s{%s=\"%s\",%s=\"%s\",%s=\"%s\"}", name, key1,
++             value1, key2, value2, key3, value3));
+   return value;
+ }
++/* As get_metric3(), for <b>name</b>{<b>key1</b>="<b>value1</b>",
++ * <b>key2</b>="<b>value2</b>"}. */
++#define get_metric2(name, key1, value1, key2, value2) \
++  get_metric3((name), (key1), (value1), (key2), (value2), (key2), (value2))
+ /* As get_metric2(), for <b>name</b>{<b>key</b>="<b>value</b>"}. */
+ static int64_t
+ get_metric(const char *name, const char *key, const char *value)
+@@ -1255,16 +1266,22 @@ new_waiting_dir_conn(const char *input)
+   return conn;
+ }
+ 
+-/* Link <b>conn</b>, from new_waiting_dir_conn(), to a new stream on a new
+- * circuit: directory_handle_command() drops a request on a stream that is
+- * gone or closing without reading it. Return the stream. */
++/* Link <b>conn</b>, from new_waiting_dir_conn(), to a new open stream on
++ * <b>circ</b> from a known relay, as connection_exit_connect_dir() does:
++ * directory_handle_command() drops a request on a stream that is gone or
++ * closing without reading it. Return the stream. */
+ static edge_connection_t *
+-open_waiting_stream(dir_connection_t *conn)
++open_waiting_stream(dir_connection_t *conn, or_circuit_t *circ)
+ {
+   edge_connection_t *edge = edge_connection_new(CONN_TYPE_EXIT, AF_INET);
+ 
++  TO_CONN(edge)->purpose = EXIT_PURPOSE_CONNECT;
++  TO_CONN(edge)->state = EXIT_CONN_STATE_OPEN;
+   connection_link_connections(TO_CONN(conn), TO_CONN(edge));
+-  edge->on_circuit = TO_CIRCUIT(or_circuit_new(0, NULL));
++  edge->on_circuit = TO_CIRCUIT(circ);
++  edge->next_stream = circ->n_streams;
++  circ->n_streams = edge;
++  conn->prev_hop = circ->prev_hop = CHANNEL_PREV_HOP_KNOWN_RELAY;
+   return edge;
+ }
+ 
+@@ -1314,7 +1331,7 @@ test_dir_request_response_metrics(void *arg)
+   /* An unknown method is counted when we refuse it, and only then: its
+    * request is already off the inbuf when the connection closes. */
+   waiting = new_waiting_dir_conn("PUT /tor/ HTTP/1.0\r\n\r\n");
+-  stream = open_waiting_stream(waiting);
++  stream = open_waiting_stream(waiting, or_circuit_new(0, NULL));
+   tt_int_op(directory_handle_command(waiting), OP_EQ, -1);
+   tt_i64_op(REQ_SUM("unparsed"), OP_EQ, 3);
+   close_waiting_dir_conn(waiting, stream);
+@@ -1322,7 +1339,7 @@ test_dir_request_response_metrics(void *arg)
+    * request as circuit_dead, nothing at all as no_request. */
+   for (int i = 0; i < 2; i++) {
+     waiting = new_waiting_dir_conn(i ? NULL : GET("/tor/"));
+-    stream = open_waiting_stream(waiting);
++    stream = open_waiting_stream(waiting, or_circuit_new(0, NULL));
+     stream->on_circuit->marked_for_close = 1;
+     tt_int_op(directory_handle_command(waiting), OP_EQ, -1);
+     close_waiting_dir_conn(waiting, stream);
+@@ -1377,6 +1394,231 @@ test_dir_request_response_metrics(void *arg)
+   free_fake_channel(chan);
+ }
+ 
++/* Label values of tor_relay_begindir_close_reason_total. */
++static const char *const close_reasons[] = {
++  "unknown", "end_cell", "destroy_cell", "channel_closed", "timeout",
++  "begindir_rate", "hsdir_second_request", "hsdir_unknown_prev_hop",
++  "hsdir_fetch_shed", "cell_queue_full", "oom", "protocol", "other",
++};
++
++/* tor_relay_begindir_close_reason_total{type, prev_hop, reason}, and with
++ * prev_hop="known_relay". */
++#define CLOSE_REASON_METRIC(type, hop, reason) \
++  get_metric3(METRICS_NAME(relay_begindir_close_reason_total), "type", \
++              (type), "prev_hop", (hop), "reason", (reason))
++#define CLOSE_REASON(type, reason) \
++  CLOSE_REASON_METRIC((type), "known_relay", (reason))
++
++/* Close the directory connection of each stream on <b>circ</b> the way tor
++ * does once its stream or circuit is closing: it processes its inbuf, which
++ * drops any request queued there, then closes. Free them and their
++ * streams. */
++static void
++close_dir_streams(or_circuit_t *circ)
++{
++  while (circ->n_streams) {
++    edge_connection_t *stream = circ->n_streams;
++    dir_connection_t *conn = TO_DIR_CONN(TO_CONN(stream)->linked_conn);
++
++    circ->n_streams = stream->next_stream;
++    directory_handle_command(conn);
++    close_waiting_dir_conn(conn, stream);
++  }
++}
++
++/* Tunneled directory streams closed without a request read are counted by
++ * the first cause their connection noted: of their own stream, as a
++ * RELAY_END, and else of their circuit, as its DoS defense or its closing
++ * reason. Each type's reasons add up to its requests. */
++static void
++test_dir_close_reason_metrics(void *arg)
++{
++  channel_t *chan = new_fake_channel();
++  or_circuit_t *circ;
++  origin_circuit_t *ocirc;
++  edge_connection_t *stream;
++  dir_connection_t *conn;
++  relay_msg_t msg;
++  cell_t cell;
++  int64_t other_get;
++  const struct {
++    int circ_reason;
++    const char *reason;
++  } closes[] = {
++    { END_CIRC_REASON_DESTROYED, "destroy_cell" },
++    { END_CIRC_REASON_CHANNEL_CLOSED, "channel_closed" },
++    /* circuit_unlink_all_from_channel() can pass the remote flag. */
++    { END_CIRC_REASON_CHANNEL_CLOSED | END_CIRC_REASON_FLAG_REMOTE,
++      "channel_closed" },
++    { END_CIRC_REASON_TORPROTOCOL, "protocol" },
++    { END_CIRC_REASON_FINISHED, "other" },
++    { END_CIRC_REASON_RESOURCELIMIT, "other" },
++  };
++  const char *const types[] = { "no_request", "circuit_dead" };
++  const char *const hops[] = { "client", "known_relay", "unknown_relay" };
++  (void) arg;
++
++  init_test();
++  MOCK(connection_write_to_buf_impl_, connection_write_to_buf_mock);
++  MOCK(connection_mark_for_close_internal_, hsdir_mock_mark_for_close);
++
++  /* A circuit closing tells each of its waiting streams why. */
++  for (size_t i = 0; i < ARRAY_LENGTH(closes); i++) {
++    circ = new_or_circ(chan);
++    open_waiting_stream(new_waiting_dir_conn(NULL), circ);
++    circuit_mark_for_close(TO_CIRCUIT(circ), closes[i].circ_reason);
++    close_dir_streams(circ);
++  }
++  tt_i64_op(CLOSE_REASON("no_request", "destroy_cell"), OP_EQ, 1);
++  tt_i64_op(CLOSE_REASON("no_request", "channel_closed"), OP_EQ, 2);
++  tt_i64_op(CLOSE_REASON("no_request", "protocol"), OP_EQ, 1);
++  tt_i64_op(CLOSE_REASON("no_request", "other"), OP_EQ, 2);
++
++  /* A stream that got a RELAY_END keeps that cause once its circuit closes
++   * too; a sibling still waiting doesn't. */
++  circ = new_or_circ(chan);
++  stream = open_waiting_stream(new_waiting_dir_conn(NULL), circ);
++  open_waiting_stream(new_waiting_dir_conn(NULL), circ);
++  memset(&msg, 0, sizeof(msg));
++  msg.command = RELAY_COMMAND_END;
++  msg.stream_id = 1;
++  msg.length = 1;
++  msg.body = (const uint8_t *) "\x01"; /* END_STREAM_REASON_MISC */
++  tt_int_op(handle_relay_msg(&msg, TO_CIRCUIT(circ), stream, NULL, 0),
++            OP_EQ, 0);
++  tt_assert(TO_CONN(stream)->marked_for_close);
++  circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_DESTROYED);
++  close_dir_streams(circ);
++  tt_i64_op(CLOSE_REASON("no_request", "end_cell"), OP_EQ, 1);
++  tt_i64_op(CLOSE_REASON("no_request", "destroy_cell"), OP_EQ, 2);
++
++  /* A stream we are closing already for a cause we don't note, as when
++   * hibernating, doesn't take its circuit's: it stays unknown. */
++  circ = new_or_circ(chan);
++  stream = open_waiting_stream(new_waiting_dir_conn(NULL), circ);
++  connection_mark_for_close(TO_CONN(stream));
++  circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_DESTROYED);
++  close_dir_streams(circ);
++  tt_i64_op(CLOSE_REASON("no_request", "unknown"), OP_EQ, 1);
++  tt_i64_op(CLOSE_REASON("no_request", "destroy_cell"), OP_EQ, 2);
++
++  /* A DATA cell over its stream's window closes that stream and then the
++   * circuit, both as a protocol violation. */
++  circ = new_or_circ(chan);
++  stream = open_waiting_stream(new_waiting_dir_conn(NULL), circ);
++  stream->deliver_window = 0;
++  stream->on_circuit = NULL; /* So closing it sends no RELAY_END. */
++  msg.command = RELAY_COMMAND_DATA;
++  tt_int_op(handle_relay_msg(&msg, TO_CIRCUIT(circ), stream, NULL, 0),
++            OP_EQ, -END_CIRC_REASON_TORPROTOCOL);
++  tt_assert(TO_CONN(stream)->marked_for_close);
++  circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_TORPROTOCOL);
++  close_dir_streams(circ);
++  tt_i64_op(CLOSE_REASON("no_request", "protocol"), OP_EQ, 2);
++
++  /* A second onion service request closes its circuit. A sibling waiting
++   * for a request is counted as no_request, and one with a request queued,
++   * which tor drops unread, as circuit_dead, both by that defense. */
++  circ = new_or_circ(chan);
++  open_waiting_stream(new_waiting_dir_conn(NULL), circ);
++  open_waiting_stream(new_waiting_dir_conn(GET("/tor/")), circ);
++  tt_int_op(hsdir_request_on_circuit(circ, GET("/tor/hs/3/x"), NULL),
++            OP_EQ, 404);
++  tt_int_op(circ->dir_close_reason, OP_EQ, DIR_CLOSE_UNKNOWN);
++  tt_int_op(hsdir_request_on_circuit(circ, GET("/tor/hs/3/x"), NULL),
++            OP_EQ, 0);
++  close_dir_streams(circ);
++  tt_i64_op(CLOSE_REASON("no_request", "hsdir_second_request"), OP_EQ, 1);
++  tt_i64_op(CLOSE_REASON("circuit_dead", "hsdir_second_request"), OP_EQ, 1);
++
++  /* A full cell queue closes its circuit with a reason that doesn't say
++   * so. */
++  circ = new_or_circ(chan);
++  open_waiting_stream(new_waiting_dir_conn(NULL), circ);
++  memset(&cell, 0, sizeof(cell));
++  circ->p_chan_cells.n = INT_MAX;
++  tt_int_op(append_cell_to_circuit_queue(TO_CIRCUIT(circ), chan, &cell,
++                                         CELL_DIRECTION_IN, 0), OP_EQ, -1);
++  circ->p_chan_cells.n = 0;
++  circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_INTERNAL);
++  close_dir_streams(circ);
++  tt_i64_op(CLOSE_REASON("no_request", "cell_queue_full"), OP_EQ, 1);
++  /* The queue toward the next hop notes it too. */
++  circ = new_or_circ(chan);
++  TO_CIRCUIT(circ)->n_chan_cells.n = INT_MAX;
++  tt_int_op(append_cell_to_circuit_queue(TO_CIRCUIT(circ), chan, &cell,
++                                         CELL_DIRECTION_OUT, 0), OP_EQ, -1);
++  TO_CIRCUIT(circ)->n_chan_cells.n = 0;
++  tt_int_op(circ->dir_close_reason, OP_EQ, DIR_CLOSE_CELL_QUEUE_FULL);
++  /* An origin circuit has no OR circuit to note it on. */
++  ocirc = origin_circuit_new();
++  TO_CIRCUIT(ocirc)->purpose = CIRCUIT_PURPOSE_C_GENERAL;
++  TO_CIRCUIT(ocirc)->n_chan_cells.n = INT_MAX;
++  tt_int_op(append_cell_to_circuit_queue(TO_CIRCUIT(ocirc), chan, &cell,
++                                         CELL_DIRECTION_OUT, 0), OP_EQ, -1);
++  TO_CIRCUIT(ocirc)->n_chan_cells.n = 0;
++
++  /* A stream whose request we read notes what closed it, but is counted
++   * only by its request. (Tests that don't fork may have counted other
++   * GETs before this one: compare.) */
++  other_get = REQ_SUM("other_get");
++  circ = new_or_circ(chan);
++  conn = new_waiting_dir_conn(GET("/tor/"));
++  open_waiting_stream(conn, circ);
++  tt_int_op(directory_handle_command(conn), OP_EQ, 0);
++  circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_DESTROYED);
++  tt_int_op(conn->close_reason, OP_EQ, DIR_CLOSE_DESTROY_CELL);
++  close_dir_streams(circ);
++  tt_i64_op(REQ_SUM("other_get"), OP_EQ, other_get + 1);
++
++  /* A connection that stalls without a request times out, and keeps that
++   * cause when its circuit closes before it does: its stream isn't
++   * closing, so the circuit tells it why too. */
++  tor_init_connection_lists();
++  circ = new_or_circ(chan);
++  conn = new_waiting_dir_conn(NULL);
++  open_waiting_stream(conn, circ);
++  tt_int_op(connection_add(TO_CONN(conn)), OP_EQ, 0);
++  get_options_mutable()->TestingDirConnectionMaxStall = 300;
++  TO_CONN(conn)->timestamp_last_write_allowed = time(NULL) - 301;
++  run_connection_housekeeping(TO_CONN(conn)->conn_array_index, time(NULL));
++  tt_assert(TO_CONN(conn)->marked_for_close);
++  connection_remove(TO_CONN(conn));
++  circuit_mark_for_close(TO_CIRCUIT(circ), END_CIRC_REASON_DESTROYED);
++  close_dir_streams(circ);
++  tt_i64_op(CLOSE_REASON("no_request", "timeout"), OP_EQ, 1);
++  tt_i64_op(CLOSE_REASON("no_request", "destroy_cell"), OP_EQ, 2);
++
++  /* Each reason is exported under its own label and previous hop. */
++  tt_int_op(ARRAY_LENGTH(close_reasons), OP_EQ, DIR_CLOSE_REASON_COUNT);
++  for (int r = 0; r < DIR_CLOSE_REASON_COUNT; r++) {
++    conn = new_waiting_dir_conn(NULL);
++    conn->prev_hop = CHANNEL_PREV_HOP_UNKNOWN_RELAY;
++    conn->close_reason = r;
++    close_waiting_dir_conn(conn, NULL);
++    tt_i64_op(CLOSE_REASON_METRIC("no_request", "unknown_relay",
++                                  close_reasons[r]), OP_EQ, 1);
++  }
++
++  /* Each type's reasons add up to its requests, for each previous hop. */
++  for (size_t t = 0; t < ARRAY_LENGTH(types); t++) {
++    for (size_t h = 0; h < ARRAY_LENGTH(hops); h++) {
++      int64_t sum = 0;
++      for (size_t r = 0; r < ARRAY_LENGTH(close_reasons); r++)
++        sum += CLOSE_REASON_METRIC(types[t], hops[h], close_reasons[r]);
++      tt_i64_op(sum, OP_EQ, REQ_METRIC(types[t], hops[h]));
++    }
++  }
++  tt_i64_op(REQ_SUM("no_request"), OP_EQ, 26);
++  tt_i64_op(REQ_SUM("circuit_dead"), OP_EQ, 1);
++
++ done:
++  UNMOCK(connection_write_to_buf_impl_);
++  UNMOCK(connection_mark_for_close_internal_);
++  circuit_free_all();
++  free_fake_channel(chan);
++}
++
+ /* Each GET that url_table matches is counted by the type of its entry, and
+  * any other as other_get. */
+ static void
+@@ -1632,6 +1874,7 @@ test_prev_hop_metric_series(void *arg)
+     { METRICS_NAME(relay_create_cell_source_total), 15, "counter" },
+     { METRICS_NAME(relay_begindir_cell_source_total), 15, "counter" },
+     { METRICS_NAME(relay_hsdir_fetch_descriptor_total), 10, "counter" },
++    { METRICS_NAME(relay_begindir_close_reason_total), 78, "counter" },
+   };
+   or_circuit_t *circ = or_circuit_new(0, NULL);
+   (void) arg;
+@@ -1801,6 +2044,7 @@ test_hsdir_prev_hop_defense(void *arg)
+   routerstatus_t known_rs;
+   dos_options_t *dos_opts;
+   or_circuit_t *circ;
++  dir_connection_t *waiting;
+   const char *get = GET("/tor/hs/3/x");
+   const char *post = "POST /tor/hs/3/publish HTTP/1.0\r\n\r\n";
+   (void) arg;
+@@ -1826,8 +2070,12 @@ test_hsdir_prev_hop_defense(void *arg)
+                        "HSDirRefuseUnknownPrevHop=1");
+   tt_int_op(hsdir_request_on_circuit(circ, get, NULL), OP_EQ, 0);
+   circ = new_or_circ(chan);
++  waiting = new_waiting_dir_conn(NULL);
++  open_waiting_stream(waiting, circ);
+   tt_int_op(hsdir_request_on_circuit(circ, get, NULL), OP_EQ, 0);
+   tt_assert(TO_CIRCUIT(circ)->marked_for_close);
++  tt_int_op(waiting->close_reason, OP_EQ, DIR_CLOSE_HSDIR_UNKNOWN_PREV_HOP);
++  close_dir_streams(circ);
+   tt_int_op(hsdir_request_on_new_circ(chan, post, "x"), OP_EQ, 0);
+   smartlist_add(mock_hsdir_ns->routerstatus_list, &known_rs);
+   tt_int_op(hsdir_request_on_new_circ(chan, get, NULL), OP_EQ, 404);
+@@ -1972,6 +2220,7 @@ test_hsdir_desc_fetch_shedding(void *arg)
+   char *str_a = NULL, *str_b = NULL, *get_a = NULL, *get_b = NULL;
+   dos_options_t *dos_opts;
+   or_circuit_t *circ;
++  dir_connection_t *waiting;
+   const uint64_t billion = 1000000000;
+   uint64_t now = 100 * billion;
+   (void) arg;
+@@ -2000,12 +2249,20 @@ test_hsdir_desc_fetch_shedding(void *arg)
+ 
+   /* A's first six fetches fit in half again the budget; the seventh closes
+    * its circuit without an answer. */
+-  for (int i = 0; i < 6; i++)
++  for (int i = 0; i < 5; i++)
+     tt_int_op(hsdir_request_on_new_circ(chan, get_a, NULL), OP_EQ, 200);
++  /* An answered fetch doesn't note a cause on its circuit. */
+   circ = new_or_circ(chan);
++  tt_int_op(hsdir_request_on_circuit(circ, get_a, NULL), OP_EQ, 200);
++  tt_int_op(circ->dir_close_reason, OP_EQ, DIR_CLOSE_UNKNOWN);
++  circ = new_or_circ(chan);
++  waiting = new_waiting_dir_conn(NULL);
++  open_waiting_stream(waiting, circ);
+   tt_int_op(hsdir_request_on_circuit(circ, get_a, NULL), OP_EQ, 0);
+   tt_int_op(TO_CIRCUIT(circ)->marked_for_close_reason, OP_EQ,
+             END_CIRC_REASON_RESOURCELIMIT);
++  tt_int_op(waiting->close_reason, OP_EQ, DIR_CLOSE_HSDIR_FETCH_SHED);
++  close_dir_streams(circ);
+ 
+   /* In the next second, B and A's fetch within its rate are answered; A's
+    * next one is shed. */
+@@ -2218,6 +2475,8 @@ struct testcase_t hs_cache[] = {
+     NULL, NULL },
+   { "dir_request_response_metrics", test_dir_request_response_metrics,
+     TT_FORK, NULL, NULL },
++  { "dir_close_reason_metrics", test_dir_close_reason_metrics, TT_FORK,
++    NULL, NULL },
+   { "dir_request_url_table_types", test_dir_request_url_table_types, TT_FORK,
+     NULL, NULL },
+   { "dir_response_bytes_metric", test_dir_response_bytes_metric, TT_FORK,
+diff --git a/src/test/test_oom.c b/src/test/test_oom.c
+index 92221dfafb..8a6ca018f0 100644
+--- a/src/test/test_oom.c
++++ b/src/test/test_oom.c
+@@ -12,9 +12,11 @@
+ #include "core/or/circuitlist.h"
+ #include "lib/evloop/compat_libevent.h"
+ #include "core/mainloop/connection.h"
++#include "core/mainloop/mainloop.h"
+ #include "app/config/config.h"
+ #include "lib/crypt_ops/crypto_rand.h"
+ #include "core/or/relay.h"
++#include "core/or/connection_edge.h"
+ #include "test/test.h"
+ #include "test/test_helpers.h"
+ 
+@@ -22,6 +24,10 @@
+ #include "core/or/entry_connection_st.h"
+ #include "core/or/or_circuit_st.h"
+ #include "core/or/origin_circuit_st.h"
++#include "feature/dircommon/dir_connection_st.h"
++
++/* The dir_close_reason of the last OR circuit marked, when it was marked. */
++static int dir_close_reason_at_mark = -1;
+ 
+ /* small replacement mock for circuit_mark_for_close_ to avoid doing all
+  * the other bookkeeping that comes with marking circuits. */
+@@ -39,6 +45,8 @@ circuit_mark_for_close_dummy_(circuit_t *circ, int reason, int line,
+ 
+   circ->marked_for_close = line;
+   circ->marked_for_close_file = file;
++  if (!CIRCUIT_IS_ORIGIN(circ))
++    dir_close_reason_at_mark = TO_OR_CIRCUIT(circ)->dir_close_reason;
+ }
+ 
+ static circuit_t *
+@@ -343,6 +351,8 @@ test_oom_streambuf(void *arg)
+   tt_assert(! c3->marked_for_close);
+   tt_assert(c4->marked_for_close);
+   tt_assert(! c5->marked_for_close);
++  /* Noting why, for its tunneled directory streams. */
++  tt_int_op(dir_close_reason_at_mark, OP_EQ, DIR_CLOSE_OOM);
+ 
+   tt_int_op(cell_queues_get_total_allocation(), OP_EQ,
+             packed_cell_mem_cost() * 85);
+@@ -363,8 +373,72 @@ test_oom_streambuf(void *arg)
+   monotime_disable_test_mocking();
+ }
+ 
++/* Mark <b>conn</b> for close without the rest of the bookkeeping. */
++static void
++connection_mark_for_close_dummy_(connection_t *conn, int line,
++                                 const char *file)
++{
++  (void) line;
++  (void) file;
++  conn->marked_for_close = 1;
++}
++
++/** Test that when the OOM handler closes the stream of a tunneled directory
++ * connection waiting for its request, the directory connection notes why. */
++static void
++test_oom_dir_close_reason(void *arg)
++{
++  or_options_t *options = get_options_mutable();
++  circuit_t *circ = NULL;
++  edge_connection_t *edge = NULL;
++  dir_connection_t *dirconn = NULL;
++  const uint64_t start_ns = 1389641159 * (uint64_t)1000000000;
++  (void) arg;
++
++  monotime_enable_test_mocking();
++  monotime_coarse_set_mock_time_nsec(start_ns);
++  MOCK(circuit_mark_for_close_, circuit_mark_for_close_dummy_);
++  MOCK(connection_mark_for_close_internal_, connection_mark_for_close_dummy_);
++  tor_init_connection_lists();
++  options->CellStatistics = 0;
++
++  /* An exit stream with data on its buffers, linked to a directory
++   * connection with none, on a circuit with no cells. */
++  circ = dummy_or_circuit_new(0, 0);
++  edge = dummy_edge_conn_new(circ, CONN_TYPE_EXIT, 1000, 1000);
++  TO_CONN(edge)->purpose = EXIT_PURPOSE_CONNECT;
++  TO_CONN(edge)->state = EXIT_CONN_STATE_OPEN;
++  dirconn = dir_connection_new(AF_INET);
++  connection_link_connections(TO_CONN(dirconn), TO_CONN(edge));
++  tt_int_op(connection_add(TO_CONN(edge)), OP_EQ, 0);
++
++  /* Just over the limit: freeing the stream's buffers is enough, so its
++   * circuit stays open. */
++  monotime_coarse_set_mock_time_nsec(start_ns + 1000 * 1000000);
++  options->MaxMemInQueues = buf_get_total_allocation() - 1;
++  tt_int_op(cell_queues_check_size(), OP_EQ, 1);
++  cell_queues_reclaim_memory();
++  tt_assert(TO_CONN(edge)->marked_for_close);
++  tt_int_op(dirconn->close_reason, OP_EQ, DIR_CLOSE_OOM);
++  tt_assert(! circ->marked_for_close);
++  tt_int_op(TO_OR_CIRCUIT(circ)->dir_close_reason, OP_EQ, DIR_CLOSE_UNKNOWN);
++
++ done:
++  if (edge)
++    connection_remove(TO_CONN(edge));
++  circuit_free(circ);
++  if (edge)
++    connection_free_minimal(TO_CONN(edge));
++  if (dirconn)
++    connection_free_minimal(TO_CONN(dirconn));
++  UNMOCK(circuit_mark_for_close_);
++  UNMOCK(connection_mark_for_close_internal_);
++  monotime_disable_test_mocking();
++}
++
+ struct testcase_t oom_tests[] = {
+   { "circbuf", test_oom_circbuf, TT_FORK, NULL, NULL },
+   { "streambuf", test_oom_streambuf, TT_FORK, NULL, NULL },
++  { "dir_close_reason", test_oom_dir_close_reason, TT_FORK, NULL, NULL },
+   END_OF_TESTCASES
+ };
+-- 
+2.39.5 (Apple Git-154)
+

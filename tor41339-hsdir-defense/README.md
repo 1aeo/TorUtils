@@ -54,7 +54,9 @@ Apply with `git am` onto Tor 0.4.9.15 (`tor-0.4.9.15`). `.7`'s series for
 easiest to merge upstream (bugfixes, then observe-only MetricsPort counters)
 to off-by-default enforcement, one upstream change per commit. 0015–0020 are
 the metrics for the network team's questions
-(`analysis/metrics-proposal.md`). `patches/torspec-param-spec.patch` is the
+(`analysis/metrics-proposal.md`), and 0021 adds what first closed the
+streams that never sent a request and the requests dropped unread.
+`patches/torspec-param-spec.patch` is the
 companion param-spec and rend-spec text for the three new consensus
 parameters.
 
@@ -80,6 +82,7 @@ parameters.
 | 0018 | Metrics | `tor_relay_create_cell_source_total{prev_hop,nth}` and `tor_relay_begindir_cell_source_total{prev_hop,nth}`: cells by their place among their source's that minute. A source is a client address (a client channel, if tor doesn't track its address) or a relay channel. Bridges don't count these. | with a MetricsPort |
 | 0019 | Metrics | `tor_relay_hsdir_fetch_descriptor_total{lookup,nth}`: descriptor fetches by their place among the same descriptor's fetches that minute, by the decoded blinded key. Only a keyed hash of each key is kept, until the first fetch of a later minute clears the table. Bridges don't count these. | with a MetricsPort |
 | 0020 | Metrics | `tor_relay_dos_total{type="hsdir_descriptor_only_prev_hop"}`: onion service requests from relays known only by descriptor. | always on |
+| 0021 | Metrics | `tor_relay_begindir_close_reason_total{type,prev_hop,reason}`: the requests 0007 counts as `no_request` or `circuit_dead`, counted again by the first cause tor noted of their closing: a RELAY_END on the stream (`end_cell`), its stall timeout (`timeout`), a DESTROY or a closed channel on its circuit (`destroy_cell`, `channel_closed`), a defense closing the circuit (`begindir_rate`, `hsdir_second_request`, `hsdir_unknown_prev_hop`, `hsdir_fetch_shed`), a full cell queue, the out-of-memory handler, a protocol violation or any other circuit close (`cell_queue_full`, `oom`, `protocol`, `other`), or `unknown` when tor noted none. Each type's reasons add up to its requests by previous hop: 78 series, most of them 0. | always on |
 
 The metric names follow stock tor's: `tor_relay_<subsystem>_<thing>_total`
 for counters, with a singular noun as in `tor_relay_destroy_cell_total`, and
@@ -89,7 +92,7 @@ marked "with a MetricsPort" do per-cell or per-fetch work (an address lookup,
 a hash, a token bucket) that only the MetricsPort shows, so a relay without
 one skips it.
 
-The metrics (0006–0010, 0012, 0015–0020) only count, and count only
+The metrics (0006–0010, 0012, 0015–0021) only count, and count only
 tunneled (linked) connections, so DirPort traffic stays out. Each defense
 (0011, 0013) counts what it would refuse whether or not it is enabled, so
 operators can measure before enabling it on the MetricsPort; both apply only
@@ -117,18 +120,19 @@ Upstream merge requests, each built from fresh `main`: 0001–0003 (0002 needs
 0001's context), 0004, 0005, then the stack 0006–0010 on top of 0001–0005
 (0007's context includes a line from 0003), then 0011, 0012 and 0013, each
 on the one before (0013 reuses 0011's option helper), for separate
-discussion, 0014 on 0002 (its test extends 0002's), and 0015–0020 as one
+discussion, 0014 on 0002 (its test extends 0002's), and 0015–0021 as one
 stack on top. The commits are upstream style (`subsystem: Summary`; three
 `changes/` files, for the hardening, the metrics and the DoS options, to
 which each commit adds its own entries and which pass `lintChanges.py`;
 `check-spaces` clean; the man page renders without asciidoc warnings). Each
 commit builds with `--enable-fatal-warnings` and passes `make test`. After
 each commit, practracker reports the same problems as on stock 0.4.9.15,
-with two exceptions updated:
+with three exceptions updated:
 - 0007 raises `directory_handle_command_post()`'s from 124 to 138 lines
   (0.4.9.15 already brought it to 131), and 0010 to 139;
 - 0013 raises the `dos.c` dependency-violation exception from 6 to 8, for
-  its two bandwidth includes.
+  its two bandwidth includes;
+- 0021 raises `run_connection_housekeeping()`'s from 123 to 124 lines.
 
 The series also grows functions and files that stock already has over the
 limit, among them `connection_exit_begin_conn()`,
@@ -138,7 +142,10 @@ limit, among them `connection_exit_begin_conn()`,
 tor 0.4.9.15 with 0001–0020 as they were before two small later changes in
 `patches/` (comment fixes in 0011 and 0013, and a `BUG()` guard in 0012),
 every defense off (see `packages/BUILD-INFO.txt`). They replace
-`+tor41339.8` on every relay. `.9`
+`+tor41339.8` on every relay. The `+tor41339.10` canary `.deb`s go in
+`packages/` beside them: `.9`'s series as built plus 0021, so `.9`'s options,
+defaults and metric names and one counter family more,
+`tor_relay_begindir_close_reason_total`. `.9` stays the fleet build. `.9`
 is `.8` with 790 fewer changed lines and the fixes of a three-lens review
 (`engineering/v9-minimize/`). It has `.8`'s options, defaults and metric
 names. What changes: `no_request` also counts the streams closed before
@@ -156,7 +163,7 @@ kept as an alias. The metric names are `.7`'s, less the counters `.8` drops
 `tor_relay_begindir_request_over_max_total`), and plus the request type
 `circuit_dead` and tor 0.4.9.15's own `begindir_*` counts.
 `hsdir_unknown_prev_hop` now leaves out a circuit's second request, which
-tor refuses first. `operator/begindir-breakdown.py` reads `.6` to `.9`. The
+tor refuses first. `operator/begindir-breakdown.py` reads `.6` to `.10`. The
 earlier `+tor41339.3` canary packages were built from a legacy 7-patch series
 that exported only the four `hsdir_*` counters of 0010 and the 0011 rules. The
 operator documents below were written for those canary builds; for the options
@@ -252,7 +259,13 @@ two review rounds in `analysis/v7-review.md` on `.7`, a review of the
 0.4.9.15 rebase, mutation testing, and the install check, live controls and
 breakdown lab. All 20 then had `.9`'s three-lens review
 (`engineering/v9-minimize/`), which found no crash path and five behavior
-problems, all fixed. (That
+problems, all fixed. 0021 had a review for size and reuse, which cut it
+to one helper and direct tag writes, then three rounds of adversarial
+review for bugs, edge cases and regressions. They found no defect, only six
+test gaps, all closed. As committed, 25 mutants, all killed
+(`engineering/v10-close-reasons/mutants.tsv`); its install check ran offline
+with `Sandbox 0`, so it has not yet run under tor's seccomp sandbox, and the
+live controls and breakdown lab were not rerun for it. (That
 critique's remark that ConnLimit bounds held-open directory connections does
 not hold for BEGIN_DIR pairs, which have no socket.)
 
@@ -317,7 +330,7 @@ quantities the stock (unpatched) counters can and cannot establish.
 ## Layout
 
 ```
-patches/       the 20-patch series (git am) + torspec patch
+patches/       the 21-patch series (git am) + torspec patch
 simulator/     closed-lab benchmark: design, harness (scripts/), results/
 operator/      count-only canary + capture playbook + crash-at-scale review,
                BEGIN_DIR breakdown tool
@@ -334,7 +347,8 @@ engineering/   amd64 build-check, CI matrix, seccomp audit, .deb build + install
                two review rounds; fixes for two stock tor bugs they found),
                v8-prototype/ (the proposed metrics on .7: diff, mutants, lab),
                v8-rebase/ (the rebase onto tor 0.4.9.15), v9-minimize/ (the
-               smaller series, its review, per-commit builds and mutants)
+               smaller series, its review, per-commit builds and mutants),
+               v10-close-reasons/ (0021's mutants)
 packages/      the built .debs for Ubuntu 24.04 and 26.04 (+ geoipdb), SHA256SUMS, buildinfo/changes
 ```
 

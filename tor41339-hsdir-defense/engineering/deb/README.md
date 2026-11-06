@@ -1,27 +1,36 @@
 # amd64 `.deb` for Ubuntu 24.04 and 26.04: build + install evidence
 
-> **Not yet upstream-reviewed.** `+tor41339.9` is tor 0.4.9.15 with all 20
-> patches in `../../patches/`. Every defense of the series (0011, 0013) is
+> **Not yet upstream-reviewed.** `+tor41339.9` is tor 0.4.9.15 with patches
+> 0001–0020 as built (`build-reordered/debian-patches/`; `../../patches/`
+> has since changed 0011–0013). `+tor41339.10`, a canary build, is `.9`'s
+> series as built plus 0021. Every defense of the series (0011, 0013) is
 > off: the AUTOBOOL options default to `auto` and no consensus sets their
 > parameters. Tor 0.4.9.15's own BEGIN_DIR rate limit and limit of one onion
 > service request per circuit are on, as in stock. The MetricsPort counters
-> (0006–0010, 0012, 0013's, 0015–0020) are on (those of 0018 and 0019 only
-> while a MetricsPort is configured), and the hardening patches 0001–0005 and
-> 0014 are always active, so the build is not equivalent to stock. The
-> crash-at-scale review (`../../operator/patch-crash-at-scale-critique.md`:
-> 0 critical / 0 high) covered the legacy 7-patch series behind
-> `+tor41339.3`, not 0006–0008 or 0012–0020. It is not a released package;
-> do not enable enforcement fleet-wide before measuring with the counters.
+> (0006–0010, 0012, 0013's, 0015–0020, and 0021 on `.10`) are on (those of
+> 0018 and 0019 only while a MetricsPort is configured), and the hardening
+> patches 0001–0005 and 0014 are always active, so the build is not
+> equivalent to stock. The crash-at-scale review
+> (`../../operator/patch-crash-at-scale-critique.md`: 0 critical / 0 high)
+> covered the legacy 7-patch series behind `+tor41339.3`, not 0006–0008 or
+> 0012–0021. It is not a released package; do not enable enforcement
+> fleet-wide before measuring with the counters.
 
 ## Packages (`../../packages/`)
 
-One build per Ubuntu LTS from the same patches and the same build
-configuration:
+Two builds per Ubuntu LTS, `.9` (fleet) and `.10` (canary), each for both
+releases from the same patches and the same configure line:
 
 | Host | Package |
 |---|---|
 | Ubuntu 24.04 (noble) | `tor_0.4.9.15-1~noble+1+tor41339.9_amd64.deb` |
 | Ubuntu 26.04 (resolute) | `tor_0.4.9.15-1~resolute+1+tor41339.9_amd64.deb` |
+| Ubuntu 24.04 (noble), canary | `tor_0.4.9.15-1~noble+1+tor41339.10_amd64.deb` |
+| Ubuntu 26.04 (resolute), canary | `tor_0.4.9.15-1~resolute+1+tor41339.10_amd64.deb` |
+
+`.9` stays the fleet build. `.10` is `.9` plus 0021: the same options,
+defaults and metric names, and the 78 series of
+`tor_relay_begindir_close_reason_total` (`../../operator/BEGIN_DIR-BREAKDOWN.md`).
 
 - The `tor_…_amd64.deb` is the patched daemon (`/usr/bin/tor` + the systemd
   units); **it alone contains the patches.** The current plan unpacks it to
@@ -79,16 +88,27 @@ deb.torproject.org source package for that release: `SUITE=noble` in
 `ubuntu:24.04` on `tor_0.4.9.15-1~noble+1`, `SUITE=resolute` in `ubuntu:26.04`
 on `tor_0.4.9.15-1~resolute+1`. The two source packages share the orig tarball
 (sha256 `1911f5b2…63f3`, identical to dist.torproject.org), and their Debian
-packaging differs only in the changelog entry. The quilt series in
+packaging differs only in the changelog entry. By the time of `.10`,
+deb.torproject.org no longer had those 0.4.9.15 sources, so `.10` is built
+on the same two, rebuilt from Debian's tor 0.4.9.15-1 with the same sha256
+(`REBUILD-FROM-CURRENT-SERIES.md`). The quilt series in
 `debian-patches/` is `0000` (restores `doc/nofooter.conf`, which the release
 tarball omits), then `0001`–`0020` as they were at the build; it is the
-same for both builds. `../../patches/` has since corrected three comments
-in 0011 and 0013 and added a `BUG()` guard in 0012, which the packages
-don't have (`BUILD-INFO.txt`). `changelog` is the 24.04 build's
-`debian/changelog`; `resolute/changelog` is the 26.04 one.
+same for both releases. `debian-patches/` also holds `0021`, and `.10`'s
+series is `.9`'s with `0021` added: the driver writes it from the staged
+patches, `series` stays `.9`'s, and `BUILD-INFO.txt` has `.10`'s sha256.
+`../../patches/` has since corrected three comments in 0011 and 0013 and
+added a `BUG()` guard in 0012, which the packages don't have
+(`BUILD-INFO.txt`). `changelog` is the 24.04 build's `debian/changelog`;
+`resolute/changelog` is the 26.04 one. Both are `.9`'s; `.10`'s go beside
+them, with its suffix in their names.
 
-- `dh_auto_test` (`make test`, the full unit binary), both builds: **1639 tests
-  ok, 24 skipped (the same environment-conditional set), 0 failed.**
+- `dh_auto_test` (`make test`, the full unit binary), `.9`, both
+  releases: **1639 tests ok, 24 skipped (the same environment-conditional
+  set), 0 failed.** `.10` adds 0021's two tests (1641 ok, 24 skipped in a
+  native build), but its packages were built under amd64 emulation, where
+  tor's seccomp sandbox cannot load, so 7 sandbox tests were skipped: 1634
+  ok, 31 skipped, 0 failed in both releases (`BUILD-INFO.txt`).
 - No compiler warning on any line the series adds (gcc 13 and gcc 15). The
   only warnings in files the series touches are in unchanged upstream test
   code (`BUILD-INFO.txt` lists them).
@@ -111,7 +131,8 @@ To rebuild after `patches/` changes, follow `REBUILD-FROM-CURRENT-SERIES.md`.
 network (its own directory authorities and consensus; nothing touches the real
 Tor network) is brought up, then a fresh container of the matching release
 installs **only the `tor` package** (`tor-geoipdb` not installed) and runs an
-unpublished relay joined to that network. Results, the same for both builds:
+unpublished relay joined to that network. Results for `.9`, the same for
+both releases:
 
 - `tor --verify-config` returns 0 for the default and the lab torrc, and the
   installed version ends in `+tor41339.9`.
@@ -129,13 +150,30 @@ unpublished relay joined to that network. Results, the same for both builds:
   labels. None is under a name `.7` replaced or `.8` dropped, and tor
   0.4.9.15's three `begindir_*` counts are there. The values are near 0,
   since an unpublished relay gets no HS traffic.
+- On `.10` the check also requires the 78 series of
+  `tor_relay_begindir_close_reason_total`, each with exactly its labels
+  (`type`, `prev_hop`, `reason`, in that order): 199 in all. It checks
+  their names and labels, not that each type's reasons add up to its
+  requests. `.10`'s check did not run in this lab but offline, under amd64
+  emulation: the built `.deb` was installed with apt (its dependencies,
+  curl and procps from the Ubuntu archive) into a container that was then
+  committed, and `in-container.sh` ran from it with no network, against a
+  fake loopback authority and with `Sandbox 0`. Every check passed except
+  bootstrap, which cannot succeed there, so each transcript ends
+  `RESULT: FAIL`; all 78 series were present and 0. With `Sandbox 0`,
+  tor's seccomp filter never loaded (`Seccomp_filters: 1`, Docker's
+  alone), so the bad-syscall check could not fire: `.10` has not yet run
+  under `Sandbox 1`, and its 7 sandbox unit tests were skipped. Run it once
+  under `Sandbox 1` on amd64 (`run-deb-test.sh`) before a relay that uses
+  `Sandbox 1` takes the canary. The live controls and the breakdown lab
+  were not rerun (`../../packages/BUILD-INFO.txt`).
 
 `resolute/controls/` drives real HS-directory traffic through a private net
 in which every node runs the packaged binary under `Sandbox 1`, and switches
 each defense on and off live at one target HSDir, with a reuse load (5
 fetches per circuit), a one-hop load from an unlisted relay, and a stock
-client. Results for both packages (`controls-result.json` for 26.04,
-`controls-result-noble.json` for 24.04):
+client. Results for both `+tor41339.9` packages (`controls-result.json`
+for 26.04, `controls-result-noble.json` for 24.04; not rerun for `.10`):
 
 | Phase (40 s each) | Stock prober (target only) | Reuse load | One-hop load | Refused at the target |
 |---|---|---|---|---|
@@ -188,7 +226,9 @@ The install check exits nonzero if any of these fails.
 
 Evidence: `install-run-reordered/` (24.04) and `resolute/` (26.04):
 `install-run-transcript.txt`, `labnet.log`, `torrc-lab` (local paths replaced
-by `<work>`). The earlier `+tor41339.1`–`.4` builds are superseded.
+by `<work>`), for `.9`; `.10`'s transcript and torrc go beside them, with
+its suffix in their names (no lab log: its check ran offline). The earlier
+`+tor41339.1`–`.4` builds are superseded.
 
 ## Shutdown with `Sandbox 1`
 

@@ -1,0 +1,39 @@
+Format: 1.8
+Date: Fri, 06 Nov 2026 18:00:35 +0000
+Source: tor
+Binary: tor tor-geoipdb
+Built-For-Profiles: noudeb
+Architecture: amd64 all
+Version: 0.4.9.15-1~noble+1+tor41339.10
+Distribution: noble
+Urgency: medium
+Maintainer: Peter Palfrader <weasel@debian.org>
+Changed-By: 1aeo <github@1aeo.com>
+Description:
+ tor        - anonymizing overlay network for TCP
+ tor-geoipdb - GeoIP database for Tor
+Changes:
+ tor (0.4.9.15-1~noble+1+tor41339.10) noble; urgency=medium
+ .
+   * Apply the tor#41339 HSDir defensive series (patches 0001-0021) on
+     tor 0.4.9.15: the +tor41339.9 series unchanged, plus a MetricsPort
+     counter of the tunneled directory streams closed without reading a
+     request, by the first cause noted for their closing
+     (tor_relay_begindir_close_reason_total); restore doc/nofooter.conf.
+     The same options, defaults and other MetricsPort series as
+     +tor41339.9.
+Checksums-Sha1:
+ d2d8d25562fdd1e044439b38003e28cddabd7e15 6960344 tor-dbgsym_0.4.9.15-1~noble+1+tor41339.10_amd64.ddeb
+ 561d1510a7f82af77c1b778060480abb8449d957 2880502 tor-geoipdb_0.4.9.15-1~noble+1+tor41339.10_all.deb
+ f5f8037901dffae9b46364216aa038111f39041e 8672 tor_0.4.9.15-1~noble+1+tor41339.10_amd64.buildinfo
+ 26c25aaf4e711f3c4b8f0814fdd9ad732a66afe4 1766726 tor_0.4.9.15-1~noble+1+tor41339.10_amd64.deb
+Checksums-Sha256:
+ de26875217ba8f0a72fde682b86daec9432872e9f09382f369be817d6890f2ad 6960344 tor-dbgsym_0.4.9.15-1~noble+1+tor41339.10_amd64.ddeb
+ 750cd218caa7ba405b93867041c71276d4442b28ea24f74b7342a4930b4570c0 2880502 tor-geoipdb_0.4.9.15-1~noble+1+tor41339.10_all.deb
+ eaa650c486a16036a8ffbbd86350062706031efad4a1892a24e2d91794787dca 8672 tor_0.4.9.15-1~noble+1+tor41339.10_amd64.buildinfo
+ e3773afec2bc14df3278fb8c2aaa6b2dab96d14ca86c457cb40f8e089043d7e4 1766726 tor_0.4.9.15-1~noble+1+tor41339.10_amd64.deb
+Files:
+ 8b02da0820ee8353bf42154650e9e2d5 6960344 debug optional tor-dbgsym_0.4.9.15-1~noble+1+tor41339.10_amd64.ddeb
+ e4babed8b36adb99f06729c4862d1fb6 2880502 net optional tor-geoipdb_0.4.9.15-1~noble+1+tor41339.10_all.deb
+ d7c34a6702f3672bd3048bec55f6275d 8672 net optional tor_0.4.9.15-1~noble+1+tor41339.10_amd64.buildinfo
+ f5e989e2e362a18d153446ec1fe90dd7 1766726 net optional tor_0.4.9.15-1~noble+1+tor41339.10_amd64.deb

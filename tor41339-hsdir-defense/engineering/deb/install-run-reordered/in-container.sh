@@ -35,11 +35,14 @@ for old in HSDirOneRequestPerCircuit DoSBeginDirLimitEnabled DoSBeginDirMaxStrea
 done
 # The new series, by family: the exact labels tor writes (keys, values and
 # order) and how many series there must be. The 7 new tor_relay_dos_total
-# types and every series of each new family, 121 in all: no unset previous
-# hop, no misspelled label, nothing missing.
+# types and every series of each new family, 121 in all, and from
+# +tor41339.10 (0021) the 78 of tor_relay_begindir_close_reason_total, 199:
+# no unset previous hop, no misspelled label, nothing missing.
 HOP='prev_hop="(client|known_relay|unknown_relay)"'
 TYPE='type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"'
 BAND='nth="(1|2_10|11_100|101_1000|1001_plus)"'
+# 0021's reasons, in tor's order (dir_close_reason_names[] in relay_metrics.c).
+REASON='reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"'
 EXPECT="tor_relay_dos_total type=\"(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))\" 7
 tor_relay_hsdir_fetch_total action=\"(success|not_found|single_hop|refused)\" 4
 tor_relay_hsdir_upload_total action=\"(success|bad_url|invalid|not_newer|single_hop|refused)\" 6
@@ -52,6 +55,11 @@ tor_relay_begindir_cell_total $HOP,$BAND 15
 tor_relay_begindir_cell_source_total $HOP,$BAND 15
 tor_relay_create_cell_total $HOP 3
 tor_relay_create_cell_source_total $HOP,$BAND 15"
+# REV must be a whole number: it decides which families are expected.
+check grep -qxE '[0-9]+' <<< "$REV"
+[ "$REV" -ge 10 ] && EXPECT="$EXPECT
+tor_relay_begindir_close_reason_total type=\"(no_request|circuit_dead)\",$HOP,$REASON 78"
+TOTAL=$(awk '{s += $NF} END {print s}' <<< "$EXPECT")
 SERIES=$(while read -r f l n; do printf '|%s\\{%s\\}' "$f" "$l"; done <<< "$EXPECT")
 SERIES=${SERIES#|}
 tor -f /etc/tor/torrc-lab > /var/lib/tor-lab/stdout.log 2>&1 &
@@ -65,7 +73,7 @@ for i in 1 2 3 4; do
 done
 curl -s http://127.0.0.1:9650/metrics > /tmp/metrics.txt
 N=$(grep -E "^($SERIES) " /tmp/metrics.txt | cut -d' ' -f1 | sort -u | wc -l)
-echo "NEW_METRIC_SERIES=$N (expect 121)"; check [ "$N" -eq 121 ]
+echo "NEW_METRIC_SERIES=$N (expect $TOTAL)"; check [ "$N" -eq "$TOTAL" ]
 while read -r f l n; do
   e=$(grep -E "^$f\{$l\} " /tmp/metrics.txt | cut -d' ' -f1 | sort -u | wc -l)
   echo "$f: $e (expect $n)"; check [ "$e" -eq "$n" ]

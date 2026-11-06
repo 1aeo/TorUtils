@@ -1,10 +1,13 @@
 # tor#41339 defensive series: amd64 engineering results
 
 > **Historical summary.** The table below covers the legacy 7-patch series
-> up to the `+tor41339.3` packages. For the current 20-patch series on tor
-> 0.4.9.15 and the `+tor41339.9` packages, see `deb/README.md` (build,
-> install check, live controls) and `v9-minimize/` (the smaller series, its
-> review, per-commit builds, practracker and mutation testing).
+> up to the `+tor41339.3` packages. For the current 21-patch series on tor
+> 0.4.9.15 and the `+tor41339.9` (fleet) and `+tor41339.10` (canary)
+> packages, see `deb/README.md` (build, install check, live controls),
+> `v9-minimize/` (`.9`'s 20 patches: the smaller series, its review,
+> per-commit builds, practracker and mutation testing) and
+> `v10-close-reasons/mutants.tsv` (0021's mutants; its other checks are in
+> the `.10` block of `../packages/BUILD-INFO.txt`).
 > `v8-rebase/` covers the rebase onto tor 0.4.9.15 (`.8`), and `v7-review/`
 > and `../analysis/v7-review.md` cover `.7`.
 

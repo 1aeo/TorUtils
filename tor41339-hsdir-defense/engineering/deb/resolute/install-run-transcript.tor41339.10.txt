@@ -1,0 +1,676 @@
++ : 10
++ fail=0
++ export DEBIAN_FRONTEND=noninteractive
++ DEBIAN_FRONTEND=noninteractive
++ head -2 /etc/os-release
+PRETTY_NAME="Ubuntu 26.04.1 LTS"
+NAME="Ubuntu"
++ apt-get update -q
+W: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/resolute/InRelease  Temporary failure resolving 'archive.ubuntu.com'
+W: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/resolute-updates/InRelease  Temporary failure resolving 'archive.ubuntu.com'
+W: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/resolute-backports/InRelease  Temporary failure resolving 'archive.ubuntu.com'
+W: Failed to fetch http://security.ubuntu.com/ubuntu/dists/resolute-security/InRelease  Temporary failure resolving 'security.ubuntu.com'
+W: Some index files failed to download. They have been ignored, or old ones used instead.
++ apt-get install -y -q --no-install-recommends /debs/tor_0.4.9.15-1~resolute+1+tor41339.10_amd64.deb curl procps
++ tail -n 2
++ dpkg -l tor tor-geoipdb
+ii  tor            0.4.9.15-1~resolute+1+tor41339.10 amd64        anonymizing overlay network for TCP
+un  tor-geoipdb    <none>                            <none>       (no description available)
++ tor --version
+Tor version 0.4.9.15.
+This build of Tor is covered by the GNU General Public License (https://www.gnu.org/licenses/gpl-3.0.en.html)
+Tor is running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.
+Tor compiled with GCC version 15.2.0
++ tor --verify-config
+Nov 06 18:35:10.236 [notice] Tor 0.4.9.15 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.
+Nov 06 18:35:10.236 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+Nov 06 18:35:10.237 [notice] Read configuration file "/etc/tor/torrc".
+Nov 06 18:35:10.259 [warn] You are running Tor as root. You don't need to, and you probably shouldn't.
+Configuration was valid
++ rc=0
++ echo 'verify-config(default /etc/tor/torrc) rc=0'
+verify-config(default /etc/tor/torrc) rc=0
++ check '[' 0 -eq 0 ']'
++ '[' 0 -eq 0 ']'
++ install -d -o debian-tor -g debian-tor -m 700 /var/lib/tor-lab
++ cp /lab/torrc-lab /etc/tor/torrc-lab
++ tor -f /etc/tor/torrc-lab --verify-config
+Nov 06 18:35:10.387 [notice] Tor 0.4.9.15 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.
+Nov 06 18:35:10.387 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+Nov 06 18:35:10.388 [notice] Read configuration file "/etc/tor/torrc-lab".
+Nov 06 18:35:10.406 [warn] Your ContactInfo config option is not set. Please strongly consider setting it, so we can contact you if your relay is misconfigured, end-of-life, or something else goes wrong. It is also possible that your relay might get rejected from the network due to a missing valid contact address.
+Nov 06 18:35:10.407 [notice] Based on detected system memory, MaxMemInQueues is set to 8192 MB. You can override this by setting MaxMemInQueues by hand.
+Nov 06 18:35:10.409 [warn] You have used DirAuthority or AlternateDirAuthority to specify alternate directory authorities in your configuration. This is potentially dangerous: it can make you look different from all other Tor users, and hurt your anonymity. Even if you've specified the same authorities as Tor uses by default, the defaults could change in the future. Be sure you know what you're doing.
+Nov 06 18:35:10.410 [warn] TestingTorNetwork is set. This will make your node almost unusable in the public Tor network, and is therefore only advised if you are building a testing Tor network!
+Configuration was valid
++ rc=0
++ echo 'verify-config(lab) rc=0'
+verify-config(lab) rc=0
++ check '[' 0 -eq 0 ']'
++ '[' 0 -eq 0 ']'
+--- package version (expect suffix +tor41339.10)
++ echo '--- package version (expect suffix +tor41339.10)'
+++ dpkg-query -W '-f=${Version}' tor
++ V=0.4.9.15-1~resolute+1+tor41339.10
++ echo 0.4.9.15-1~resolute+1+tor41339.10
+0.4.9.15-1~resolute+1+tor41339.10
++ check '[' 10 = 10 ']'
++ '[' 10 = 10 ']'
++ echo '--- new option defaults (expect every defense off: auto with no consensus parameter, or 0)'
+--- new option defaults (expect every defense off: auto with no consensus parameter, or 0)
++ install -d -m 700 /tmp/dc
++ printf 'DataDirectory /tmp/dc\nSocksPort 0\nLog notice stdout\n'
++ OPTS='HSDirRefuseUnknownPrevHop|HSDirDescriptorFetchRate|HSDirDescriptorFetchBurst|HSDirFetchShedding|HSDirFetchBudget'
++ tor --defaults-torrc /dev/null -f /tmp/dc.torrc --dump-config full
++ grep -E '^(HSDirRefuseUnknownPrevHop|HSDirDescriptorFetchRate|HSDirDescriptorFetchBurst|HSDirFetchShedding|HSDirFetchBudget|RefuseUnknownExits|DoSBeginDir(Rate|Burst|RateEnabled|DefenseType)) '
+DoSBeginDirBurst 0
+DoSBeginDirDefenseType 0
+DoSBeginDirRate 0
+DoSBeginDirRateEnabled auto
+HSDirDescriptorFetchBurst 20
+HSDirDescriptorFetchRate 5
+HSDirFetchBudget 0
+HSDirFetchShedding auto
+HSDirRefuseUnknownPrevHop auto
+RefuseUnknownExits auto
+++ tor --list-torrc-options
+++ grep -cxE 'HSDirRefuseUnknownPrevHop|HSDirDescriptorFetchRate|HSDirDescriptorFetchBurst|HSDirFetchShedding|HSDirFetchBudget'
++ NO=5
++ echo 'NEW_OPTIONS=5 (expect 5)'
+NEW_OPTIONS=5 (expect 5)
++ check '[' 5 -eq 5 ']'
++ '[' 5 -eq 5 ']'
+--- names that +tor41339.8 dropped are unknown options: a torrc that sets one must be fixed
++ echo '--- names that +tor41339.8 dropped are unknown options: a torrc that sets one must be fixed'
++ for old in HSDirOneRequestPerCircuit DoSBeginDirLimitEnabled DoSBeginDirMaxStreams HSDirDescriptorFetchLimit
++ cat /tmp/dc.torrc -
++ printf '%s 1\n' HSDirOneRequestPerCircuit
+++ tor --defaults-torrc /dev/null -f /tmp/dc-old.torrc --verify-config
++ OLDOPT=$'Nov 06 18:35:10.769 [notice] Tor 0.4.9.15 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.\nNov 06 18:35:10.770 [notice] Tor can\'t help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/\nNov 06 18:35:10.770 [notice] Read configuration file "/tmp/dc-old.torrc".\nNov 06 18:35:10.779 [warn] Failed to parse/validate config: Unknown option \'HSDirOneRequestPerCircuit\'.  Failing.\nNov 06 18:35:10.779 [err] Reading config failed--see warnings above.'
++ echo $'Nov 06 18:35:10.769 [notice] Tor 0.4.9.15 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.\nNov 06 18:35:10.770 [notice] Tor can\'t help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/\nNov 06 18:35:10.770 [notice] Read configuration file "/tmp/dc-old.torrc".\nNov 06 18:35:10.779 [warn] Failed to parse/validate config: Unknown option \'HSDirOneRequestPerCircuit\'.  Failing.\nNov 06 18:35:10.779 [err] Reading config failed--see warnings above.'
++ grep -E 'Unknown option|Configuration was valid'
+Nov 06 18:35:10.779 [warn] Failed to parse/validate config: Unknown option 'HSDirOneRequestPerCircuit'.  Failing.
++ check grep -q 'Unknown option '\''HSDirOneRequestPerCircuit'\'''
++ grep -q 'Unknown option '\''HSDirOneRequestPerCircuit'\'''
++ for old in HSDirOneRequestPerCircuit DoSBeginDirLimitEnabled DoSBeginDirMaxStreams HSDirDescriptorFetchLimit
++ printf '%s 1\n' DoSBeginDirLimitEnabled
++ cat /tmp/dc.torrc -
+++ tor --defaults-torrc /dev/null -f /tmp/dc-old.torrc --verify-config
++ OLDOPT=$'Nov 06 18:35:10.931 [notice] Tor 0.4.9.15 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.\nNov 06 18:35:10.931 [notice] Tor can\'t help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/\nNov 06 18:35:10.931 [notice] Read configuration file "/tmp/dc-old.torrc".\nNov 06 18:35:10.940 [warn] Failed to parse/validate config: Unknown option \'DoSBeginDirLimitEnabled\'.  Failing.\nNov 06 18:35:10.940 [err] Reading config failed--see warnings above.'
++ grep -E 'Unknown option|Configuration was valid'
++ echo $'Nov 06 18:35:10.931 [notice] Tor 0.4.9.15 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.\nNov 06 18:35:10.931 [notice] Tor can\'t help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/\nNov 06 18:35:10.931 [notice] Read configuration file "/tmp/dc-old.torrc".\nNov 06 18:35:10.940 [warn] Failed to parse/validate config: Unknown option \'DoSBeginDirLimitEnabled\'.  Failing.\nNov 06 18:35:10.940 [err] Reading config failed--see warnings above.'
+Nov 06 18:35:10.940 [warn] Failed to parse/validate config: Unknown option 'DoSBeginDirLimitEnabled'.  Failing.
++ check grep -q 'Unknown option '\''DoSBeginDirLimitEnabled'\'''
++ grep -q 'Unknown option '\''DoSBeginDirLimitEnabled'\'''
++ for old in HSDirOneRequestPerCircuit DoSBeginDirLimitEnabled DoSBeginDirMaxStreams HSDirDescriptorFetchLimit
++ printf '%s 1\n' DoSBeginDirMaxStreams
++ cat /tmp/dc.torrc -
+++ tor --defaults-torrc /dev/null -f /tmp/dc-old.torrc --verify-config
++ OLDOPT=$'Nov 06 18:35:11.088 [notice] Tor 0.4.9.15 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.\nNov 06 18:35:11.089 [notice] Tor can\'t help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/\nNov 06 18:35:11.089 [notice] Read configuration file "/tmp/dc-old.torrc".\nNov 06 18:35:11.098 [warn] Failed to parse/validate config: Unknown option \'DoSBeginDirMaxStreams\'.  Failing.\nNov 06 18:35:11.098 [err] Reading config failed--see warnings above.'
++ echo $'Nov 06 18:35:11.088 [notice] Tor 0.4.9.15 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.\nNov 06 18:35:11.089 [notice] Tor can\'t help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/\nNov 06 18:35:11.089 [notice] Read configuration file "/tmp/dc-old.torrc".\nNov 06 18:35:11.098 [warn] Failed to parse/validate config: Unknown option \'DoSBeginDirMaxStreams\'.  Failing.\nNov 06 18:35:11.098 [err] Reading config failed--see warnings above.'
++ grep -E 'Unknown option|Configuration was valid'
+Nov 06 18:35:11.098 [warn] Failed to parse/validate config: Unknown option 'DoSBeginDirMaxStreams'.  Failing.
++ check grep -q 'Unknown option '\''DoSBeginDirMaxStreams'\'''
++ grep -q 'Unknown option '\''DoSBeginDirMaxStreams'\'''
++ for old in HSDirOneRequestPerCircuit DoSBeginDirLimitEnabled DoSBeginDirMaxStreams HSDirDescriptorFetchLimit
++ printf '%s 1\n' HSDirDescriptorFetchLimit
++ cat /tmp/dc.torrc -
+++ tor --defaults-torrc /dev/null -f /tmp/dc-old.torrc --verify-config
++ OLDOPT=$'Nov 06 18:35:11.253 [notice] Tor 0.4.9.15 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.\nNov 06 18:35:11.253 [notice] Tor can\'t help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/\nNov 06 18:35:11.254 [notice] Read configuration file "/tmp/dc-old.torrc".\nNov 06 18:35:11.263 [warn] Failed to parse/validate config: Unknown option \'HSDirDescriptorFetchLimit\'.  Failing.\nNov 06 18:35:11.263 [err] Reading config failed--see warnings above.'
++ grep -E 'Unknown option|Configuration was valid'
++ echo $'Nov 06 18:35:11.253 [notice] Tor 0.4.9.15 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.\nNov 06 18:35:11.253 [notice] Tor can\'t help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/\nNov 06 18:35:11.254 [notice] Read configuration file "/tmp/dc-old.torrc".\nNov 06 18:35:11.263 [warn] Failed to parse/validate config: Unknown option \'HSDirDescriptorFetchLimit\'.  Failing.\nNov 06 18:35:11.263 [err] Reading config failed--see warnings above.'
+Nov 06 18:35:11.263 [warn] Failed to parse/validate config: Unknown option 'HSDirDescriptorFetchLimit'.  Failing.
++ check grep -q 'Unknown option '\''HSDirDescriptorFetchLimit'\'''
++ grep -q 'Unknown option '\''HSDirDescriptorFetchLimit'\'''
++ HOP='prev_hop="(client|known_relay|unknown_relay)"'
++ TYPE='type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"'
++ BAND='nth="(1|2_10|11_100|101_1000|1001_plus)"'
++ REASON='reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"'
++ EXPECT=$'tor_relay_dos_total type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))" 7\ntor_relay_hsdir_fetch_total action="(success|not_found|single_hop|refused)" 4\ntor_relay_hsdir_upload_total action="(success|bad_url|invalid|not_newer|single_hop|refused)" 6\ntor_relay_hsdir_fetch_descriptor_total lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)" 10\ntor_relay_begindir_request_total type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)" 30\ntor_relay_begindir_response_total type="(hs_descriptor|other)" 2\ntor_relay_begindir_response_bytes_total type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)" 10\ntor_relay_begindir_connections state="(command_wait|writing_hs_descriptor|writing_other|draining)" 4\ntor_relay_begindir_cell_total prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)" 15\ntor_relay_begindir_cell_source_total prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)" 15\ntor_relay_create_cell_total prev_hop="(client|known_relay|unknown_relay)" 3\ntor_relay_create_cell_source_total prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)" 15'
++ check grep -qxE '[0-9]+'
++ grep -qxE '[0-9]+'
++ '[' 10 -ge 10 ']'
++ EXPECT=$'tor_relay_dos_total type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))" 7\ntor_relay_hsdir_fetch_total action="(success|not_found|single_hop|refused)" 4\ntor_relay_hsdir_upload_total action="(success|bad_url|invalid|not_newer|single_hop|refused)" 6\ntor_relay_hsdir_fetch_descriptor_total lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)" 10\ntor_relay_begindir_request_total type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)" 30\ntor_relay_begindir_response_total type="(hs_descriptor|other)" 2\ntor_relay_begindir_response_bytes_total type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)" 10\ntor_relay_begindir_connections state="(command_wait|writing_hs_descriptor|writing_other|draining)" 4\ntor_relay_begindir_cell_total prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)" 15\ntor_relay_begindir_cell_source_total prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)" 15\ntor_relay_create_cell_total prev_hop="(client|known_relay|unknown_relay)" 3\ntor_relay_create_cell_source_total prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)" 15\ntor_relay_begindir_close_reason_total type="(no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)",reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)" 78'
+++ awk '{s += $NF} END {print s}'
++ TOTAL=199
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_dos_total 'type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_hsdir_fetch_total 'action="(success|not_found|single_hop|refused)"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_hsdir_upload_total 'action="(success|bad_url|invalid|not_newer|single_hop|refused)"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_hsdir_fetch_descriptor_total 'lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_begindir_request_total 'type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_begindir_response_total 'type="(hs_descriptor|other)"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_begindir_response_bytes_total 'type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_begindir_connections 'state="(command_wait|writing_hs_descriptor|writing_other|draining)"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_begindir_cell_total 'prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_begindir_cell_source_total 'prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_create_cell_total 'prev_hop="(client|known_relay|unknown_relay)"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_create_cell_source_total 'prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"'
+++ read -r f l n
+++ printf '|%s\\{%s\\}' tor_relay_begindir_close_reason_total 'type="(no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)",reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"'
+++ read -r f l n
++ SERIES='|tor_relay_dos_total\{type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))"\}|tor_relay_hsdir_fetch_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_upload_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_hsdir_fetch_descriptor_total\{lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_request_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_begindir_response_total\{type="(hs_descriptor|other)"\}|tor_relay_begindir_response_bytes_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"\}|tor_relay_begindir_connections\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}|tor_relay_begindir_cell_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_create_cell_total\{prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_create_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_close_reason_total\{type="(no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)",reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"\}'
++ SERIES='tor_relay_dos_total\{type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))"\}|tor_relay_hsdir_fetch_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_upload_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_hsdir_fetch_descriptor_total\{lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_request_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_begindir_response_total\{type="(hs_descriptor|other)"\}|tor_relay_begindir_response_bytes_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"\}|tor_relay_begindir_connections\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}|tor_relay_begindir_cell_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_create_cell_total\{prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_create_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_close_reason_total\{type="(no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)",reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"\}'
++ TORPID=179
++ sleep 20
++ tor -f /etc/tor/torrc-lab
++ check kill -0 179
++ kill -0 179
+--- after 20s: Seccomp state of packaged tor (pid 179)
++ echo '--- after 20s: Seccomp state of packaged tor (pid 179)'
++ grep -E '^Seccomp' /proc/179/status
+Seccomp:	2
+Seccomp_filters:	1
++ for i in 1 2 3 4
++ sleep 25
+++ curl -s http://127.0.0.1:9650/metrics
+++ grep -cE '^(tor_relay_dos_total\{type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))"\}|tor_relay_hsdir_fetch_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_upload_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_hsdir_fetch_descriptor_total\{lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_request_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_begindir_response_total\{type="(hs_descriptor|other)"\}|tor_relay_begindir_response_bytes_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"\}|tor_relay_begindir_connections\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}|tor_relay_begindir_cell_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_create_cell_total\{prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_create_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_close_reason_total\{type="(no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)",reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"\}) '
+--- +45s: 199 new series
++ echo '--- +45s: 199 new series'
++ for i in 1 2 3 4
++ sleep 25
+++ curl -s http://127.0.0.1:9650/metrics
+++ grep -cE '^(tor_relay_dos_total\{type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))"\}|tor_relay_hsdir_fetch_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_upload_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_hsdir_fetch_descriptor_total\{lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_request_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_begindir_response_total\{type="(hs_descriptor|other)"\}|tor_relay_begindir_response_bytes_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"\}|tor_relay_begindir_connections\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}|tor_relay_begindir_cell_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_create_cell_total\{prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_create_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_close_reason_total\{type="(no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)",reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"\}) '
++ echo '--- +70s: 199 new series'
++ for i in 1 2 3 4
++ sleep 25
+--- +70s: 199 new series
+++ curl -s http://127.0.0.1:9650/metrics
+++ grep -cE '^(tor_relay_dos_total\{type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))"\}|tor_relay_hsdir_fetch_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_upload_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_hsdir_fetch_descriptor_total\{lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_request_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_begindir_response_total\{type="(hs_descriptor|other)"\}|tor_relay_begindir_response_bytes_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"\}|tor_relay_begindir_connections\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}|tor_relay_begindir_cell_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_create_cell_total\{prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_create_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_close_reason_total\{type="(no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)",reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"\}) '
++ echo '--- +95s: 199 new series'
+--- +95s: 199 new series
++ for i in 1 2 3 4
++ sleep 25
+++ curl -s http://127.0.0.1:9650/metrics
+++ grep -cE '^(tor_relay_dos_total\{type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))"\}|tor_relay_hsdir_fetch_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_upload_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_hsdir_fetch_descriptor_total\{lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_request_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_begindir_response_total\{type="(hs_descriptor|other)"\}|tor_relay_begindir_response_bytes_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"\}|tor_relay_begindir_connections\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}|tor_relay_begindir_cell_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_create_cell_total\{prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_create_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_close_reason_total\{type="(no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)",reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"\}) '
++ echo '--- +120s: 199 new series'
+--- +120s: 199 new series
++ curl -s http://127.0.0.1:9650/metrics
+++ grep -E '^(tor_relay_dos_total\{type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))"\}|tor_relay_hsdir_fetch_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_upload_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_hsdir_fetch_descriptor_total\{lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_request_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_begindir_response_total\{type="(hs_descriptor|other)"\}|tor_relay_begindir_response_bytes_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"\}|tor_relay_begindir_connections\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}|tor_relay_begindir_cell_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_create_cell_total\{prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_create_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_close_reason_total\{type="(no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)",reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"\}) ' /tmp/metrics.txt
+++ cut '-d ' -f1
+++ sort -u
+++ wc -l
++ N=199
+NEW_METRIC_SERIES=199 (expect 199)
++ echo 'NEW_METRIC_SERIES=199 (expect 199)'
++ check '[' 199 -eq 199 ']'
++ '[' 199 -eq 199 ']'
++ read -r f l n
+++ cut '-d ' -f1
+++ grep -E '^tor_relay_dos_total\{type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))"\} ' /tmp/metrics.txt
+++ sort -u
+++ wc -l
++ e=7
+tor_relay_dos_total: 7 (expect 7)
++ echo 'tor_relay_dos_total: 7 (expect 7)'
++ check '[' 7 -eq 7 ']'
++ '[' 7 -eq 7 ']'
++ '[' tor_relay_dos_total '!=' tor_relay_dos_total ']'
++ read -r f l n
+++ grep -E '^tor_relay_hsdir_fetch_total\{action="(success|not_found|single_hop|refused)"\} ' /tmp/metrics.txt
+++ cut '-d ' -f1
+++ sort -u
+++ wc -l
++ e=4
+tor_relay_hsdir_fetch_total: 4 (expect 4)
++ echo 'tor_relay_hsdir_fetch_total: 4 (expect 4)'
++ check '[' 4 -eq 4 ']'
++ '[' 4 -eq 4 ']'
++ '[' tor_relay_hsdir_fetch_total '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_hsdir_fetch_total\{' /tmp/metrics.txt
++ a=4
++ check '[' 4 -eq 4 ']'
++ '[' 4 -eq 4 ']'
++ read -r f l n
+++ cut '-d ' -f1
+++ grep -E '^tor_relay_hsdir_upload_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\} ' /tmp/metrics.txt
+++ sort -u
+++ wc -l
++ e=6
+tor_relay_hsdir_upload_total: 6 (expect 6)
++ echo 'tor_relay_hsdir_upload_total: 6 (expect 6)'
++ check '[' 6 -eq 6 ']'
++ '[' 6 -eq 6 ']'
++ '[' tor_relay_hsdir_upload_total '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_hsdir_upload_total\{' /tmp/metrics.txt
++ a=6
++ check '[' 6 -eq 6 ']'
++ '[' 6 -eq 6 ']'
++ read -r f l n
+++ grep -E '^tor_relay_hsdir_fetch_descriptor_total\{lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)"\} ' /tmp/metrics.txt
+++ cut '-d ' -f1
+++ sort -u
+++ wc -l
++ e=10
++ echo 'tor_relay_hsdir_fetch_descriptor_total: 10 (expect 10)'
+tor_relay_hsdir_fetch_descriptor_total: 10 (expect 10)
++ check '[' 10 -eq 10 ']'
++ '[' 10 -eq 10 ']'
++ '[' tor_relay_hsdir_fetch_descriptor_total '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_hsdir_fetch_descriptor_total\{' /tmp/metrics.txt
++ a=10
++ check '[' 10 -eq 10 ']'
++ '[' 10 -eq 10 ']'
++ read -r f l n
+++ cut '-d ' -f1
+++ grep -E '^tor_relay_begindir_request_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)"\} ' /tmp/metrics.txt
+++ sort -u
+++ wc -l
++ e=30
+tor_relay_begindir_request_total: 30 (expect 30)
++ echo 'tor_relay_begindir_request_total: 30 (expect 30)'
++ check '[' 30 -eq 30 ']'
++ '[' 30 -eq 30 ']'
++ '[' tor_relay_begindir_request_total '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_begindir_request_total\{' /tmp/metrics.txt
++ a=30
++ check '[' 30 -eq 30 ']'
++ '[' 30 -eq 30 ']'
++ read -r f l n
+++ cut '-d ' -f1
+++ sort -u
+++ grep -E '^tor_relay_begindir_response_total\{type="(hs_descriptor|other)"\} ' /tmp/metrics.txt
+++ wc -l
++ e=2
++ echo 'tor_relay_begindir_response_total: 2 (expect 2)'
++ check '[' 2 -eq 2 ']'
+tor_relay_begindir_response_total: 2 (expect 2)
++ '[' 2 -eq 2 ']'
++ '[' tor_relay_begindir_response_total '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_begindir_response_total\{' /tmp/metrics.txt
++ a=2
++ check '[' 2 -eq 2 ']'
++ '[' 2 -eq 2 ']'
++ read -r f l n
+++ cut '-d ' -f1
+++ grep -E '^tor_relay_begindir_response_bytes_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"\} ' /tmp/metrics.txt
+++ sort -u
+++ wc -l
++ e=10
+tor_relay_begindir_response_bytes_total: 10 (expect 10)
++ echo 'tor_relay_begindir_response_bytes_total: 10 (expect 10)'
++ check '[' 10 -eq 10 ']'
++ '[' 10 -eq 10 ']'
++ '[' tor_relay_begindir_response_bytes_total '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_begindir_response_bytes_total\{' /tmp/metrics.txt
++ a=10
++ check '[' 10 -eq 10 ']'
++ '[' 10 -eq 10 ']'
++ read -r f l n
+++ cut '-d ' -f1
+++ grep -E '^tor_relay_begindir_connections\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\} ' /tmp/metrics.txt
+++ sort -u
+++ wc -l
++ e=4
++ echo 'tor_relay_begindir_connections: 4 (expect 4)'
+tor_relay_begindir_connections: 4 (expect 4)
++ check '[' 4 -eq 4 ']'
++ '[' 4 -eq 4 ']'
++ '[' tor_relay_begindir_connections '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_begindir_connections\{' /tmp/metrics.txt
++ a=4
++ check '[' 4 -eq 4 ']'
++ '[' 4 -eq 4 ']'
++ read -r f l n
+++ grep -E '^tor_relay_begindir_cell_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\} ' /tmp/metrics.txt
+++ cut '-d ' -f1
+++ sort -u
+++ wc -l
++ e=15
++ echo 'tor_relay_begindir_cell_total: 15 (expect 15)'
+tor_relay_begindir_cell_total: 15 (expect 15)
++ check '[' 15 -eq 15 ']'
++ '[' 15 -eq 15 ']'
++ '[' tor_relay_begindir_cell_total '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_begindir_cell_total\{' /tmp/metrics.txt
++ a=15
++ check '[' 15 -eq 15 ']'
++ '[' 15 -eq 15 ']'
++ read -r f l n
+++ cut '-d ' -f1
+++ grep -E '^tor_relay_begindir_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\} ' /tmp/metrics.txt
+++ sort -u
+++ wc -l
++ e=15
+tor_relay_begindir_cell_source_total: 15 (expect 15)
++ echo 'tor_relay_begindir_cell_source_total: 15 (expect 15)'
++ check '[' 15 -eq 15 ']'
++ '[' 15 -eq 15 ']'
++ '[' tor_relay_begindir_cell_source_total '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_begindir_cell_source_total\{' /tmp/metrics.txt
++ a=15
++ check '[' 15 -eq 15 ']'
++ '[' 15 -eq 15 ']'
++ read -r f l n
+++ cut '-d ' -f1
+++ sort -u
+++ grep -E '^tor_relay_create_cell_total\{prev_hop="(client|known_relay|unknown_relay)"\} ' /tmp/metrics.txt
+++ wc -l
++ e=3
+tor_relay_create_cell_total: 3 (expect 3)
++ echo 'tor_relay_create_cell_total: 3 (expect 3)'
++ check '[' 3 -eq 3 ']'
++ '[' 3 -eq 3 ']'
++ '[' tor_relay_create_cell_total '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_create_cell_total\{' /tmp/metrics.txt
++ a=3
++ check '[' 3 -eq 3 ']'
++ '[' 3 -eq 3 ']'
++ read -r f l n
+++ cut '-d ' -f1
+++ grep -E '^tor_relay_create_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\} ' /tmp/metrics.txt
+++ sort -u
+++ wc -l
++ e=15
++ echo 'tor_relay_create_cell_source_total: 15 (expect 15)'
++ check '[' 15 -eq 15 ']'
+tor_relay_create_cell_source_total: 15 (expect 15)
++ '[' 15 -eq 15 ']'
++ '[' tor_relay_create_cell_source_total '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_create_cell_source_total\{' /tmp/metrics.txt
++ a=15
++ check '[' 15 -eq 15 ']'
++ '[' 15 -eq 15 ']'
++ read -r f l n
+++ cut '-d ' -f1
+++ grep -E '^tor_relay_begindir_close_reason_total\{type="(no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)",reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"\} ' /tmp/metrics.txt
+++ sort -u
+++ wc -l
++ e=78
+tor_relay_begindir_close_reason_total: 78 (expect 78)
++ echo 'tor_relay_begindir_close_reason_total: 78 (expect 78)'
++ check '[' 78 -eq 78 ']'
++ '[' 78 -eq 78 ']'
++ '[' tor_relay_begindir_close_reason_total '!=' tor_relay_dos_total ']'
+++ grep -cE '^tor_relay_begindir_close_reason_total\{' /tmp/metrics.txt
++ a=78
++ check '[' 78 -eq 78 ']'
++ '[' 78 -eq 78 ']'
++ read -r f l n
+++ grep -cE '^tor_relay_(dir_requests_total|dir_responses_total|dir_server_conns|begindir_streams_total|begindir_requests_total|begindir_over_max_requests_total|begindir_request_over_max_total|hsdir_get_total|hsdir_post_total|hsdir_fetch_target_total)\{|^tor_relay_dos_total\{type="(hsdir_request(_total)?|hsdir_req_reused|hsdir_circ_reused|begindir_over_stream_rate|begindir_over_max)"\}|^tor_relay_hsdir_(fetch|upload)_total\{action="circuit_dead"\}|lookup="missing"' /tmp/metrics.txt
++ GONE=0
++ echo 'replaced names: 0 series (expect 0)'
++ check '[' 0 -eq 0 ']'
+replaced names: 0 series (expect 0)
++ '[' 0 -eq 0 ']'
+++ grep -cE '^tor_relay_dos_total\{type="begindir_(rejected|rate_rejected|hsdir_rejected)"\}' /tmp/metrics.txt
++ STOCK=3
++ echo 'tor 0.4.9.15 BEGIN_DIR counts: 3 series (expect 3)'
++ check '[' 3 -eq 3 ']'
+tor 0.4.9.15 BEGIN_DIR counts: 3 series (expect 3)
++ '[' 3 -eq 3 ']'
++ grep -E '^(tor_relay_dos_total\{type="(hsdir_(unknown_prev_hop|descriptor_only_prev_hop|fetch_over_rate|fetch_pressure|fetch_shed)|circuit_(over_rate|untracked))"\}|tor_relay_hsdir_fetch_total\{action="(success|not_found|single_hop|refused)"\}|tor_relay_hsdir_upload_total\{action="(success|bad_url|invalid|not_newer|single_hop|refused)"\}|tor_relay_hsdir_fetch_descriptor_total\{lookup="(found|not_found)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_request_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_begindir_response_total\{type="(hs_descriptor|other)"\}|tor_relay_begindir_response_bytes_total\{type="(hs_get|hs_post|consensus|microdesc|descriptor|other_get|other_post|unparsed|no_request|circuit_dead)"\}|tor_relay_begindir_connections\{state="(command_wait|writing_hs_descriptor|writing_other|draining)"\}|tor_relay_begindir_cell_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_create_cell_total\{prev_hop="(client|known_relay|unknown_relay)"\}|tor_relay_create_cell_source_total\{prev_hop="(client|known_relay|unknown_relay)",nth="(1|2_10|11_100|101_1000|1001_plus)"\}|tor_relay_begindir_close_reason_total\{type="(no_request|circuit_dead)",prev_hop="(client|known_relay|unknown_relay)",reason="(unknown|end_cell|destroy_cell|channel_closed|timeout|begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed|cell_queue_full|oom|protocol|other)"\}) ' /tmp/metrics.txt
+tor_relay_begindir_cell_source_total{prev_hop="client",nth="1"} 0
+tor_relay_begindir_cell_source_total{prev_hop="client",nth="2_10"} 0
+tor_relay_begindir_cell_source_total{prev_hop="client",nth="11_100"} 0
+tor_relay_begindir_cell_source_total{prev_hop="client",nth="101_1000"} 0
+tor_relay_begindir_cell_source_total{prev_hop="client",nth="1001_plus"} 0
+tor_relay_begindir_cell_source_total{prev_hop="known_relay",nth="1"} 0
+tor_relay_begindir_cell_source_total{prev_hop="known_relay",nth="2_10"} 0
+tor_relay_begindir_cell_source_total{prev_hop="known_relay",nth="11_100"} 0
+tor_relay_begindir_cell_source_total{prev_hop="known_relay",nth="101_1000"} 0
+tor_relay_begindir_cell_source_total{prev_hop="known_relay",nth="1001_plus"} 0
+tor_relay_begindir_cell_source_total{prev_hop="unknown_relay",nth="1"} 0
+tor_relay_begindir_cell_source_total{prev_hop="unknown_relay",nth="2_10"} 0
+tor_relay_begindir_cell_source_total{prev_hop="unknown_relay",nth="11_100"} 0
+tor_relay_begindir_cell_source_total{prev_hop="unknown_relay",nth="101_1000"} 0
+tor_relay_begindir_cell_source_total{prev_hop="unknown_relay",nth="1001_plus"} 0
+tor_relay_hsdir_fetch_descriptor_total{lookup="not_found",nth="1"} 0
+tor_relay_hsdir_fetch_descriptor_total{lookup="not_found",nth="2_10"} 0
+tor_relay_hsdir_fetch_descriptor_total{lookup="not_found",nth="11_100"} 0
+tor_relay_hsdir_fetch_descriptor_total{lookup="not_found",nth="101_1000"} 0
+tor_relay_hsdir_fetch_descriptor_total{lookup="not_found",nth="1001_plus"} 0
+tor_relay_hsdir_fetch_descriptor_total{lookup="found",nth="1"} 0
+tor_relay_hsdir_fetch_descriptor_total{lookup="found",nth="2_10"} 0
+tor_relay_hsdir_fetch_descriptor_total{lookup="found",nth="11_100"} 0
+tor_relay_hsdir_fetch_descriptor_total{lookup="found",nth="101_1000"} 0
+tor_relay_hsdir_fetch_descriptor_total{lookup="found",nth="1001_plus"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="unknown"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="end_cell"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="destroy_cell"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="channel_closed"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="timeout"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="begindir_rate"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="hsdir_second_request"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="hsdir_unknown_prev_hop"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="hsdir_fetch_shed"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="cell_queue_full"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="oom"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="protocol"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="client",reason="other"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="unknown"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="end_cell"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="destroy_cell"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="channel_closed"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="timeout"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="begindir_rate"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="hsdir_second_request"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="hsdir_unknown_prev_hop"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="hsdir_fetch_shed"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="cell_queue_full"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="oom"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="protocol"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="known_relay",reason="other"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="unknown"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="end_cell"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="destroy_cell"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="channel_closed"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="timeout"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="begindir_rate"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="hsdir_second_request"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="hsdir_unknown_prev_hop"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="hsdir_fetch_shed"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="cell_queue_full"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="oom"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="protocol"} 0
+tor_relay_begindir_close_reason_total{type="no_request",prev_hop="unknown_relay",reason="other"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="unknown"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="end_cell"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="destroy_cell"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="channel_closed"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="timeout"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="begindir_rate"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="hsdir_second_request"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="hsdir_unknown_prev_hop"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="hsdir_fetch_shed"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="cell_queue_full"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="oom"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="protocol"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="client",reason="other"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="unknown"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="end_cell"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="destroy_cell"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="channel_closed"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="timeout"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="begindir_rate"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="hsdir_second_request"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="hsdir_unknown_prev_hop"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="hsdir_fetch_shed"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="cell_queue_full"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="oom"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="protocol"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="known_relay",reason="other"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="unknown"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="end_cell"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="destroy_cell"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="channel_closed"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="timeout"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="begindir_rate"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="hsdir_second_request"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="hsdir_unknown_prev_hop"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="hsdir_fetch_shed"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="cell_queue_full"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="oom"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="protocol"} 0
+tor_relay_begindir_close_reason_total{type="circuit_dead",prev_hop="unknown_relay",reason="other"} 0
+tor_relay_begindir_response_bytes_total{type="hs_get"} 0
+tor_relay_begindir_response_bytes_total{type="hs_post"} 0
+tor_relay_begindir_response_bytes_total{type="consensus"} 0
+tor_relay_begindir_response_bytes_total{type="microdesc"} 0
+tor_relay_begindir_response_bytes_total{type="descriptor"} 0
+tor_relay_begindir_response_bytes_total{type="other_get"} 0
+tor_relay_begindir_response_bytes_total{type="other_post"} 0
+tor_relay_begindir_response_bytes_total{type="unparsed"} 0
+tor_relay_begindir_response_bytes_total{type="no_request"} 0
+tor_relay_begindir_response_bytes_total{type="circuit_dead"} 0
+tor_relay_create_cell_total{prev_hop="client"} 0
+tor_relay_create_cell_total{prev_hop="known_relay"} 0
+tor_relay_create_cell_total{prev_hop="unknown_relay"} 0
+tor_relay_dos_total{type="circuit_over_rate"} 0
+tor_relay_dos_total{type="circuit_untracked"} 0
+tor_relay_dos_total{type="hsdir_unknown_prev_hop"} 0
+tor_relay_dos_total{type="hsdir_descriptor_only_prev_hop"} 0
+tor_relay_dos_total{type="hsdir_fetch_over_rate"} 0
+tor_relay_dos_total{type="hsdir_fetch_pressure"} 0
+tor_relay_dos_total{type="hsdir_fetch_shed"} 0
+tor_relay_hsdir_upload_total{action="success"} 0
+tor_relay_hsdir_upload_total{action="bad_url"} 0
+tor_relay_hsdir_upload_total{action="invalid"} 0
+tor_relay_hsdir_upload_total{action="not_newer"} 0
+tor_relay_hsdir_upload_total{action="single_hop"} 0
+tor_relay_hsdir_upload_total{action="refused"} 0
+tor_relay_create_cell_source_total{prev_hop="client",nth="1"} 0
+tor_relay_create_cell_source_total{prev_hop="client",nth="2_10"} 0
+tor_relay_create_cell_source_total{prev_hop="client",nth="11_100"} 0
+tor_relay_create_cell_source_total{prev_hop="client",nth="101_1000"} 0
+tor_relay_create_cell_source_total{prev_hop="client",nth="1001_plus"} 0
+tor_relay_create_cell_source_total{prev_hop="known_relay",nth="1"} 0
+tor_relay_create_cell_source_total{prev_hop="known_relay",nth="2_10"} 0
+tor_relay_create_cell_source_total{prev_hop="known_relay",nth="11_100"} 0
+tor_relay_create_cell_source_total{prev_hop="known_relay",nth="101_1000"} 0
+tor_relay_create_cell_source_total{prev_hop="known_relay",nth="1001_plus"} 0
+tor_relay_create_cell_source_total{prev_hop="unknown_relay",nth="1"} 0
+tor_relay_create_cell_source_total{prev_hop="unknown_relay",nth="2_10"} 0
+tor_relay_create_cell_source_total{prev_hop="unknown_relay",nth="11_100"} 0
+tor_relay_create_cell_source_total{prev_hop="unknown_relay",nth="101_1000"} 0
+tor_relay_create_cell_source_total{prev_hop="unknown_relay",nth="1001_plus"} 0
+tor_relay_begindir_connections{state="command_wait"} 0
+tor_relay_begindir_connections{state="writing_hs_descriptor"} 0
+tor_relay_begindir_connections{state="writing_other"} 0
+tor_relay_begindir_connections{state="draining"} 0
+tor_relay_begindir_response_total{type="hs_descriptor"} 0
+tor_relay_begindir_response_total{type="other"} 0
+tor_relay_begindir_cell_total{prev_hop="client",nth="1"} 0
+tor_relay_begindir_cell_total{prev_hop="client",nth="2_10"} 0
+tor_relay_begindir_cell_total{prev_hop="client",nth="11_100"} 0
+tor_relay_begindir_cell_total{prev_hop="client",nth="101_1000"} 0
+tor_relay_begindir_cell_total{prev_hop="client",nth="1001_plus"} 0
+tor_relay_begindir_cell_total{prev_hop="known_relay",nth="1"} 0
+tor_relay_begindir_cell_total{prev_hop="known_relay",nth="2_10"} 0
+tor_relay_begindir_cell_total{prev_hop="known_relay",nth="11_100"} 0
+tor_relay_begindir_cell_total{prev_hop="known_relay",nth="101_1000"} 0
+tor_relay_begindir_cell_total{prev_hop="known_relay",nth="1001_plus"} 0
+tor_relay_begindir_cell_total{prev_hop="unknown_relay",nth="1"} 0
+tor_relay_begindir_cell_total{prev_hop="unknown_relay",nth="2_10"} 0
+tor_relay_begindir_cell_total{prev_hop="unknown_relay",nth="11_100"} 0
+tor_relay_begindir_cell_total{prev_hop="unknown_relay",nth="101_1000"} 0
+tor_relay_begindir_cell_total{prev_hop="unknown_relay",nth="1001_plus"} 0
+tor_relay_begindir_request_total{type="hs_get",prev_hop="client"} 0
+tor_relay_begindir_request_total{type="hs_get",prev_hop="known_relay"} 0
+tor_relay_begindir_request_total{type="hs_get",prev_hop="unknown_relay"} 0
+tor_relay_begindir_request_total{type="hs_post",prev_hop="client"} 0
+tor_relay_begindir_request_total{type="hs_post",prev_hop="known_relay"} 0
+tor_relay_begindir_request_total{type="hs_post",prev_hop="unknown_relay"} 0
+tor_relay_begindir_request_total{type="consensus",prev_hop="client"} 0
+tor_relay_begindir_request_total{type="consensus",prev_hop="known_relay"} 0
+tor_relay_begindir_request_total{type="consensus",prev_hop="unknown_relay"} 0
+tor_relay_begindir_request_total{type="microdesc",prev_hop="client"} 0
+tor_relay_begindir_request_total{type="microdesc",prev_hop="known_relay"} 0
+tor_relay_begindir_request_total{type="microdesc",prev_hop="unknown_relay"} 0
+tor_relay_begindir_request_total{type="descriptor",prev_hop="client"} 0
+tor_relay_begindir_request_total{type="descriptor",prev_hop="known_relay"} 0
+tor_relay_begindir_request_total{type="descriptor",prev_hop="unknown_relay"} 0
+tor_relay_begindir_request_total{type="other_get",prev_hop="client"} 0
+tor_relay_begindir_request_total{type="other_get",prev_hop="known_relay"} 0
+tor_relay_begindir_request_total{type="other_get",prev_hop="unknown_relay"} 0
+tor_relay_begindir_request_total{type="other_post",prev_hop="client"} 0
+tor_relay_begindir_request_total{type="other_post",prev_hop="known_relay"} 0
+tor_relay_begindir_request_total{type="other_post",prev_hop="unknown_relay"} 0
+tor_relay_begindir_request_total{type="unparsed",prev_hop="client"} 0
+tor_relay_begindir_request_total{type="unparsed",prev_hop="known_relay"} 0
+tor_relay_begindir_request_total{type="unparsed",prev_hop="unknown_relay"} 0
+tor_relay_begindir_request_total{type="no_request",prev_hop="client"} 0
+tor_relay_begindir_request_total{type="no_request",prev_hop="known_relay"} 0
+tor_relay_begindir_request_total{type="no_request",prev_hop="unknown_relay"} 0
+tor_relay_begindir_request_total{type="circuit_dead",prev_hop="client"} 0
+tor_relay_begindir_request_total{type="circuit_dead",prev_hop="known_relay"} 0
+tor_relay_begindir_request_total{type="circuit_dead",prev_hop="unknown_relay"} 0
+tor_relay_hsdir_fetch_total{action="success"} 0
+tor_relay_hsdir_fetch_total{action="not_found"} 0
+tor_relay_hsdir_fetch_total{action="single_hop"} 0
+tor_relay_hsdir_fetch_total{action="refused"} 0
++ grep -E '^# TYPE tor_relay_(hsdir|create|begindir)_' /tmp/metrics.txt
+# TYPE tor_relay_begindir_cell_source_total counter
+# TYPE tor_relay_hsdir_fetch_descriptor_total counter
+# TYPE tor_relay_begindir_close_reason_total counter
+# TYPE tor_relay_begindir_response_bytes_total counter
+# TYPE tor_relay_create_cell_total counter
+# TYPE tor_relay_hsdir_upload_total counter
+# TYPE tor_relay_create_cell_source_total counter
+# TYPE tor_relay_begindir_connections gauge
+# TYPE tor_relay_begindir_response_total counter
+# TYPE tor_relay_begindir_cell_total counter
+# TYPE tor_relay_begindir_request_total counter
+# TYPE tor_relay_hsdir_fetch_total counter
++ echo '--- bootstrap'
+--- bootstrap
++ check grep -qE 'Bootstrapped 100%' /var/lib/tor-lab/notice.log
++ grep -qE 'Bootstrapped 100%' /var/lib/tor-lab/notice.log
+FAIL: grep -qE Bootstrapped 100% /var/lib/tor-lab/notice.log
++ echo 'FAIL: grep -qE Bootstrapped 100% /var/lib/tor-lab/notice.log'
++ fail=1
+--- notice log
++ echo '--- notice log'
++ cat /var/lib/tor-lab/notice.log
+Nov 06 18:35:11.000 [notice] Tor 0.4.9.15 opening new log file.
+Nov 06 18:35:11.400 [notice] We compiled with OpenSSL 30500050: OpenSSL 3.5.5 27 Jan 2026 and we are running with OpenSSL 30500050: 3.5.5. These two versions should be binary compatible.
+Nov 06 18:35:11.434 [notice] Tor 0.4.9.15 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.5.5, Zlib 1.3.1, Liblzma 5.8.3, Libzstd 1.5.7 and Glibc 2.43 as libc.
+Nov 06 18:35:11.434 [notice] Tor can't help you if you use it wrong! Learn how to be safe at https://support.torproject.org/faq/staying-anonymous/
+Nov 06 18:35:11.435 [notice] Read configuration file "/etc/tor/torrc-lab".
+Nov 06 18:35:11.452 [warn] Your ContactInfo config option is not set. Please strongly consider setting it, so we can contact you if your relay is misconfigured, end-of-life, or something else goes wrong. It is also possible that your relay might get rejected from the network due to a missing valid contact address.
+Nov 06 18:35:11.453 [notice] Based on detected system memory, MaxMemInQueues is set to 8192 MB. You can override this by setting MaxMemInQueues by hand.
+Nov 06 18:35:11.455 [warn] You have used DirAuthority or AlternateDirAuthority to specify alternate directory authorities in your configuration. This is potentially dangerous: it can make you look different from all other Tor users, and hurt your anonymity. Even if you've specified the same authorities as Tor uses by default, the defaults could change in the future. Be sure you know what you're doing.
+Nov 06 18:35:11.456 [warn] TestingTorNetwork is set. This will make your node almost unusable in the public Tor network, and is therefore only advised if you are building a testing Tor network!
+Nov 06 18:35:11.458 [notice] Opening Metrics listener on 127.0.0.1:9650
+Nov 06 18:35:11.459 [notice] Opened Metrics listener connection (ready) on 127.0.0.1:9650
+Nov 06 18:35:11.459 [notice] Opening OR listener on 127.0.0.1:5650
+Nov 06 18:35:11.459 [notice] Opened OR listener connection (ready) on 127.0.0.1:5650
+Nov 06 18:35:11.000 [notice] Configured to measure directory request statistics, but no GeoIP database found. Please specify a GeoIP database using the GeoIPFile option.
+Nov 06 18:35:11.000 [notice] You are running a new relay. Thanks for helping the Tor network! If you wish to know what will happen in the upcoming weeks regarding its usage, have a look at https://blog.torproject.org/lifecycle-of-a-new-relay
+Nov 06 18:35:11.000 [notice] It looks like I need to generate and sign a new medium-term signing key, because I don't have one. To do that, I need to load (or create) the permanent master identity key. If the master identity key was not moved or encrypted with a passphrase, this will be done automatically and no further action is required. Otherwise, provide the necessary data using 'tor --keygen' to do it manually.
+Nov 06 18:35:11.000 [notice] Set list of supported TLS groups to: ?*X25519MLKEM768 / ?SecP256r1MLKEM768 / *P-256:?X25519:P-224
+Nov 06 18:35:11.000 [notice] Your Tor server's identity key fingerprint is 'deblab F23FEE93EEDB0DE2A66A1969E9032240EA182DCB'
+Nov 06 18:35:11.000 [notice] Your Tor server's identity key ed25519 fingerprint is 'deblab WwJzHqwCZMoPACwDjc2yCgzSa9ASZDKsF3eYUd5utZ4'
+Nov 06 18:35:11.000 [notice] Bootstrapped 0% (starting): Starting
+Nov 06 18:35:11.000 [notice] Starting with guard context "default"
++ kill -TERM 179
++ sleep 5
+++ kill -0 179
+++ echo exited
++ echo 'SIGTERM exit check: exited'
+SIGTERM exit check: exited
++ kill -KILL 179
+++ cat /var/lib/tor-lab/notice.log /var/lib/tor-lab/stdout.log
+++ grep -c 'Caught a bad syscall'
++ BAD=0
++ echo 'bad syscalls: 0'
+bad syscalls: 0
++ check '[' 0 -eq 0 ']'
++ '[' 0 -eq 0 ']'
+++ '[' 1 -eq 0 ']'
+++ echo FAIL
++ echo 'RESULT: FAIL'
+RESULT: FAIL
++ exit 1
+container rc=1

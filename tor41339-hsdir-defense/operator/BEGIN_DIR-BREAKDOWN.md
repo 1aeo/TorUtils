@@ -1,8 +1,8 @@
 # What is this BEGIN_DIR flood? A breakdown from the MetricsPort
 
 `begindir-breakdown.py` reads the MetricsPort of a relay running the
-tor#41339 series (`+tor41339.9` or `.8` on tor 0.4.9.15, or `.7`; it also
-reads `.6`, with fewer answers),
+tor#41339 series (`+tor41339.10`, `.9` or `.8` on tor 0.4.9.15, or `.7`; it
+also reads `.6`, with fewer answers),
 optionally twice to get rates, and says what the relay's BEGIN_DIR streams
 were. With access to the ControlPort it
 also counts the relay's open OR connections by kind of peer. It only reads,
@@ -17,7 +17,8 @@ python3 -I begindir-breakdown.py --metrics http://127.0.0.1:9035/metrics \
 Names below are `.7`'s, which `.8` keeps, less the counters of the rules it
 drops and plus one request type (see "What `+tor41339.8` changes"). `.9`
 keeps `.8`'s names, and below, `.8` means `.8` and `.9` except as "What
-`+tor41339.9` changes" says. `.6` called some of the
+`+tor41339.9` changes" says. `.10` keeps `.9`'s names and adds one family
+(see "What `+tor41339.10` adds"). `.6` called some of the
 families differently
 (`tor_relay_hsdir_get_total` and `_post_total`, `tor_relay_dir_requests_total`,
 `tor_relay_dir_responses_total`, `tor_relay_dir_server_conns`), and exported
@@ -61,8 +62,12 @@ sentences, each built from named counters, for `.7` or later:
      (Little's law). Below 10 s, it also gives the share that must have
      closed within 10 s, before the stall timeout could close them
      (Markov's inequality).
+   - on `.10`, one sentence each for the empty streams and the requests
+     dropped unread: the share of each cause tor noted first of their
+     closing, and the share the relay's own defenses closed.
 8. **What these metrics can't say**, pointing to
-   `analysis/v8-metrics-proposal.md`.
+   `analysis/v8-metrics-proposal.md`. On `.10`, how empty streams end is no
+   longer among them.
 
 Where a relay exports the proposed families of that note (a prototype
 build, `engineering/v8-prototype/`), the tool prints them too:
@@ -322,6 +327,50 @@ is the five ordinary request types, `unparsed` is `unparsed` and
 - **Relays behind a channel.** Nothing counts the sources behind a relay's
   channel.
 
+## What `+tor41339.10` adds
+
+`.10` is `.9` as built plus 0021: `.9`'s options, defaults and metric
+names, and one counter family more,
+`tor_relay_begindir_close_reason_total{type,prev_hop,reason}`. It counts the
+requests of the types `no_request` and `circuit_dead` again, by the first
+cause tor noted of their closing, so for each type and previous hop the
+reasons add up to `tor_relay_begindir_request_total`. That is 78 series (2
+types, 3 previous hops, 13 reasons), most of them 0. The first cause wins: a
+stream that got a RELAY_END keeps `end_cell` when its circuit is destroyed
+later.
+
+| reason | noted first when |
+|---|---|
+| `end_cell` | the stream got a RELAY_END |
+| `timeout` | the stream stalled for `TestingDirConnectionMaxStall` (5 minutes by default) |
+| `destroy_cell` | its circuit closed with a DESTROY, from either side; when the previous hop is a relay, that includes a failure on an earlier hop, passed along as DESTROY |
+| `channel_closed` | a channel of its circuit closed, by us or by the peer |
+| `begindir_rate` | tor 0.4.9.15's BEGIN_DIR rate limit closed its circuit (on by default) |
+| `hsdir_second_request` | a second onion service request on its circuit closed it (always on) |
+| `hsdir_unknown_prev_hop` | `HSDirRefuseUnknownPrevHop` closed its circuit (only while enabled) |
+| `hsdir_fetch_shed` | `HSDirFetchShedding` closed its circuit (only while enabled) |
+| `cell_queue_full` | one of its circuit's cell queues was full |
+| `oom` | the out-of-memory handler closed the stream or its circuit |
+| `protocol` | a DATA cell over the stream's window, or its circuit closed for a protocol violation |
+| `other` | its circuit closed for any other reason |
+| `unknown` | tor noted nothing: hibernation, an exit policy reload (`ReevaluateExitPolicy`), `DisableNetwork` or shutdown. It should stay near 0: a lasting count without one of those means a close that tor fails to note |
+
+The four defense reasons are noted only when a defense closes the circuit,
+never while it only counts. So `begindir_rate` (on by default) and
+`hsdir_second_request` (always on) show what tor's own limits cost the
+other streams of the circuits they close. `end_cell` shows senders ending
+streams, and `destroy_cell` circuits dropped by the previous hop or an
+earlier one; `channel_closed` also counts channels this relay closed
+itself. Why a peer sent its END or DESTROY is not known.
+
+The script prints the nonzero reasons, by previous hop and most first,
+under "nothing sent" and "dropped unread: circuit closing" in Q1 x Q4. In
+"What this says" it gives one sentence for each of the two types: each
+reason's share, and the share the relay's own defenses closed. If a type's
+reasons from a previous hop do not add up to its requests from that hop,
+exactly, it says so, as a counting bug. Its output for `.9` and earlier is
+unchanged.
+
 ## Prometheus
 
 The same with PromQL, over 5 minutes:
@@ -393,6 +442,13 @@ rate(tor_relay_dos_total{type="begindir_over_stream_rate"}[5m])
 rate(tor_relay_dos_total{type="begindir_hsdir_rejected"}[5m])
 sum(rate(tor_relay_begindir_request_total{type="circuit_dead"}[5m]))
 rate(tor_relay_dos_total{type="begindir_rate_rejected"}[5m])
+# .10: requests closed unread, by the first cause tor noted, and the share
+# of each type that the relay's own defenses closed
+sum by (type, reason) (rate(tor_relay_begindir_close_reason_total[5m]))
+sum by (type) (rate(tor_relay_begindir_close_reason_total{reason=~"begindir_rate|hsdir_second_request|hsdir_unknown_prev_hop|hsdir_fetch_shed"}[5m]))
+  / sum by (type) (rate(tor_relay_begindir_request_total{type=~"no_request|circuit_dead"}[5m]))
+# .10: closes tor didn't note (should stay near 0)
+sum(rate(tor_relay_begindir_close_reason_total{reason="unknown"}[5m]))
 ```
 
 ## Checked in a private lab
