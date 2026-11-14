@@ -1,0 +1,10 @@
+# Private experiment outputs, relay rosters, and blog drafts stay out of public TorUtils
+memory/blogs/
+memory/experiments/
+memory/reports/
+relay-setup/relay-config.csv
+relay-setup/servers.txt
+*.secret_family_key
+.DS_Store
+__pycache__/
+*.pyc

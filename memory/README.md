@@ -104,7 +104,7 @@ grep ",relay," memory.csv
 grep "A1B2C3D4E5F6" memory.csv
 
 # Specific relay by nickname
-grep ",22gz," memory.csv
+grep ",relay01," memory.csv
 ```
 
 ### timeseries-charts.py - Visualizations
@@ -142,7 +142,7 @@ cd tools
 ./migrate-monitoring.sh /path/to/old/memory_stats.csv /path/to/new/memory.csv
 
 # With explicit server name
-./migrate-monitoring.sh --server go old_stats.csv new_stats.csv
+./migrate-monitoring.sh --server server1 old_stats.csv new_stats.csv
 ```
 
 Note: Migrated data will only contain aggregate rows. Per-relay detail was not collected by the legacy format.
@@ -169,9 +169,9 @@ cd tools
 ./memory-tool.sh watch relay01
 ```
 
-## Reports
+## Reports (Local Only — Ignored in Git)
 
-Reports are organized by date and server:
+Generated experiment reports are stored locally outside Git (`memory/reports/` is ignored by `.gitignore`):
 
 ```
 reports/
@@ -181,10 +181,6 @@ reports/
 │   ├── memory_measurements.csv   # Collected data (unified format)
 │   └── charts/            # Generated visualizations
 ```
-
-### Existing Reports
-
-- [2025-09-18-co-guard-fragmentation](reports/2025-09-18-co-guard-fragmentation/) - Guard relay memory fragmentation investigation
 
 ## Experiments
 
@@ -241,11 +237,11 @@ Each server collects data independently using the same tools:
 ```bash
 # On server1:
 ./collect.sh --output /var/log/tor/memory.csv
-# Collects: go data with server=go
+# Collects: server1 data with server=server1
 
 # On server2:
 ./collect.sh --output /var/log/tor/memory.csv
-# Collects: sortaopen data with server=sortaopen
+# Collects: server2 data with server=server2
 ```
 
 Data can be merged or compared since each row includes the server name.
@@ -258,10 +254,3 @@ The following tools are deprecated and replaced by `collect.sh`:
 - `memory-tool.sh collect` - Use `collect.sh` instead
 
 These tools remain for backward compatibility but will be removed in a future version.
-
-## References
-
-See the [Guard Relay Fragmentation Report](reports/2025-09-18-co-guard-fragmentation/REPORT.md) for:
-- Root cause analysis of memory fragmentation
-- Official Tor Project documentation links
-- Recommended next steps (alternative allocators, etc.)

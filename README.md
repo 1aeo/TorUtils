@@ -39,14 +39,14 @@ Tool for adding /24 IP ranges. Auto-detects netplan or NetworkManager.
 
 ### `memory/` - Memory Analysis
 
-Tools and reports for investigating Tor relay memory usage.
+Tools for monitoring and benchmarking Tor relay memory usage (experiment CSVs, reports, and blog drafts are kept out of this public repository via `.gitignore`).
 
-- `tools/monitor.sh` - Time-series monitoring (for cron)
+- `tools/collect.sh` - Unified time-series memory collection (for cron)
 - `tools/diagnostics.sh` - System diagnostics for troubleshooting
-- `tools/memory-tool.sh` - Point-in-time analysis and experiments
-- `tools/timeseries-charts.py` - Charts from monitor.sh data
+- `tools/memory-tool.sh` - Point-in-time analysis
+- `tools/timeseries-charts.py` - Charts from `collect.sh` data
 - `tools/generate-charts.py` - Charts from experiment data
-- `reports/` - Date-organized analysis reports
+- `tools/experiment.sh` - Local A/B experiment scaffolding
 
 ```bash
 cd memory/tools

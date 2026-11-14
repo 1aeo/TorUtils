@@ -1,8 +1,0 @@
-# Ignore generated chart files
-*.png
-*.svg
-*.pdf
-
-# Keep this directory
-!.gitignore
-
